@@ -1,0 +1,16 @@
+/* Import base dashboard layout styles */
+@import './DashboardLayout.css';
+
+.reviewer-layout .logo {
+  color: var(--accent);
+}
+
+.reviewer-layout .nav-item.active {
+  background: linear-gradient(135deg, var(--accent), #0d9488);
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.2);
+}
+
+
+
+
+

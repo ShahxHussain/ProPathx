@@ -1,0 +1,728 @@
+import { useEffect, useState } from 'react';
+import { Plus, Search, UserPlus, Upload, Download, X, CheckCircle, AlertCircle, FileText, Edit, Trash2 } from 'lucide-react';
+import { studentAPI } from '../../services/api';
+import './Students.css';
+
+const RegisterStudentModal = ({ onClose, onSuccess, student = null }) => {
+  const isEditMode = !!student;
+  const [formData, setFormData] = useState({
+    fullName: student?.FullName || '',
+    email: student?.Email || '',
+    password: '',
+    identityNo: student?.IdentityNo || '',
+    fatherName: student?.FatherName || '',
+    gender: student?.Gender || '',
+    dateOfBirth: student?.DateOfBirth || '',
+    address: student?.Address || '',
+    phone: student?.Phone || '',
+    status: student?.Status || 'Active',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(''), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      if (isEditMode) {
+        // Remove password from update if empty
+        const updateData = { ...formData };
+        if (!updateData.password) {
+          delete updateData.password;
+        }
+        await studentAPI.updateStudent(student.StudentID, updateData);
+      } else {
+        await studentAPI.registerStudent(formData);
+      }
+      if (onSuccess) {
+        onSuccess();
+      }
+      onClose();
+    } catch (err) {
+      setError(err.message || err.details || `Failed to ${isEditMode ? 'update' : 'register'} student`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>{isEditMode ? 'Edit Student' : 'Register Student'}</h2>
+          <button className="btn-icon" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <form className="modal-form" onSubmit={handleSubmit}>
+          <div className="form-row">
+            <label>
+              <span>Full Name *</span>
+              <input
+                type="text"
+                value={formData.fullName}
+                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                required
+              />
+            </label>
+          </div>
+
+          <div className="form-row form-row-2">
+            <label>
+              <span>Email *</span>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                required
+              />
+            </label>
+
+            <label>
+              <span>Password {isEditMode ? '(leave empty to keep current)' : '*'}</span>
+              <input
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required={!isEditMode}
+                placeholder={isEditMode ? 'Enter new password to change' : 'Auto-generated if empty'}
+              />
+            </label>
+          </div>
+
+          <div className="form-row form-row-2">
+            <label>
+              <span>Identity No (NIC/Passport/OrgReg)</span>
+              <input
+                type="text"
+                value={formData.identityNo}
+                onChange={(e) => setFormData({ ...formData, identityNo: e.target.value })}
+              />
+            </label>
+
+            <label>
+              <span>Father Name</span>
+              <input
+                type="text"
+                value={formData.fatherName}
+                onChange={(e) => setFormData({ ...formData, fatherName: e.target.value })}
+              />
+            </label>
+          </div>
+
+          <div className="form-row form-row-2">
+            <label>
+              <span>Gender</span>
+              <select
+                value={formData.gender}
+                onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+              >
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Date of Birth</span>
+              <input
+                type="date"
+                value={formData.dateOfBirth}
+                onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+              />
+            </label>
+          </div>
+
+          <div className="form-row">
+            <label>
+              <span>Address</span>
+              <textarea
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                rows="2"
+              />
+            </label>
+          </div>
+
+          <div className="form-row form-row-2">
+            <label>
+              <span>Phone</span>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              />
+            </label>
+
+            <label>
+              <span>Status *</span>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                required
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </label>
+          </div>
+
+          {error && (
+            <div className="notice error">
+              <AlertCircle size={18} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? (isEditMode ? 'Updating...' : 'Registering...') : (isEditMode ? 'Update Student' : 'Register Student')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const BulkRegisterModal = ({ onClose, onSuccess }) => {
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState(null);
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile) {
+      if (selectedFile.type !== 'text/csv' && !selectedFile.name.endsWith('.csv')) {
+        setError('Please select a CSV file');
+        return;
+      }
+      setFile(selectedFile);
+      setError('');
+    }
+  };
+
+  // Helper function to parse CSV values (handles quoted values)
+  const parseCSVValue = (value) => {
+    if (!value) return '';
+    // Remove surrounding quotes if present
+    value = value.trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || 
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    return value.trim();
+  };
+
+  // Helper function to split CSV line (handles quoted values with commas)
+  const splitCSVLine = (line) => {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    let quoteChar = null;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if ((char === '"' || char === "'") && (i === 0 || line[i - 1] === ',' || line[i - 1] === ' ')) {
+        if (!inQuotes) {
+          inQuotes = true;
+          quoteChar = char;
+          continue;
+        } else if (char === quoteChar) {
+          inQuotes = false;
+          quoteChar = null;
+          continue;
+        }
+      }
+      
+      if (char === ',' && !inQuotes) {
+        values.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    values.push(current); // Add last value
+    
+    return values.map(v => parseCSVValue(v));
+  };
+
+  const parseCSV = (text) => {
+    const lines = text.split('\n').filter((line) => line.trim());
+    if (lines.length < 2) {
+      throw new Error('CSV file must have at least a header row and one data row');
+    }
+
+    // Parse header row
+    const headers = splitCSVLine(lines[0]).map((h) => parseCSVValue(h).toLowerCase().replace(/\s+/g, ''));
+    const requiredHeaders = ['fullname', 'email'];
+    const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h));
+
+    if (missingHeaders.length > 0) {
+      throw new Error(`Missing required columns: ${missingHeaders.join(', ')}`);
+    }
+
+    console.log('CSV Headers:', headers);
+
+    const students = [];
+    for (let i = 1; i < lines.length; i++) {
+      const values = splitCSVLine(lines[i]);
+      if (values.length === 0 || !values[0]) continue; // Skip empty rows
+
+      const student = {};
+      headers.forEach((header, index) => {
+        const value = parseCSVValue(values[index] || '');
+        
+        // Map CSV headers to API fields (case-insensitive, handles spaces and underscores)
+        const normalizedHeader = header.toLowerCase().replace(/\s+/g, '').replace(/_/g, '');
+        
+        if (normalizedHeader === 'fullname' || normalizedHeader === 'full name' || normalizedHeader === 'name') {
+          student.fullName = value;
+        } else if (normalizedHeader === 'email' || normalizedHeader === 'emailaddress') {
+          student.email = value;
+        } else if (normalizedHeader === 'password' || normalizedHeader === 'pwd') {
+          student.password = value;
+        } else if (normalizedHeader === 'identityno' || normalizedHeader === 'identity number' || normalizedHeader === 'nic' || normalizedHeader === 'cnic') {
+          student.identityNo = value;
+        } else if (normalizedHeader === 'fathername' || normalizedHeader === 'father name' || normalizedHeader === 'fathersname') {
+          student.fatherName = value;
+        } else if (normalizedHeader === 'gender' || normalizedHeader === 'sex') {
+          student.gender = value;
+        } else if (normalizedHeader === 'dateofbirth' || normalizedHeader === 'date of birth' || normalizedHeader === 'dob' || normalizedHeader === 'birthdate') {
+          student.dateOfBirth = value;
+        } else if (normalizedHeader === 'address') {
+          student.address = value;
+        } else if (normalizedHeader === 'phone' || normalizedHeader === 'phonenumber' || normalizedHeader === 'mobile' || normalizedHeader === 'contact') {
+          student.phone = value;
+        } else if (normalizedHeader === 'status') {
+          // Only set status if it's a valid enum value
+          const statusLower = value.toLowerCase().trim();
+          if (['active', 'inactive', 'suspended'].includes(statusLower)) {
+            student.status = statusLower.charAt(0).toUpperCase() + statusLower.slice(1);
+          } else if (value) {
+            console.warn(`Row ${i + 1}: Invalid status value "${value}", using default "Active"`);
+            student.status = 'Active'; // Default
+          } else {
+            student.status = 'Active'; // Default
+          }
+        } else {
+          // Unknown column - log warning but don't fail
+          console.warn(`Row ${i + 1}: Unknown column "${header}" with value "${value}" - ignoring`);
+        }
+      });
+
+      if (student.fullName && student.email) {
+        students.push(student);
+      } else {
+        console.warn(`Row ${i + 1}: Skipped - missing fullName or email`);
+      }
+    }
+
+    if (students.length === 0) {
+      throw new Error('No valid student records found in CSV');
+    }
+
+    console.log(`Parsed ${students.length} students from CSV`);
+    return students;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!file) {
+      setError('Please select a CSV file');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+    setResult(null);
+
+    try {
+      const text = await file.text();
+      const students = parseCSV(text);
+
+      const response = await studentAPI.registerStudentsBulk(students);
+      setResult(response);
+
+      if (onSuccess && response.summary.successful > 0) {
+        setTimeout(() => {
+          onSuccess();
+          onClose();
+        }, 2000);
+      }
+    } catch (err) {
+      console.error('Bulk register error:', err);
+      console.error('Error details:', err.details);
+      console.error('Error object:', err);
+      
+      // Build detailed error message
+      let errorMessage = err.message || 'Failed to register students';
+      
+      // Add detailed error information if available
+      if (err.details) {
+        if (typeof err.details === 'string') {
+          errorMessage = err.details;
+        } else if (typeof err.details === 'object') {
+          errorMessage = err.details.details || err.details.message || errorMessage;
+          if (err.details.errorCode) {
+            errorMessage += ` (Error Code: ${err.details.errorCode})`;
+          }
+          if (err.details.hint) {
+            errorMessage += ` - ${err.details.hint}`;
+          }
+        }
+      }
+      
+      // Add error code and hint if available directly on error object
+      if (err.errorCode) {
+        errorMessage += ` (Error Code: ${err.errorCode})`;
+      }
+      if (err.hint) {
+        errorMessage += ` - ${err.hint}`;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const template = `FullName,Email,Password,IdentityNo,FatherName,Gender,DateOfBirth,Address,Phone,Status
+John Doe,john.doe@example.com,password123,12345-1234567-1,John Senior,Male,2000-01-15,123 Main St,03001234567,Active
+Jane Smith,jane.smith@example.com,password456,12345-1234568-2,Jane Senior,Female,2001-03-20,456 Oak Ave,03001234568,Active`;
+    
+    const blob = new Blob([template], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'students_template.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Bulk Register Students</h2>
+          <button className="btn-icon" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div className="bulk-upload-info">
+            <p>
+              <strong>Instructions:</strong>
+            </p>
+            <ul>
+              <li>Upload a CSV file with student information</li>
+              <li>Required columns: <strong>FullName</strong>, <strong>Email</strong></li>
+              <li>Optional columns: Password, IdentityNo, FatherName, Gender, DateOfBirth, Address, Phone, Status</li>
+              <li>Download the template below to see the correct format</li>
+            </ul>
+          </div>
+
+          <div className="template-download">
+            <button type="button" className="btn-secondary" onClick={downloadTemplate}>
+              <Download size={16} />
+              Download CSV Template
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            <div className="form-row">
+              <label>
+                <span>CSV File *</span>
+                <div className="file-input-wrapper">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileChange}
+                    required
+                  />
+                  {file && (
+                    <div className="file-name">
+                      <FileText size={16} />
+                      {file.name}
+                    </div>
+                  )}
+                </div>
+              </label>
+            </div>
+
+            {error && (
+              <div className="notice error">
+                <AlertCircle size={18} />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {result && (
+              <div className="bulk-result">
+                <div className="notice success">
+                  <CheckCircle size={18} />
+                  <div>
+                    <strong>Bulk Registration Complete</strong>
+                    <p>
+                      Successful: {result.summary.successful} | 
+                      Failed: {result.summary.failed} | 
+                      Skipped: {result.summary.skipped || 0}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>
+                Cancel
+              </button>
+              <button type="submit" className="btn-primary" disabled={loading || !file}>
+                {loading ? 'Registering...' : 'Register Students'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const Students = () => {
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [deletingStudent, setDeletingStudent] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
+
+  useEffect(() => {
+    loadStudents();
+  }, [page, searchTerm]);
+
+  const loadStudents = async () => {
+    try {
+      setLoading(true);
+      const response = await studentAPI.getStudents({
+        page,
+        limit: 20,
+        search: searchTerm || undefined,
+      });
+      setStudents(response.students || []);
+      setPagination(response.pagination);
+    } catch (error) {
+      console.error('Failed to load students:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (student) => {
+    setEditingStudent(student);
+    setShowRegisterModal(true);
+  };
+
+  const handleDelete = async (student) => {
+    if (!window.confirm(`Are you sure you want to delete ${student.FullName}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await studentAPI.deleteStudent(student.StudentID);
+      loadStudents();
+    } catch (error) {
+      alert(error.message || error.details || 'Failed to delete student');
+    }
+  };
+
+  return (
+    <div className="students-page">
+      <div className="page-header">
+        <div>
+          <h1>Students</h1>
+          <p className="page-subtitle">Manage and register students for your organization</p>
+        </div>
+        <div className="header-actions">
+          <button className="btn-secondary" onClick={() => setShowBulkModal(true)}>
+            <Upload size={18} />
+            <span>Bulk Register</span>
+          </button>
+          <button className="btn-primary" onClick={() => setShowRegisterModal(true)}>
+            <Plus size={18} />
+            <span>Register Student</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="students-filters">
+        <div className="search-box">
+          <Search size={18} />
+          <input
+            type="text"
+            placeholder="Search students by name, email, or identity number..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1); // Reset to first page on search
+            }}
+          />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="loading-state">Loading students...</div>
+      ) : students.length === 0 ? (
+        <div className="empty-state">
+          <UserPlus size={48} />
+          <h3>No students found</h3>
+          <p>Get started by registering your first student</p>
+          <div className="empty-state-actions">
+            <button className="btn-secondary" onClick={() => setShowBulkModal(true)}>
+              <Upload size={18} />
+              <span>Bulk Register</span>
+            </button>
+            <button className="btn-primary" onClick={() => setShowRegisterModal(true)}>
+              <Plus size={18} />
+              <span>Register Student</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="students-table-container">
+            <table className="students-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Identity No</th>
+                  <th>Gender</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                  <th>Registered</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((student) => (
+                  <tr key={student.StudentID}>
+                    <td>
+                      <div className="student-name-cell">
+                        <div className="student-avatar">
+                          {student.FullName?.charAt(0) || 'S'}
+                        </div>
+                        {student.FullName || 'N/A'}
+                      </div>
+                    </td>
+                    <td>{student.Email || 'N/A'}</td>
+                    <td>{student.IdentityNo || 'N/A'}</td>
+                    <td>{student.Gender || 'N/A'}</td>
+                    <td>{student.Phone || 'N/A'}</td>
+                    <td>
+                      <span className={`status-badge status-${student.Status?.toLowerCase()}`}>
+                        {student.Status || 'N/A'}
+                      </span>
+                    </td>
+                    <td>
+                      {student.CreatedAt
+                        ? new Date(student.CreatedAt).toLocaleDateString()
+                        : 'N/A'}
+                    </td>
+                    <td>
+                      <div className="table-actions">
+                        <button
+                          className="btn-icon-small"
+                          onClick={() => handleEdit(student)}
+                          title="Edit student"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button
+                          className="btn-icon-small btn-danger"
+                          onClick={() => handleDelete(student)}
+                          title="Delete student"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {pagination && pagination.totalPages > 1 && (
+            <div className="pagination">
+              <button
+                className="btn-secondary"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Previous
+              </button>
+              <span>
+                Page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
+              </span>
+              <button
+                className="btn-secondary"
+                onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+                disabled={page === pagination.totalPages}
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {showRegisterModal && (
+        <RegisterStudentModal
+          student={editingStudent}
+          onClose={() => {
+            setShowRegisterModal(false);
+            setEditingStudent(null);
+          }}
+          onSuccess={() => {
+            setShowRegisterModal(false);
+            setEditingStudent(null);
+            loadStudents();
+          }}
+        />
+      )}
+
+      {showBulkModal && (
+        <BulkRegisterModal
+          onClose={() => setShowBulkModal(false)}
+          onSuccess={() => {
+            setShowBulkModal(false);
+            loadStudents();
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+export default Students;

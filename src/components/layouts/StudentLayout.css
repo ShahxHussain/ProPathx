@@ -1,0 +1,57 @@
+/* Import base dashboard layout styles */
+@import './DashboardLayout.css';
+
+.student-layout {
+  --primary: #1e40af;
+  --primary-hover: #1e3a8a;
+}
+
+/* Use the same classic sidebar style as OrgAdmin */
+.student-layout .sidebar {
+  background: #ffffff;
+  border-right: 1px solid #e5e7eb;
+}
+
+.student-layout .nav-item.active {
+  background: linear-gradient(135deg, #1e40af, #1e3a8a);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.2);
+}
+
+.student-layout .nav-item:hover {
+  background: #f9fafb;
+  color: #1e40af;
+}
+
+.student-layout .logo {
+  color: #1e40af;
+}
+
+.student-layout .org-info {
+  color: #1f2937;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.student-layout .org-name {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.student-layout .org-email {
+  color: #6b7280;
+}
+
+.student-layout .user-role {
+  color: #9ca3af;
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.student-layout .sidebar-toggle {
+  color: #6b7280;
+}
+
+.student-layout .sidebar-toggle:hover {
+  background: #f9fafb;
+  color: #1f2937;
+}

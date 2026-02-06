@@ -1,0 +1,35 @@
+@import './DashboardLayout.css';
+
+.admin-layout .logo {
+  color: #dc2626;
+}
+
+.admin-layout .nav-item.active {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+}
+
+.admin-info {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.1), rgba(185, 28, 28, 0.05));
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  padding: 16px 20px !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.admin-info .org-name {
+  color: #dc2626;
+  font-weight: 700;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.admin-info .org-email {
+  line-height: 1.4;
+}
+
+
+
