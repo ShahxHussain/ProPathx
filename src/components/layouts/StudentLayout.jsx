@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { studentAuth } from '../../services/api';
 import NotificationBell from '../NotificationBell';
+import AnnouncementBanner from '../AnnouncementBanner';
 import './DashboardLayout.css';
 import './StudentLayout.css';
 
@@ -100,6 +101,7 @@ const StudentLayout = () => {
 
       {/* Main Content */}
       <main className="dashboard-main">
+        <AnnouncementBanner />
         <div className="dashboard-header">
           <div className="header-left">
             <button

@@ -11,6 +11,7 @@ import testRoutes from './routes/tests.js';
 import studentRoutes from './routes/students.js';
 import groupRoutes from './routes/groups.js';
 import studentAuthRoutes from './routes/auth.js';
+import { recordRequest } from './utils/metricsStore.js';
 
 dotenv.config();
 
@@ -21,6 +22,12 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Record API request counts by status for System Health (last 24h)
+app.use('/api', (req, res, next) => {
+  res.on('finish', () => recordRequest(res.statusCode));
+  next();
+});
 
 // Health check
 app.get('/health', (req, res) => {

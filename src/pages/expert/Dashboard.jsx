@@ -13,10 +13,7 @@ import {
   Award,
   AlertCircle,
   Calendar,
-  Zap,
   Target,
-  Eye,
-  Edit
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -75,7 +72,14 @@ const Dashboard = () => {
       
       setStats(response.stats || {});
       setRecentQuestions(response.recentQuestions || []);
-      setStatusData(response.statusData || []);
+      
+      // Transform statusData to use 'name' instead of 'status' for the chart
+      const transformedStatusData = (response.statusData || []).map(item => ({
+        name: item.status || item.name || 'Unknown',
+        count: item.count || item.value || 0
+      }));
+      setStatusData(transformedStatusData);
+      
       setTrendData(response.trendData || []);
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
@@ -390,39 +394,6 @@ const Dashboard = () => {
                   </span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="dashboard-section">
-            <div className="section-header">
-              <h2>
-                <Zap size={20} />
-                Quick Actions
-              </h2>
-            </div>
-            <div className="quick-actions">
-              <button
-                className="action-btn primary"
-                onClick={() => navigate('/expert/create')}
-              >
-                <Plus size={20} />
-                <span>Create New Question</span>
-              </button>
-              <button
-                className="action-btn"
-                onClick={() => navigate('/expert/questions')}
-              >
-                <Eye size={20} />
-                <span>View All Questions</span>
-              </button>
-              <button
-                className="action-btn"
-                onClick={() => navigate('/expert/questions')}
-              >
-                <Edit size={20} />
-                <span>Edit Questions</span>
-              </button>
             </div>
           </div>
 

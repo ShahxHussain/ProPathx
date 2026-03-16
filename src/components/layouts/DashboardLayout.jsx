@@ -17,9 +17,11 @@ import {
   GraduationCap,
   UsersRound,
   List,
+  BookOpenCheck,
 } from 'lucide-react';
 import { orgAuth } from '../../services/api';
 import NotificationBell from '../NotificationBell';
+import AnnouncementBanner from '../AnnouncementBanner';
 import './DashboardLayout.css';
 
 const DashboardLayout = () => {
@@ -56,13 +58,18 @@ const DashboardLayout = () => {
     { icon: Search, label: 'Explore Exams', path: '/org/explore-exams' },
     { icon: Package, label: 'Subscription Plans', path: '/org/subscription-plans' },
     { icon: FileText, label: 'Tests', path: '/org/tests' },
+    { icon: BookOpenCheck, label: 'Questions in Tests', path: '/org/test-questions' },
+    { icon: BookOpen, label: 'Question Bank', path: '/org/question-bank' },
     { icon: List, label: 'Assigned Tests', path: '/org/test-assignments' },
     { icon: ScrollText, label: 'System Logs', path: '/org/logs' },
     { icon: Bell, label: 'Create Notification', path: '/org/create-notification' },
     { icon: Settings, label: 'Settings', path: '/org/settings' },
   ];
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    if (path === '/org/test-questions') return location.pathname === path || location.pathname.startsWith('/org/test-questions/');
+    return location.pathname === path;
+  };
 
   return (
     <div className="dashboard-layout">
@@ -115,6 +122,7 @@ const DashboardLayout = () => {
 
       {/* Main Content */}
       <main className="dashboard-main">
+        <AnnouncementBanner />
         <div className="dashboard-header">
           <button
             className="mobile-menu-toggle"

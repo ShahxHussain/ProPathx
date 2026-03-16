@@ -1,0 +1,377 @@
+.latex-editor-container {
+  width: 100%;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+
+.latex-editor-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.latex-editor-label span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #333);
+}
+
+.latex-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 6px;
+  color: var(--text-muted, #666);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.latex-toggle-btn:hover {
+  background: var(--background, #f0f0f0);
+  border-color: #8b5cf6;
+  color: #8b5cf6;
+}
+
+.latex-toggle-btn.active {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  border-color: #8b5cf6;
+  color: white;
+}
+
+.latex-toggle-btn.active:hover {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+}
+
+.latex-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--background, #f8f9fa);
+  border: 1px solid var(--border, #e0e0e0);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  flex-wrap: wrap;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border, #e0e0e0);
+  margin: 0 4px;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 6px;
+  color: var(--text, #333);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 32px;
+}
+
+.toolbar-btn:hover {
+  background: var(--background, #f0f0f0);
+  border-color: #8b5cf6;
+  color: #8b5cf6;
+}
+
+.toolbar-btn-primary {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+  border-color: #8b5cf6;
+}
+
+.toolbar-btn-primary:hover {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  border-color: #7c3aed;
+  color: white;
+}
+
+.toolbar-dropdown {
+  position: relative;
+}
+
+.latex-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1000;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 500px;
+  max-width: 90vw;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.latex-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border, #e0e0e0);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text, #333);
+}
+
+.latex-menu-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--text-muted, #666);
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.latex-menu-close:hover {
+  background: var(--background, #f0f0f0);
+  color: var(--text, #333);
+}
+
+.latex-menu-content {
+  padding: 16px;
+}
+
+.latex-menu-section {
+  margin-bottom: 20px;
+}
+
+.latex-menu-section:last-child {
+  margin-bottom: 0;
+}
+
+.latex-menu-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.latex-templates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.latex-template-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--background, #f8f9fa);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.latex-template-btn:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: #8b5cf6;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.1);
+}
+
+.latex-template-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.latex-template-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text, #333);
+}
+
+.latex-template-example {
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.latex-quick-insert {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.latex-quick-btn {
+  padding: 8px 14px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text, #333);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.latex-quick-btn:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: #8b5cf6;
+  color: #8b5cf6;
+}
+
+.latex-menu-help {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(139, 92, 246, 0.05);
+  border-left: 3px solid #8b5cf6;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-muted, #666);
+  line-height: 1.6;
+}
+
+.latex-menu-help strong {
+  color: var(--text, #333);
+}
+
+.latex-menu-help code {
+  background: rgba(139, 92, 246, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #8b5cf6;
+}
+
+.latex-editor-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border, #e0e0e0);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--surface, #fff);
+  color: var(--text, #333);
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.6;
+  box-sizing: border-box;
+  display: block;
+}
+
+.latex-editor-textarea:focus {
+  outline: none;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+.latex-editor-container.error .latex-editor-textarea {
+  border-color: #ef4444;
+}
+
+.latex-editor-container.error .latex-editor-textarea:focus {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.latex-editor-textarea::placeholder {
+  color: var(--text-muted, #999);
+}
+
+.latex-editor-textarea.simple-mode {
+  border-radius: 8px;
+  border-top: 1px solid var(--border, #e0e0e0);
+}
+
+.latex-editor-help {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: var(--background, #f8f9fa);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-muted, #666);
+}
+
+.latex-editor-help kbd {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .latex-menu {
+    min-width: calc(100vw - 32px);
+    max-width: calc(100vw - 32px);
+    left: 0;
+    right: 0;
+  }
+
+  .latex-templates-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .latex-quick-insert {
+    flex-direction: column;
+  }
+
+  .latex-quick-btn {
+    width: 100%;
+  }
+
+  .latex-editor-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar-group {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .toolbar-divider {
+    display: none;
+  }
+}

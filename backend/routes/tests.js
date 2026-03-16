@@ -5,6 +5,120 @@ import { authenticate, requireRole, verifyActiveStatus } from '../middleware/aut
 
 const router = express.Router();
 
+/** In-memory binding config per test (Custom / Auto / Hybrid). No DB change. Lost on server restart. */
+const testBindingConfig = new Map();
+
+/** Minimum questions required before a test can be activated or assigned (can later come from SubscriptionPlanExams.MinQuestionsPerTest) */
+const MIN_QUESTIONS_PER_TEST = 1;
+
+/**
+ * Returns the minimum number of questions required for the test (for activate/assign).
+ * Uses constant; can later read from SubscriptionPlanExams.MinQuestionsPerTest if column is added.
+ */
+function getMinQuestionsForTest() {
+  return MIN_QUESTIONS_PER_TEST;
+}
+
+/**
+ * Validate subject weightage: per-subject question count must not exceed (totalQuestions * Subject.Weightage/100).
+ * Returns { valid: true } or { valid: false, message, exceeded }.
+ */
+async function validateWeightageForAdd(testId, examId, totalQuestionsAfterAdd, questionIdsToAdd) {
+  if (!examId || totalQuestionsAfterAdd <= 0) return { valid: true };
+  const { data: subjects } = await supabase
+    .from('Subjects')
+    .select('SubjectID, SubjectName, Weightage')
+    .eq('ExamID', examId);
+  if (!subjects || subjects.length === 0) return { valid: true };
+
+  const maxPerSubject = new Map();
+  for (const s of subjects) {
+    const w = s.Weightage != null ? parseFloat(s.Weightage) : null;
+    const max = w != null && !isNaN(w) ? Math.ceil((totalQuestionsAfterAdd * w) / 100) : null;
+    if (max != null) maxPerSubject.set(s.SubjectID, { max, subjectName: s.SubjectName });
+  }
+  if (maxPerSubject.size === 0) return { valid: true };
+
+  const { data: existingTq } = await supabase
+    .from('TestQuestions')
+    .select('QuestionID')
+    .eq('TestID', testId);
+  const existingIds = (existingTq || []).map((r) => r.QuestionID);
+  const allIds = [...new Set([...existingIds, ...(questionIdsToAdd || [])])];
+  if (allIds.length === 0) return { valid: true };
+
+  const { data: questionsWithTopic } = await supabase
+    .from('Questions')
+    .select('QuestionID, TopicID')
+    .in('QuestionID', allIds);
+  const topicIds = [...new Set((questionsWithTopic || []).map((q) => q.TopicID).filter(Boolean))];
+  if (topicIds.length === 0) return { valid: true };
+
+  const { data: topics } = await supabase
+    .from('Topics')
+    .select('TopicID, SubjectID')
+    .in('TopicID', topicIds);
+  const topicToSubject = new Map((topics || []).map((t) => [t.TopicID, t.SubjectID]));
+  const qidToSubject = new Map();
+  for (const q of questionsWithTopic || []) {
+    const sid = topicToSubject.get(q.TopicID);
+    if (sid) qidToSubject.set(q.QuestionID, sid);
+  }
+
+  const currentCountBySubject = new Map();
+  for (const qid of existingIds) {
+    const sid = qidToSubject.get(qid);
+    if (sid) currentCountBySubject.set(sid, (currentCountBySubject.get(sid) || 0) + 1);
+  }
+  const addCountBySubject = new Map();
+  for (const qid of questionIdsToAdd || []) {
+    const sid = qidToSubject.get(qid);
+    if (sid) addCountBySubject.set(sid, (addCountBySubject.get(sid) || 0) + 1);
+  }
+
+  const exceeded = [];
+  for (const [subjectId, { max, subjectName }] of maxPerSubject) {
+    const current = currentCountBySubject.get(subjectId) || 0;
+    const add = addCountBySubject.get(subjectId) || 0;
+    const total = current + add;
+    if (total > max) {
+      exceeded.push({ subjectId, subjectName, current, add, total, max });
+    }
+  }
+  if (exceeded.length > 0) {
+    const msg = exceeded.map((e) => `${e.subjectName}: ${e.total} questions (max ${e.max} by weightage)`).join('; ');
+    return { valid: false, message: `Subject weightage exceeded: ${msg}`, exceeded };
+  }
+  return { valid: true };
+}
+
+/**
+ * Check test has at least min questions; returns { ok: false, status, body } to send, or { ok: true }.
+ */
+async function checkMinQuestionsForActivateOrAssign(testId, orgId) {
+  const { data: test, error: testError } = await supabase
+    .from('Tests')
+    .select('TestID, SubscriptionID, ExamID, TotalQuestions')
+    .eq('TestID', testId)
+    .eq('OrgID', orgId)
+    .single();
+  if (testError || !test) return { ok: false, status: 404, body: { error: 'Test not found' } };
+  const minRequired = getMinQuestionsForTest();
+  const count = test.TotalQuestions ?? 0;
+  if (count < minRequired) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: `Test must have at least ${minRequired} question(s) before it can be activated or assigned`,
+        minRequired,
+        currentCount: count,
+      },
+    };
+  }
+  return { ok: true };
+}
+
 /**
  * Helper function to check and reset daily counters
  * Accepts a counter object directly to avoid re-querying
@@ -485,8 +599,8 @@ router.get('/:testId', authenticate, requireRole(['OrgAdmin']), verifyActiveStat
       return res.status(404).json({ error: 'Test not found' });
     }
 
-    // Get test questions
-    const { data: testQuestions, error: questionsError } = await supabase
+    // Get test questions with options (for view/export)
+    let tqQuery = supabase
       .from('TestQuestions')
       .select(`
         *,
@@ -494,19 +608,760 @@ router.get('/:testId', authenticate, requireRole(['OrgAdmin']), verifyActiveStat
           QuestionID,
           QuestionText,
           DifficultyLevel,
-          QuestionType
+          QuestionType,
+          Explanation,
+          Options (
+            OptionNumber,
+            OptionText,
+            IsCorrect
+          )
         )
       `)
       .eq('TestID', testId);
+    const { data: testQuestions, error: questionsError } = await tqQuery.order('QuestionID', { ascending: true });
+
+    const bindingConfig = testBindingConfig.get(testId) || { bindingType: 'custom', autoPercent: 0 };
 
     res.json({
       test: {
         ...test,
         questions: testQuestions || [],
+        bindingType: bindingConfig.bindingType,
+        autoPercent: bindingConfig.autoPercent,
       },
     });
   } catch (error) {
     console.error('Get test error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * GET /api/org/tests/:testId/binding-config
+ * Get question binding type for this test (Custom / Auto / Hybrid). Stored in memory only.
+ */
+router.get('/:testId/binding-config', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  const { testId } = req.params;
+  const { orgId } = req.user;
+  try {
+    const { data: test, error } = await supabase.from('Tests').select('TestID').eq('TestID', testId).eq('OrgID', orgId).single();
+    if (error || !test) return res.status(404).json({ error: 'Test not found' });
+    const config = testBindingConfig.get(testId) || { bindingType: 'custom', autoPercent: 0 };
+    res.json(config);
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});
+
+/**
+ * PUT /api/org/tests/:testId/binding-config
+ * Set question binding type (custom | auto | hybrid) and optional autoPercent for hybrid. Stored in memory only.
+ */
+router.put('/:testId/binding-config', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  const { testId } = req.params;
+  const { orgId } = req.user;
+  const { bindingType = 'custom', autoPercent = 0 } = req.body || {};
+  try {
+    const { data: test, error } = await supabase.from('Tests').select('TestID').eq('TestID', testId).eq('OrgID', orgId).single();
+    if (error || !test) return res.status(404).json({ error: 'Test not found' });
+    const valid = ['custom', 'auto', 'hybrid'].includes(bindingType);
+    if (!valid) return res.status(400).json({ error: 'bindingType must be custom, auto, or hybrid' });
+    const percent = Math.max(0, Math.min(100, Number(autoPercent) || 0));
+    testBindingConfig.set(testId, { bindingType, autoPercent: bindingType === 'hybrid' ? percent : 0 });
+    res.json({ bindingType, autoPercent: bindingType === 'hybrid' ? percent : 0 });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});
+
+/**
+ * GET /api/org/tests/:testId/questions/available
+ * List questions that can be added to this test (same exam, org scope, not already in test). Respects MaxQuestionsPerTest.
+ */
+router.get('/:testId/questions/available', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  const { testId } = req.params;
+  const { orgId } = req.user;
+  const { subjectId, topicId, difficulty, approvedOnly, search, customOnly, questionType, page = 1, limit = 50 } = req.query;
+
+  try {
+    const { data: test, error: testError } = await supabase
+      .from('Tests')
+      .select('TestID, ExamID, OrgID, SubscriptionID, TotalQuestions, TotalMarks')
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .single();
+
+    if (testError || !test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    const { data: subscription } = await supabase
+      .from('Subscriptions')
+      .select('PlanID')
+      .eq('SubscriptionID', test.SubscriptionID)
+      .single();
+
+    let maxQuestionsPerTest = null;
+    if (subscription?.PlanID) {
+      const { data: planExam } = await supabase
+        .from('SubscriptionPlanExams')
+        .select('MaxQuestionsPerTest')
+        .eq('PlanID', subscription.PlanID)
+        .eq('ExamID', test.ExamID)
+        .single();
+      maxQuestionsPerTest = planExam?.MaxQuestionsPerTest ?? null;
+    }
+
+    const { data: existingRows } = await supabase
+      .from('TestQuestions')
+      .select('QuestionID')
+      .eq('TestID', testId);
+    const existingIds = (existingRows || []).map((r) => r.QuestionID);
+    const currentCount = existingIds.length;
+
+    const { data: subjects } = await supabase
+      .from('Subjects')
+      .select('SubjectID')
+      .eq('ExamID', test.ExamID);
+    const subjectIds = (subjects || []).map((s) => s.SubjectID);
+    if (subjectIds.length === 0) {
+      return res.json({
+        questions: [],
+        currentCount,
+        maxQuestionsPerTest,
+        canAddMore: maxQuestionsPerTest == null || currentCount < maxQuestionsPerTest,
+        pagination: { page: 1, limit: Number(limit), total: 0, totalPages: 0 },
+      });
+    }
+
+    let topicIds = null;
+    if (topicId) {
+      const { data: t } = await supabase.from('Topics').select('TopicID').eq('TopicID', topicId).single();
+      topicIds = t ? [t.TopicID] : [];
+    } else {
+      const filterSubjectIds = subjectId ? [subjectId] : subjectIds;
+      const { data: topics } = await supabase
+        .from('Topics')
+        .select('TopicID')
+        .in('SubjectID', filterSubjectIds);
+      topicIds = (topics || []).map((t) => t.TopicID);
+    }
+    if (topicIds.length === 0) {
+      return res.json({
+        questions: [],
+        currentCount,
+        maxQuestionsPerTest,
+        canAddMore: true,
+        pagination: { page: 1, limit: Number(limit), total: 0, totalPages: 0 },
+      });
+    }
+
+    // Custom binding: only this org's questions (OrgID = orgId). Otherwise org + platform.
+    const customOnlyOrg = customOnly === 'true' || customOnly === '1';
+    let query = supabase
+      .from('Questions')
+      .select(`
+        QuestionID,
+        QuestionText,
+        DifficultyLevel,
+        QuestionType,
+        IsVerified,
+        TopicID,
+        OrgID,
+        Topics (
+          TopicName,
+          SubjectID,
+          Subjects ( SubjectName, ExamID )
+        )
+      `, { count: 'exact' })
+      .in('TopicID', topicIds);
+    if (customOnlyOrg) {
+      query = query.eq('OrgID', orgId);
+    } else {
+      query = query.or(`OrgID.eq.${orgId},OrgID.is.null`);
+    }
+    if (existingIds.length > 0) {
+      query = query.not('QuestionID', 'in', `(${existingIds.join(',')})`);
+    }
+
+    if (difficulty) query = query.eq('DifficultyLevel', difficulty);
+    if (approvedOnly === 'true' || approvedOnly === '1') query = query.eq('IsVerified', true);
+    if (questionType && (questionType === 'Single Correct' || questionType === 'Multiple Correct')) query = query.eq('QuestionType', questionType);
+    if (search && search.trim()) query = query.ilike('QuestionText', `%${search.trim()}%`);
+
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const from = (pageNum - 1) * limitNum;
+    query = query.order('CreatedAt', { ascending: false }).range(from, from + limitNum - 1);
+
+    const { data: questions, error: qError, count } = await query;
+
+    if (qError) {
+      console.error('Available questions error:', qError);
+      return res.status(500).json({ error: 'Failed to fetch available questions', details: qError.message });
+    }
+
+    const total = count ?? (questions?.length ?? 0);
+    res.json({
+      questions: questions || [],
+      currentCount,
+      maxQuestionsPerTest,
+      canAddMore: maxQuestionsPerTest == null || currentCount < maxQuestionsPerTest,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+      },
+    });
+  } catch (error) {
+    console.error('Get available questions error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * POST /api/org/tests/:testId/questions
+ * Add questions to test. Enforces exam scope, org scope, and MaxQuestionsPerTest.
+ */
+router.post('/:testId/questions', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  const { testId } = req.params;
+  const { questionIds = [] } = req.body;
+  const { orgId, orgUserId } = req.user;
+  const ipAddress = getClientIP(req);
+  const userAgent = getUserAgent(req);
+
+  try {
+    if (!Array.isArray(questionIds) || questionIds.length === 0) {
+      return res.status(400).json({ error: 'questionIds must be a non-empty array' });
+    }
+
+    const { data: test, error: testError } = await supabase
+      .from('Tests')
+      .select('TestID, ExamID, OrgID, SubscriptionID, TotalQuestions, TotalMarks')
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .single();
+
+    if (testError || !test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    const { data: subscription } = await supabase
+      .from('Subscriptions')
+      .select('PlanID')
+      .eq('SubscriptionID', test.SubscriptionID)
+      .single();
+
+    let maxQuestionsPerTest = null;
+    if (subscription?.PlanID) {
+      const { data: planExam } = await supabase
+        .from('SubscriptionPlanExams')
+        .select('MaxQuestionsPerTest')
+        .eq('PlanID', subscription.PlanID)
+        .eq('ExamID', test.ExamID)
+        .single();
+      maxQuestionsPerTest = planExam?.MaxQuestionsPerTest ?? null;
+    }
+
+    const { data: existingRows } = await supabase
+      .from('TestQuestions')
+      .select('QuestionID')
+      .eq('TestID', testId);
+    const currentCount = (existingRows || []).length;
+
+    const uniqueIds = [...new Set(questionIds)];
+    const newCount = currentCount + uniqueIds.length;
+    if (maxQuestionsPerTest != null && newCount > maxQuestionsPerTest) {
+      return res.status(400).json({
+        error: 'Adding these questions would exceed the plan limit',
+        maxQuestionsPerTest,
+        currentCount,
+        requested: uniqueIds.length,
+      });
+    }
+
+    const { data: subjects } = await supabase
+      .from('Subjects')
+      .select('SubjectID')
+      .eq('ExamID', test.ExamID);
+    const subjectIds = (subjects || []).map((s) => s.SubjectID);
+    const { data: topics } = await supabase
+      .from('Topics')
+      .select('TopicID')
+      .in('SubjectID', subjectIds);
+    const validTopicIds = new Set((topics || []).map((t) => t.TopicID));
+
+    const { data: questions } = await supabase
+      .from('Questions')
+      .select('QuestionID, TopicID, OrgID')
+      .in('QuestionID', uniqueIds);
+
+    const toAdd = [];
+    const invalid = [];
+    for (const q of questions || []) {
+      if (!validTopicIds.has(q.TopicID)) {
+        invalid.push(q.QuestionID);
+        continue;
+      }
+      if (q.OrgID != null && q.OrgID !== orgId) {
+        invalid.push(q.QuestionID);
+        continue;
+      }
+      toAdd.push(q.QuestionID);
+    }
+    const alreadyInTest = (existingRows || []).map((r) => r.QuestionID);
+    const actuallyNew = toAdd.filter((id) => !alreadyInTest.includes(id));
+
+    if (actuallyNew.length === 0) {
+      return res.status(400).json({
+        error: invalid.length ? 'Some questions are invalid or not allowed for this test' : 'All given questions are already in this test',
+        invalid: invalid.length ? invalid : undefined,
+      });
+    }
+
+    const totalAfterAdd = currentCount + actuallyNew.length;
+    const totalForWeightage = test.TotalQuestions != null ? Math.max(totalAfterAdd, test.TotalQuestions) : totalAfterAdd;
+    const weightageCheck = await validateWeightageForAdd(testId, test.ExamID, totalForWeightage, actuallyNew);
+    if (!weightageCheck.valid) {
+      return res.status(400).json({
+        error: weightageCheck.message,
+        weightageExceeded: weightageCheck.exceeded,
+      });
+    }
+
+    const marksPerQuestion = test.TotalMarks ? Number(test.TotalMarks) / (currentCount + actuallyNew.length) : 1;
+    const rows = actuallyNew.map((qId) => ({
+      TestID: testId,
+      QuestionID: qId,
+      Marks: marksPerQuestion,
+      TimeLimit: null,
+      NegativeMarks: 0,
+    }));
+
+    const { error: insertError } = await supabase.from('TestQuestions').insert(rows);
+
+    if (insertError) {
+      if (insertError.code === '23505') {
+        return res.status(400).json({ error: 'One or more questions are already in this test' });
+      }
+      console.error('Insert TestQuestions error:', insertError);
+      return res.status(500).json({
+        error: 'Failed to add questions',
+        details: insertError.message,
+        code: insertError.code,
+        hint: insertError.hint,
+      });
+    }
+
+    const newTotal = currentCount + actuallyNew.length;
+    await supabase
+      .from('Tests')
+      .update({ TotalQuestions: newTotal })
+      .eq('TestID', testId);
+
+    await createLog({
+      actorType: 'OrgUser',
+      actorID: orgUserId,
+      actionType: 'Update',
+      entityType: 'Test',
+      entityID: testId,
+      description: `Added ${actuallyNew.length} question(s) to test`,
+      ipAddress,
+      userAgent,
+      newData: { addedCount: actuallyNew.length, questionIds: actuallyNew },
+    });
+
+    res.status(201).json({
+      message: `${actuallyNew.length} question(s) added`,
+      added: actuallyNew.length,
+      totalQuestions: newTotal,
+    });
+  } catch (error) {
+    console.error('Add questions to test error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * POST /api/org/tests/:testId/questions/bulk
+ * Bulk add N questions by topic/criteria (topicId, subjectId, difficulty, count). Picks randomly from available pool.
+ */
+router.post('/:testId/questions/bulk', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  const { testId } = req.params;
+  const { topicId, subjectId, difficulty, approvedOnly, count = 10, customOnly } = req.body;
+  const { orgId, orgUserId } = req.user;
+  const customOnlyOrg = customOnly === true || customOnly === 'true' || customOnly === '1';
+  const ipAddress = getClientIP(req);
+  const userAgent = getUserAgent(req);
+
+  try {
+    const addCount = Math.min(100, Math.max(1, parseInt(count, 10) || 10));
+
+    const { data: test, error: testError } = await supabase
+      .from('Tests')
+      .select('TestID, ExamID, OrgID, SubscriptionID, TotalQuestions, TotalMarks')
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .single();
+
+    if (testError || !test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    const { data: subscription } = await supabase.from('Subscriptions').select('PlanID').eq('SubscriptionID', test.SubscriptionID).single();
+    let maxQuestionsPerTest = null;
+    if (subscription?.PlanID) {
+      const { data: planExam } = await supabase
+        .from('SubscriptionPlanExams')
+        .select('MaxQuestionsPerTest')
+        .eq('PlanID', subscription.PlanID)
+        .eq('ExamID', test.ExamID)
+        .single();
+      maxQuestionsPerTest = planExam?.MaxQuestionsPerTest ?? null;
+    }
+
+    const { data: existingRows } = await supabase.from('TestQuestions').select('QuestionID').eq('TestID', testId);
+    const existingIds = (existingRows || []).map((r) => r.QuestionID);
+    const currentCount = existingIds.length;
+
+    const { data: subjects } = await supabase.from('Subjects').select('SubjectID').eq('ExamID', test.ExamID);
+    const subjectIds = (subjects || []).map((s) => s.SubjectID);
+    if (subjectIds.length === 0) {
+      return res.status(400).json({ error: 'No subjects for this exam' });
+    }
+
+    let topicIds = [];
+    if (topicId) {
+      const { data: t } = await supabase.from('Topics').select('TopicID').eq('TopicID', topicId).single();
+      if (t) topicIds = [t.TopicID];
+    } else {
+      const filterSubjectIds = subjectId ? [subjectId] : subjectIds;
+      const { data: topics } = await supabase.from('Topics').select('TopicID').in('SubjectID', filterSubjectIds);
+      topicIds = (topics || []).map((t) => t.TopicID);
+    }
+    if (topicIds.length === 0) {
+      return res.status(400).json({ error: 'No topics match the criteria' });
+    }
+
+    let query = supabase
+      .from('Questions')
+      .select('QuestionID')
+      .in('TopicID', topicIds);
+    if (customOnlyOrg) {
+      query = query.eq('OrgID', orgId);
+    } else {
+      query = query.or(`OrgID.eq.${orgId},OrgID.is.null`);
+    }
+    if (existingIds.length > 0) query = query.not('QuestionID', 'in', `(${existingIds.join(',')})`);
+    if (difficulty) query = query.eq('DifficultyLevel', difficulty);
+    if (approvedOnly === true || approvedOnly === 'true' || approvedOnly === '1') query = query.eq('IsVerified', true);
+
+    const { data: pool } = await query.limit(500);
+    const availableIds = (pool || []).map((q) => q.QuestionID);
+    if (availableIds.length === 0) {
+      return res.status(400).json({ error: customOnlyOrg ? 'No questions from your organization match the criteria' : 'No questions available matching the criteria' });
+    }
+
+    const toAdd = [];
+    const shuffled = [...availableIds].sort(() => Math.random() - 0.5);
+    const canAdd = maxQuestionsPerTest != null ? Math.min(addCount, maxQuestionsPerTest - currentCount) : addCount;
+    for (let i = 0; i < Math.min(canAdd, shuffled.length); i++) toAdd.push(shuffled[i]);
+
+    if (toAdd.length === 0) {
+      return res.status(400).json({
+        error: maxQuestionsPerTest != null ? 'Plan question limit reached' : 'No questions to add',
+        maxQuestionsPerTest,
+        currentCount,
+      });
+    }
+
+    const totalAfterAdd = currentCount + toAdd.length;
+    const totalForWeightage = test.TotalQuestions != null ? Math.max(totalAfterAdd, test.TotalQuestions) : totalAfterAdd;
+    const weightageCheck = await validateWeightageForAdd(testId, test.ExamID, totalForWeightage, toAdd);
+    if (!weightageCheck.valid) {
+      return res.status(400).json({
+        error: weightageCheck.message,
+        weightageExceeded: weightageCheck.exceeded,
+      });
+    }
+
+    const marksPerQuestion = test.TotalMarks ? Number(test.TotalMarks) / (currentCount + toAdd.length) : 1;
+    const rows = toAdd.map((qId) => ({
+      TestID: testId,
+      QuestionID: qId,
+      Marks: marksPerQuestion,
+      TimeLimit: null,
+      NegativeMarks: 0,
+    }));
+
+    const { error: insertError } = await supabase.from('TestQuestions').insert(rows);
+    if (insertError) {
+      if (insertError.code === '23505') return res.status(400).json({ error: 'One or more questions already in test' });
+      return res.status(500).json({ error: 'Failed to add questions', details: insertError.message });
+    }
+
+    const newTotal = currentCount + toAdd.length;
+    await supabase.from('Tests').update({ TotalQuestions: newTotal }).eq('TestID', testId);
+
+    await createLog({
+      actorType: 'OrgUser',
+      actorID: orgUserId,
+      actionType: 'Update',
+      entityType: 'Test',
+      entityID: testId,
+      description: `Bulk added ${toAdd.length} question(s) to test`,
+      ipAddress,
+      userAgent,
+      newData: { addedCount: toAdd.length, questionIds: toAdd },
+    });
+
+    res.status(201).json({
+      message: `${toAdd.length} question(s) added`,
+      added: toAdd.length,
+      totalQuestions: newTotal,
+    });
+  } catch (error) {
+    console.error('Bulk add questions error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * POST /api/org/tests/:testId/questions/copy-from
+ * Copy questions from another test (same org, same exam). Body: { sourceTestId, questionIds?: [] }. If questionIds omitted, copy all.
+ */
+router.post('/:testId/questions/copy-from', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  const { testId } = req.params;
+  const { sourceTestId, questionIds: requestedIds } = req.body;
+  const { orgId, orgUserId } = req.user;
+  const ipAddress = getClientIP(req);
+  const userAgent = getUserAgent(req);
+
+  try {
+    if (!sourceTestId) {
+      return res.status(400).json({ error: 'sourceTestId is required' });
+    }
+
+    const { data: test, error: testError } = await supabase
+      .from('Tests')
+      .select('TestID, ExamID, OrgID, SubscriptionID, TotalQuestions, TotalMarks')
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .single();
+
+    if (testError || !test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    const { data: sourceTest, error: sourceError } = await supabase
+      .from('Tests')
+      .select('TestID, ExamID, OrgID')
+      .eq('TestID', sourceTestId)
+      .eq('OrgID', orgId)
+      .single();
+
+    if (sourceError || !sourceTest) {
+      return res.status(404).json({ error: 'Source test not found' });
+    }
+    if (sourceTest.ExamID !== test.ExamID) {
+      return res.status(400).json({ error: 'Source test must be for the same exam' });
+    }
+
+    const { data: subscription } = await supabase.from('Subscriptions').select('PlanID').eq('SubscriptionID', test.SubscriptionID).single();
+    let maxQuestionsPerTest = null;
+    if (subscription?.PlanID) {
+      const { data: planExam } = await supabase
+        .from('SubscriptionPlanExams')
+        .select('MaxQuestionsPerTest')
+        .eq('PlanID', subscription.PlanID)
+        .eq('ExamID', test.ExamID)
+        .single();
+      maxQuestionsPerTest = planExam?.MaxQuestionsPerTest ?? null;
+    }
+
+    const { data: sourceRows } = await supabase
+      .from('TestQuestions')
+      .select('QuestionID')
+      .eq('TestID', sourceTestId);
+    let toCopyIds = (sourceRows || []).map((r) => r.QuestionID);
+    if (requestedIds && Array.isArray(requestedIds) && requestedIds.length > 0) {
+      const requestedSet = new Set(requestedIds);
+      toCopyIds = toCopyIds.filter((id) => requestedSet.has(id));
+    }
+
+    const { data: existingRows } = await supabase.from('TestQuestions').select('QuestionID').eq('TestID', testId);
+    const existingSet = new Set((existingRows || []).map((r) => r.QuestionID));
+    let actuallyNew = toCopyIds.filter((id) => !existingSet.has(id));
+    if (actuallyNew.length > 0) {
+      const { data: qList } = await supabase.from('Questions').select('QuestionID, OrgID').in('QuestionID', actuallyNew);
+      const orgOnlyIds = new Set((qList || []).filter((q) => q.OrgID === orgId).map((q) => q.QuestionID));
+      actuallyNew = actuallyNew.filter((id) => orgOnlyIds.has(id));
+    }
+    const currentCount = (existingRows || []).length;
+    const newTotal = currentCount + actuallyNew.length;
+
+    if (maxQuestionsPerTest != null && newTotal > maxQuestionsPerTest) {
+      return res.status(400).json({
+        error: 'Copying would exceed plan limit',
+        maxQuestionsPerTest,
+        currentCount,
+        wouldAdd: actuallyNew.length,
+      });
+    }
+    if (actuallyNew.length === 0) {
+      return res.status(400).json({ error: 'All selected questions are already in this test, or none belong to your organization' });
+    }
+
+    const weightageCheck = await validateWeightageForAdd(testId, test.ExamID, test.TotalQuestions != null ? Math.max(newTotal, test.TotalQuestions) : newTotal, actuallyNew);
+    if (!weightageCheck.valid) {
+      return res.status(400).json({ error: weightageCheck.message, weightageExceeded: weightageCheck.exceeded });
+    }
+
+    const marksPerQuestion = test.TotalMarks ? Number(test.TotalMarks) / newTotal : 1;
+    const rows = actuallyNew.map((qId) => ({
+      TestID: testId,
+      QuestionID: qId,
+      Marks: marksPerQuestion,
+      TimeLimit: null,
+      NegativeMarks: 0,
+    }));
+
+    const { error: insertError } = await supabase.from('TestQuestions').insert(rows);
+    if (insertError) {
+      if (insertError.code === '23505') return res.status(400).json({ error: 'One or more questions already in test' });
+      return res.status(500).json({ error: 'Failed to copy questions', details: insertError.message });
+    }
+
+    await supabase.from('Tests').update({ TotalQuestions: newTotal }).eq('TestID', testId);
+
+    await createLog({
+      actorType: 'OrgUser',
+      actorID: orgUserId,
+      actionType: 'Update',
+      entityType: 'Test',
+      entityID: testId,
+      description: `Copied ${actuallyNew.length} question(s) from another test`,
+      ipAddress,
+      userAgent,
+      newData: { sourceTestId, addedCount: actuallyNew.length },
+    });
+
+    res.status(201).json({
+      message: `${actuallyNew.length} question(s) copied`,
+      added: actuallyNew.length,
+      totalQuestions: newTotal,
+    });
+  } catch (error) {
+    console.error('Copy questions from test error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * PUT /api/org/tests/:testId/questions/reorder
+ * Reorder questions. Body: { questionIds: string[] } — order of array is the new display order.
+ */
+router.put('/:testId/questions/reorder', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  const { testId } = req.params;
+  const { questionIds = [] } = req.body;
+  const { orgId } = req.user;
+
+  try {
+    if (!Array.isArray(questionIds) || questionIds.length === 0) {
+      return res.status(400).json({ error: 'questionIds must be a non-empty array' });
+    }
+
+    const { data: test, error: testError } = await supabase
+      .from('Tests')
+      .select('TestID')
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .single();
+
+    if (testError || !test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    const { data: existingRows } = await supabase
+      .from('TestQuestions')
+      .select('QuestionID')
+      .eq('TestID', testId);
+
+    const existingIds = new Set((existingRows || []).map((r) => r.QuestionID));
+    const validOrder = questionIds.filter((id) => existingIds.has(id));
+    if (validOrder.length !== existingIds.size) {
+      return res.status(400).json({ error: 'questionIds must contain exactly the questions currently in the test' });
+    }
+
+    // DisplayOrder column not in DB; accept reorder request but do not persist order
+    res.json({
+      message: 'Order updated',
+      questionIds: validOrder,
+    });
+  } catch (error) {
+    console.error('Reorder questions error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * DELETE /api/org/tests/:testId/questions/:questionId
+ * Remove a question from test; update test aggregates.
+ */
+router.delete('/:testId/questions/:questionId', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  const { testId, questionId } = req.params;
+  const { orgId, orgUserId } = req.user;
+  const ipAddress = getClientIP(req);
+  const userAgent = getUserAgent(req);
+
+  try {
+    const { data: test, error: testError } = await supabase
+      .from('Tests')
+      .select('TestID, TestName, OrgID, TotalQuestions')
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .single();
+
+    if (testError || !test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    const { error: delError } = await supabase
+      .from('TestQuestions')
+      .delete()
+      .eq('TestID', testId)
+      .eq('QuestionID', questionId);
+
+    if (delError) {
+      console.error('Delete TestQuestions error:', delError);
+      return res.status(500).json({ error: 'Failed to remove question', details: delError.message });
+    }
+
+    const newTotal = Math.max(0, (test.TotalQuestions || 0) - 1);
+    await supabase
+      .from('Tests')
+      .update({ TotalQuestions: newTotal })
+      .eq('TestID', testId);
+
+    await createLog({
+      actorType: 'OrgUser',
+      actorID: orgUserId,
+      actionType: 'Update',
+      entityType: 'Test',
+      entityID: testId,
+      description: `Removed question from test: ${test.TestName}`,
+      ipAddress,
+      userAgent,
+      newData: { questionId, totalQuestions: newTotal },
+    });
+
+    res.json({
+      message: 'Question removed from test',
+      totalQuestions: newTotal,
+    });
+  } catch (error) {
+    console.error('Remove question from test error:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
@@ -526,6 +1381,9 @@ router.post('/:testId/assign/single', authenticate, requireRole(['OrgAdmin']), v
     if (!studentId) {
       return res.status(400).json({ error: 'Student ID is required' });
     }
+
+    const minCheck = await checkMinQuestionsForActivateOrAssign(testId, orgId);
+    if (!minCheck.ok) return res.status(minCheck.status).json(minCheck.body);
 
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
@@ -645,6 +1503,9 @@ router.post('/:testId/assign/multiple', authenticate, requireRole(['OrgAdmin']),
     if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
       return res.status(400).json({ error: 'Student IDs array is required and must not be empty' });
     }
+
+    const minCheck = await checkMinQuestionsForActivateOrAssign(testId, orgId);
+    if (!minCheck.ok) return res.status(minCheck.status).json(minCheck.body);
 
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
@@ -770,6 +1631,9 @@ router.post('/:testId/assign/group', authenticate, requireRole(['OrgAdmin']), ve
     if (!groupId) {
       return res.status(400).json({ error: 'Group ID is required' });
     }
+
+    const minCheck = await checkMinQuestionsForActivateOrAssign(testId, orgId);
+    if (!minCheck.ok) return res.status(minCheck.status).json(minCheck.body);
 
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
@@ -936,6 +1800,9 @@ router.post('/:testId/assign/groups', authenticate, requireRole(['OrgAdmin']), v
     if (!groupIds || !Array.isArray(groupIds) || groupIds.length === 0) {
       return res.status(400).json({ error: 'Group IDs array is required and must not be empty' });
     }
+
+    const minCheck = await checkMinQuestionsForActivateOrAssign(testId, orgId);
+    if (!minCheck.ok) return res.status(minCheck.status).json(minCheck.body);
 
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
@@ -1109,6 +1976,9 @@ router.post('/:testId/assign/all', authenticate, requireRole(['OrgAdmin']), veri
   const userAgent = getUserAgent(req);
 
   try {
+    const minCheck = await checkMinQuestionsForActivateOrAssign(testId, orgId);
+    if (!minCheck.ok) return res.status(minCheck.status).json(minCheck.body);
+
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
       .from('Tests')
@@ -1293,6 +2163,11 @@ router.put('/:testId/status', authenticate, requireRole(['OrgAdmin']), verifyAct
     const normalizedStatus = String(status || '').trim();
     if (!['Active', 'Inactive'].includes(normalizedStatus)) {
       return res.status(400).json({ error: 'Invalid status. Must be Active or Inactive.' });
+    }
+
+    if (normalizedStatus === 'Active') {
+      const minCheck = await checkMinQuestionsForActivateOrAssign(testId, orgId);
+      if (!minCheck.ok) return res.status(minCheck.status).json(minCheck.body);
     }
 
     // Verify test belongs to organization

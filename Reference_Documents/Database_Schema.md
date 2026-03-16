@@ -17,6 +17,8 @@ CREATE TYPE status_orgusers_enum AS ENUM ('Active','Inactive','Suspended');
 
 CREATE TYPE status_organizations_enum AS ENUM ('Active','Inactive');
 
+CREATE TYPE status_subscriptionplans_enum AS ENUM ('Active','Inactive');
+
 CREATE TYPE gender_enum AS ENUM ('Male','Female','Other');
 
 CREATE TYPE certificate_type_enum AS ENUM ('Completion','Merit','Participation','Achievement');
@@ -153,8 +155,19 @@ CREATE TABLE "SubscriptionPlans" (
   "PlanName" text,
   "Price" numeric,
   "DurationMonths" int,
-  "Features" jsonb
+  "Features" jsonb,
+  "Status" status_subscriptionplans_enum NOT NULL DEFAULT 'Active'
 );
+-- Status: Active = available for new subscriptions. Inactive = hidden from org selection; existing org subscriptions are unaffected.
+
+-- Audience: defines which type of entity this plan is intended for.
+-- 'Organization' = only org admins can see/use this plan.
+-- 'Student' = only individual students can see/use this plan.
+-- 'Both' = plan can be used by both (if business needs).
+ALTER TABLE "SubscriptionPlans"
+ADD COLUMN "Audience" text
+  CHECK ("Audience" IN ('Organization','Student','Both'))
+  DEFAULT 'Organization';
 
 CREATE TABLE "Subscriptions" (
   "SubscriptionID" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -180,6 +193,30 @@ CREATE TABLE "UsageCounters" (
   "UpdatedAt" timestamptz DEFAULT now()
 );
 
+-- 2.a System Settings & Announcements
+
+-- Central key/value store for global platform settings (maintenance, AI config, defaults, etc.)
+CREATE TABLE "SystemSettings" (
+  "Key" text PRIMARY KEY,
+  "Value" jsonb NOT NULL,
+  "UpdatedAt" timestamptz DEFAULT now(),
+  "UpdatedBy" uuid REFERENCES "Users"("UserID")
+);
+
+-- Global announcements / banners shown across the platform
+CREATE TABLE "Announcements" (
+  "AnnouncementID" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "Title" text NOT NULL,
+  "Message" text NOT NULL,
+  "Link" text,
+  "TargetRoles" text[], -- e.g. {'OrgAdmin','Student'}
+  "StartsAt" timestamptz,
+  "EndsAt" timestamptz,
+  "IsActive" boolean DEFAULT true,
+  "CreatedAt" timestamptz DEFAULT now(),
+  "CreatedBy" uuid REFERENCES "Users"("UserID")
+);
+
 -- 3. Exam & Content Management
 
 CREATE TABLE "Exams" (
@@ -200,14 +237,34 @@ CREATE TABLE "Subjects" (
   "CreatedAt" timestamptz DEFAULT now()
 );
 
+-- Chapters: optional grouping under a Subject. One chapter can have many topics.
+-- Both ChapterNumber and ChapterName are optional. Created by platform User or OrgUser (one set, other null).
+CREATE TABLE "Chapters" (
+  "ChapterID" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "SubjectID" uuid NOT NULL REFERENCES "Subjects"("SubjectID") ON DELETE CASCADE,
+  "ChapterNumber" int NULL,
+  "ChapterName" text NULL,
+  "CreatedBy" uuid NULL REFERENCES "Users"("UserID") ON DELETE SET NULL,
+  "CreatedByOrgUserID" uuid NULL REFERENCES "OrgUsers"("OrgUserID") ON DELETE SET NULL,
+  "CreatedAt" timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_chapters_subjectid ON "Chapters"("SubjectID");
+CREATE INDEX IF NOT EXISTS idx_chapters_createdby_orguser ON "Chapters"("CreatedByOrgUserID");
+
 CREATE TABLE "Topics" (
   "TopicID" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "SubjectID" uuid REFERENCES "Subjects"("SubjectID") ON DELETE CASCADE,
+  "ChapterID" uuid NULL REFERENCES "Chapters"("ChapterID") ON DELETE SET NULL,
   "TopicName" text,
   "Description" text,
   "CreatedBy" uuid REFERENCES "Users"("UserID"),
   "CreatedAt" timestamptz DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_topics_chapterid ON "Topics"("ChapterID");
+-- Question→Topic→Chapter: Questions.TopicID → Topics.ChapterID. Use this join to know "topic is under which
+-- chapter" and for adaptive learning (filter by chapter only, topic only, or both). See Main_Implementation.md.
+-- If Topics previously had ChapterNumber/ChapterName columns, drop them after adding Chapters + ChapterID:
+-- ALTER TABLE "Topics" DROP COLUMN IF EXISTS "ChapterNumber", DROP COLUMN IF EXISTS "ChapterName";
 
 CREATE TABLE "Tests" (
   "TestID" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -246,7 +303,8 @@ CREATE TABLE "Questions" (
   "TimesCorrect" int DEFAULT 0,
   "TimesIncorrect" int DEFAULT 0,
   "LastUpdated" timestamptz,
-  "OrgID" uuid NULL
+  "OrgID" uuid NULL,
+  "CreatedByOrgUserID" uuid NULL
 );
 
 ALTER TABLE "Questions"
@@ -255,8 +313,17 @@ FOREIGN KEY ("OrgID")
 REFERENCES "Organizations"("OrgID")
 ON DELETE SET NULL;
 
+ALTER TABLE "Questions"
+ADD CONSTRAINT fk_questions_createdby_orguser
+FOREIGN KEY ("CreatedByOrgUserID")
+REFERENCES "OrgUsers"("OrgUserID")
+ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_questions_orgid
 ON "Questions"("OrgID");
+
+CREATE INDEX IF NOT EXISTS idx_questions_createdby_orguser
+ON "Questions"("CreatedByOrgUserID");
 
 CREATE TABLE "Options" (
   "OptionID" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -273,6 +340,7 @@ CREATE TABLE "TestQuestions" (
   "Marks" numeric,
   "TimeLimit" int,
   "NegativeMarks" numeric DEFAULT 0,
+  "DisplayOrder" int NOT NULL DEFAULT 0,
   PRIMARY KEY ("TestID","QuestionID")
 );
 
@@ -506,3 +574,18 @@ ADD COLUMN IF NOT EXISTS "StudentAttempts" INTEGER DEFAULT 0;
 
 ALTER TABLE public."UsageCounters"
 ADD COLUMN IF NOT EXISTS "LastResetAt" TIMESTAMP WITH TIME ZONE;
+
+
+-- SubscriptionPlans Status: enum status_subscriptionplans_enum ('Active', 'Inactive')
+-- Full script: backend/scripts/add_subscriptionplans_status.sql
+-- Step 1 creates the enum (run once). Step 2a adds the column if missing; step 2b converts existing text column to enum.
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_subscriptionplans_enum') THEN
+    CREATE TYPE public.status_subscriptionplans_enum AS ENUM ('Active', 'Inactive');
+  END IF;
+END $$;
+
+ALTER TABLE public."SubscriptionPlans"
+ADD COLUMN IF NOT EXISTS "Status" public.status_subscriptionplans_enum NOT NULL DEFAULT 'Active';
+

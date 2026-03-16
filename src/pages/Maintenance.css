@@ -1,0 +1,171 @@
+.maintenance-page {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at top, #fee2e2 0, #f9fafb 55%, #f3f4f6 100%);
+  z-index: 40;
+}
+
+.maintenance-backdrop {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top, rgba(248, 113, 113, 0.2), transparent 60%);
+  pointer-events: none;
+}
+
+.maintenance-card {
+  position: relative;
+  max-width: 520px;
+  width: 100%;
+  margin: 0 1.5rem;
+  background: #ffffff;
+  border-radius: 1.25rem;
+  border: 1px solid #fecaca;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.15);
+  padding: 2rem 2.25rem 1.75rem;
+  text-align: center;
+  overflow: hidden;
+}
+
+.maintenance-pulse {
+  position: absolute;
+  width: 160px;
+  height: 160px;
+  border-radius: 999px;
+  background: rgba(248, 113, 113, 0.12);
+  top: -40px;
+  right: -40px;
+  animation: maintenance-pulse 2.5s ease-out infinite;
+  pointer-events: none;
+}
+
+.maintenance-icon {
+  font-size: 2.5rem;
+}
+
+.maintenance-hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.maintenance-illustration {
+  font-size: 2.2rem;
+}
+
+.maintenance-card h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: #991b1b;
+}
+
+.maintenance-message {
+  font-size: 0.95rem;
+  color: #4b5563;
+  margin: 0.5rem 0 1rem 0;
+}
+
+.maintenance-details {
+  text-align: left;
+  background: #fef2f2;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #fecaca;
+  font-size: 0.85rem;
+  color: #7f1d1d;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.maintenance-details .label {
+  font-weight: 600;
+}
+
+.maintenance-details .value {
+  font-weight: 500;
+}
+
+.maintenance-footer {
+  margin-top: 1.25rem;
+}
+
+.loader-bar {
+  width: 100%;
+  height: 4px;
+  background: #fee2e2;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.loader-bar-fill {
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, #ef4444, #fb7185);
+  border-radius: 999px;
+  animation: maintenance-bar 1.4s ease-in-out infinite;
+}
+
+.maintenance-footnote {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.maintenance-logout-btn {
+  margin-top: 0.75rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
+}
+
+.maintenance-logout-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+  box-shadow: 0 4px 10px rgba(248, 113, 113, 0.35);
+}
+
+.maintenance-logout-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 6px rgba(248, 113, 113, 0.35);
+}
+
+@keyframes maintenance-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+
+@keyframes maintenance-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(20%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+

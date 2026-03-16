@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { orgAuth } from '../../services/api';
 import NotificationBell from '../NotificationBell';
+import AnnouncementBanner from '../AnnouncementBanner';
 import './ReviewerLayout.css';
 
 const ReviewerLayout = () => {
@@ -105,6 +106,7 @@ const ReviewerLayout = () => {
 
       {/* Main Content */}
       <main className="dashboard-main">
+        <AnnouncementBanner />
         <div className="dashboard-header">
           <button
             className="mobile-menu-toggle"

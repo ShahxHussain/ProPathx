@@ -1,0 +1,308 @@
+/* ============================================
+   SuperAdmin Exams – clear hierarchy & forms
+   ============================================ */
+
+/* Red accent: borders only for header buttons, no animation; icons/text black */
+.admin-exams-page .exam-setup-link {
+  background: var(--surface, #fff) !important;
+  color: #0f172a !important;
+  border: 1px solid #dc2626 !important;
+  box-shadow: none;
+}
+
+.admin-exams-page .exam-setup-link:hover {
+  background: var(--surface, #fff) !important;
+  color: #0f172a !important;
+  border-color: #b91c1c !important;
+  box-shadow: none;
+}
+
+.admin-exams-page .exam-actions .exam-action-btn {
+  transition: none !important;
+  border-color: #dc2626 !important;
+}
+
+.admin-exams-page .exam-actions .exam-action-btn svg {
+  stroke: #0f172a !important;
+}
+
+.admin-exams-page .exam-actions .exam-action-btn:hover {
+  transform: none !important;
+  background: var(--surface, #fff) !important;
+  border-color: #b91c1c !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.admin-exams-page .exam-actions .exam-action-btn:hover svg {
+  stroke: #0f172a !important;
+}
+
+.admin-exams-page .exam-actions .exam-action-btn.danger svg {
+  stroke: #0f172a !important;
+}
+
+.admin-exams-page .exam-actions .exam-action-btn.danger:hover {
+  background: var(--surface, #fff) !important;
+  border-color: #b91c1c !important;
+}
+
+.admin-exams-page .exam-actions .exam-action-btn.danger:hover svg {
+  stroke: #0f172a !important;
+}
+
+/* Other primary buttons on page (e.g. Add subject) stay red fill */
+.admin-exams-page .btn-primary {
+  background: #dc2626;
+}
+
+.admin-exams-page .btn-primary:hover {
+  background: #b91c1c;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.admin-exams-page .btn-primary:disabled {
+  background: #fca5a5;
+}
+
+.admin-exams-page .page-subtitle {
+  margin-bottom: 8px;
+}
+
+.admin-exams-hint {
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+  background: var(--background, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 24px;
+  max-width: 640px;
+}
+
+.admin-exams-hint strong {
+  color: var(--text, #0f172a);
+}
+
+/* Exam card: context when expanded */
+.admin-exam-context {
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.08) 0%, transparent 100%);
+  border-left: 4px solid #dc2626;
+  padding: 10px 20px;
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+  margin: 0 -20px 16px -20px;
+}
+
+.admin-exam-context strong {
+  color: var(--text, #0f172a);
+}
+
+/* Exam header: show summary when we have data */
+.exam-header .exam-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Subject card: "Part of" context */
+.admin-subject-context {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-subject-context strong {
+  color: var(--text);
+}
+
+/* Numbered sections */
+.admin-section {
+  margin-top: 24px;
+}
+
+.admin-section:first-child {
+  margin-top: 0;
+}
+
+.admin-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.admin-section-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #dc2626;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-section-title h5 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.admin-section-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 12px 34px;
+  line-height: 1.4;
+}
+
+/* Form cards (Add Chapter / Add Topic) */
+.admin-form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.admin-form-card .card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 14px 0;
+}
+
+.admin-form-card .form-group {
+  margin-bottom: 14px;
+}
+
+.admin-form-card .form-group:last-of-type {
+  margin-bottom: 16px;
+}
+
+.admin-form-card label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.admin-form-card input[type="text"],
+.admin-form-card input[type="number"],
+.admin-form-card select,
+.admin-form-card textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--background);
+  font-family: inherit;
+}
+
+.admin-form-card input:focus,
+.admin-form-card select:focus,
+.admin-form-card textarea:focus {
+  outline: none;
+  border-color: #dc2626;
+}
+
+.admin-form-card .form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.admin-form-card .field-error {
+  font-size: 12px;
+  color: #ef4444;
+  display: block;
+  margin-top: 4px;
+}
+
+/* Chapter list: clearer items */
+.admin-exams-page .chapter-item {
+  padding: 12px 14px;
+}
+
+.admin-exams-page .chapter-item span:first-child {
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* Topic list: clearer items */
+.admin-exams-page .topic-item {
+  padding: 14px 16px;
+}
+
+/* Empty states with help */
+.admin-empty-block {
+  text-align: center;
+  padding: 24px 20px;
+  background: var(--background);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.admin-empty-block p {
+  margin: 0 0 6px 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.admin-empty-block .help {
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+
+/* Section header with primary CTA */
+.admin-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.admin-section-header .admin-section-title {
+  margin-bottom: 0;
+}
+
+.admin-section-header .admin-section-desc {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+/* Weightage hint */
+.admin-weightage-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  background: var(--background);
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.admin-weightage-hint.warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+}
+
+/* Setup link on exam card (list page) */
+.exam-setup-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  text-decoration: none;
+  border-radius: 8px;
+}

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, FileText, ChevronDown, ChevronRight, Edit2, Trash2, BookOpen, BookMarked, FolderOpen, X, Building2 } from 'lucide-react';
+import { Plus, FileText, ChevronDown, ChevronRight, Edit2, Trash2, BookOpen, BookMarked, FolderOpen, X, Building2, Settings2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { adminAPI } from '../../services/api';
 import '../org/Exams.css';
+import './Exams.css';
 
 const Exams = () => {
   const [exams, setExams] = useState([]);
@@ -288,12 +290,15 @@ const Exams = () => {
   };
 
   return (
-    <div className="exams-page">
+    <div className="exams-page admin-exams-page">
       <div className="page-header">
         <div className="header-row">
           <div>
             <h1>Exams Management</h1>
-            <p className="page-subtitle">Create and manage exams, subjects, and topics across all organizations</p>
+            <p className="page-subtitle">Create and manage exams, subjects, chapters, and topics. Used by organizations to build question banks and tests.</p>
+            <div className="admin-exams-hint" role="status">
+              <strong>Structure:</strong> Exam → Subjects → optional Chapters → Topics. Add subjects to an exam, then add topics (and optionally chapters to group them).
+            </div>
           </div>
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
             <Plus size={20} />
@@ -338,6 +343,7 @@ const Exams = () => {
               onToggleSubject={toggleSubject}
               onEditExam={() => setEditingExam(exam)}
               onDeleteExam={() => handleDeleteExam(exam.ExamID)}
+              onRefreshExam={loadExamDetails}
               onCreateSubject={(data) => handleCreateSubject(exam.ExamID, data)}
               onUpdateSubject={(subjectId, data) => handleUpdateSubject(exam.ExamID, subjectId, data)}
               onDeleteSubject={(subjectId) => handleDeleteSubject(exam.ExamID, subjectId)}
@@ -389,6 +395,7 @@ const ExamCard = ({
   onToggleSubject,
   onEditExam,
   onDeleteExam,
+  onRefreshExam,
   onCreateSubject,
   onUpdateSubject,
   onDeleteSubject,
@@ -415,6 +422,8 @@ const ExamCard = ({
 
   const totalWeightage = calculateTotalWeightage();
   const canAddSubject = Math.abs(totalWeightage - 100) > 0.01; // Allow small floating point differences
+  const subjectCount = exam.subjects?.length ?? 0;
+  const topicCount = exam.subjects?.reduce((acc, s) => acc + (s.topics?.length || 0), 0) ?? 0;
 
   return (
     <div className="exam-card">
@@ -431,12 +440,22 @@ const ExamCard = ({
                   {exam.OrgName} • 
                 </>
               )}
-              {exam.NoOfSubjects ? `${exam.NoOfSubjects} subjects` : 'No subjects'} • Created{' '}
-              {new Date(exam.CreatedAt).toLocaleDateString()}
+              {subjectCount > 0 ? `${subjectCount} subject${subjectCount !== 1 ? 's' : ''}` : (exam.NoOfSubjects ? `${exam.NoOfSubjects} subjects` : 'No subjects')}
+              {subjectCount > 0 && topicCount >= 0 && ` · ${topicCount} topic${topicCount !== 1 ? 's' : ''}`}
+              {' · Created '}{new Date(exam.CreatedAt).toLocaleDateString()}
             </p>
           </div>
         </div>
         <div className="exam-actions" onClick={(e) => e.stopPropagation()}>
+          <Link
+            to={`/admin/exams/setup/${exam.ExamID}`}
+            className="btn btn-primary exam-setup-link"
+            title="Open full setup for this exam"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Settings2 size={16} />
+            Setup
+          </Link>
           <button 
             className="icon-btn exam-action-btn" 
             onClick={(e) => {
@@ -464,20 +483,22 @@ const ExamCard = ({
 
       {isExpanded && (
         <div className="exam-content">
-          {exam.Description && (
-            <div className="exam-description">
-              <strong>Description:</strong> {exam.Description}
-            </div>
-          )}
+          <div className="admin-exam-context">
+            <strong>Managing:</strong> {exam.ExamName}
+            {exam.Description && ` — ${exam.Description}`}
+          </div>
           {exam.Syllabus && (
             <div className="exam-syllabus">
               <strong>Syllabus:</strong> {exam.Syllabus}
             </div>
           )}
 
-          <div className="subjects-section">
-            <div className="section-header">
-              <h4>Subjects</h4>
+          <div className="subjects-section admin-section">
+            <div className="admin-section-header">
+              <div className="admin-section-title">
+                <span className="admin-section-num">1</span>
+                <h4 style={{ margin: 0 }}>Subjects</h4>
+              </div>
               {canAddSubject && (
                 <button className="btn btn-sm btn-primary" onClick={() => setShowAddSubject(true)}>
                   <Plus size={16} />
@@ -485,8 +506,8 @@ const ExamCard = ({
                 </button>
               )}
               {!canAddSubject && exam.subjects && exam.subjects.length > 0 && (
-                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                  Total Weightage: {totalWeightage.toFixed(2)}%
+                <span className="admin-weightage-hint">
+                  Total weightage: {totalWeightage.toFixed(1)}%. Add or edit subjects so total is 100% to add more.
                 </span>
               )}
             </div>
@@ -501,12 +522,15 @@ const ExamCard = ({
               />
             )}
 
-            {exam.subjects && exam.subjects.length > 0 ? (
+                {exam.subjects && exam.subjects.length > 0 ? (
               <div className="subjects-list">
                 {exam.subjects.map((subject) => (
                   <SubjectCard
                     key={subject.SubjectID}
+                    examId={exam.ExamID}
+                    examName={exam.ExamName}
                     subject={subject}
+                    onRefreshExam={onRefreshExam}
                     isExpanded={expandedSubjects.has(subject.SubjectID)}
                     onToggle={() => onToggleSubject(subject.SubjectID)}
                     onEdit={() => onEditSubject(subject)}
@@ -520,8 +544,13 @@ const ExamCard = ({
                 ))}
               </div>
             ) : (
-              <div className="empty-subjects">
-                <p>No subjects yet. Add your first subject to get started.</p>
+              <div className="empty-subjects admin-empty-block">
+                <p>No subjects yet.</p>
+                <p className="help">Subjects are the main categories (e.g. Physics, Chemistry). Add one to then add chapters and topics.</p>
+                <button type="button" className="btn btn-sm btn-primary" onClick={() => setShowAddSubject(true)} style={{ marginTop: 12 }}>
+                  <Plus size={14} />
+                  Add first subject
+                </button>
               </div>
             )}
           </div>
@@ -543,7 +572,10 @@ const ExamCard = ({
 };
 
 const SubjectCard = ({
+  examId,
+  examName,
   subject,
+  onRefreshExam,
   isExpanded,
   onToggle,
   onEdit,
@@ -555,6 +587,7 @@ const SubjectCard = ({
   onEditTopic,
 }) => {
   const [showAddTopic, setShowAddTopic] = useState(false);
+  const [showAddChapter, setShowAddChapter] = useState(false);
 
   return (
     <div className="subject-card">
@@ -566,7 +599,8 @@ const SubjectCard = ({
             <h4>{subject.SubjectName}</h4>
             <p className="subject-meta">
               {subject.topics?.length || 0} topics
-              {subject.Weightage !== null && ` • ${subject.Weightage}% weightage`}
+              {(subject.chapters?.length || 0) > 0 && ` · ${subject.chapters.length} chapters`}
+              {subject.Weightage != null && subject.Weightage !== '' && ` · ${subject.Weightage}% weight`}
             </p>
           </div>
         </div>
@@ -582,23 +616,76 @@ const SubjectCard = ({
 
       {isExpanded && (
         <div className="subject-content">
+          {examName && (
+            <div className="admin-subject-context">
+              Part of exam: <strong>{examName}</strong>
+            </div>
+          )}
           {subject.Description && (
             <div className="subject-description">
               <strong>Description:</strong> {subject.Description}
             </div>
           )}
 
-          <div className="topics-section">
-            <div className="section-header">
-              <h5>Topics</h5>
-              <button className="btn btn-sm btn-primary" onClick={() => setShowAddTopic(true)}>
+          <div className="chapters-section admin-section">
+            <div className="admin-section-header">
+              <div className="admin-section-title">
+                <span className="admin-section-num">2</span>
+                <h5>Chapters (optional)</h5>
+              </div>
+              <button className="btn btn-sm btn-secondary" onClick={() => setShowAddChapter(!showAddChapter)}>
                 <Plus size={14} />
-                Add Topic
+                {showAddChapter ? 'Cancel' : 'Add Chapter'}
               </button>
             </div>
+            <p className="admin-section-desc">Group topics under chapters (e.g. Ch. 1: Mechanics). You can add topics without chapters.</p>
+            {showAddChapter && (
+              <ChapterForm
+                examId={examId}
+                subjectId={subject.SubjectID}
+                onClose={() => setShowAddChapter(false)}
+                onSuccess={() => {
+                  setShowAddChapter(false);
+                  onRefreshExam?.(examId);
+                }}
+              />
+            )}
+            {subject.chapters && subject.chapters.length > 0 ? (
+              <div className="chapters-list">
+                {subject.chapters.map((ch) => (
+                  <ChapterItem
+                    key={ch.ChapterID}
+                    examId={examId}
+                    subjectId={subject.SubjectID}
+                    chapter={ch}
+                    onRefresh={() => onRefreshExam?.(examId)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="empty-chapters admin-empty-block">
+                <p>No chapters yet.</p>
+                <p className="help">Optional. Add chapters to group topics (e.g. by book chapter).</p>
+              </div>
+            )}
+          </div>
+
+          <div className="topics-section admin-section">
+            <div className="admin-section-header">
+              <div className="admin-section-title">
+                <span className="admin-section-num">3</span>
+                <h5>Topics</h5>
+              </div>
+              <button className="btn btn-sm btn-primary" onClick={() => setShowAddTopic(!showAddTopic)}>
+                <Plus size={14} />
+                {showAddTopic ? 'Cancel' : 'Add Topic'}
+              </button>
+            </div>
+            <p className="admin-section-desc">Topics are the question categories (e.g. Newton’s Laws). Each topic can optionally belong to a chapter.</p>
 
             {showAddTopic && (
               <CreateTopicForm
+                subject={subject}
                 onClose={() => setShowAddTopic(false)}
                 onSubmit={(data) => {
                   onCreateTopic(data);
@@ -619,8 +706,13 @@ const SubjectCard = ({
                 ))}
               </div>
             ) : (
-              <div className="empty-topics">
-                <p>No topics yet. Add your first topic.</p>
+              <div className="empty-topics admin-empty-block">
+                <p>No topics yet.</p>
+                <p className="help">Add topics so Subject Experts can attach questions to them.</p>
+                <button type="button" className="btn btn-sm btn-primary" onClick={() => setShowAddTopic(true)} style={{ marginTop: 12 }}>
+                  <Plus size={14} />
+                  Add first topic
+                </button>
               </div>
             )}
           </div>
@@ -630,6 +722,7 @@ const SubjectCard = ({
       {editingTopic && editingTopic.SubjectID === subject.SubjectID && (
         <EditTopicModal
           topic={editingTopic}
+          subject={subject}
           onClose={() => onEditTopic(null)}
           onSubmit={(data) => {
             onUpdateTopic(editingTopic.TopicID, data);
@@ -642,12 +735,18 @@ const SubjectCard = ({
 };
 
 const TopicItem = ({ topic, onEdit, onDelete }) => {
+  const ch = topic.Chapters;
+  const chapter = ch && (Array.isArray(ch) ? ch[0] : ch);
+  const chapterLabel = chapter
+    ? [chapter.ChapterNumber != null ? `Ch. ${chapter.ChapterNumber}` : '', chapter.ChapterName].filter(Boolean).join(': ') || ''
+    : '';
   return (
     <div className="topic-item">
       <div className="topic-info">
         <FolderOpen size={16} />
         <div>
           <strong>{topic.TopicName}</strong>
+          {chapterLabel && <span className="topic-chapter"> — {chapterLabel}</span>}
           {topic.Description && <p className="topic-description">{topic.Description}</p>}
         </div>
       </div>
@@ -1459,10 +1558,143 @@ const EditSubjectModal = ({ subject, onClose, onSubmit }) => {
   );
 };
 
-const CreateTopicForm = ({ onClose, onSubmit }) => {
+const ChapterForm = ({ examId, subjectId, onClose, onSuccess }) => {
+  const [chapterNumber, setChapterNumber] = useState('');
+  const [chapterName, setChapterName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!chapterNumber.trim() && !chapterName.trim()) {
+      setErr('Provide at least chapter number or name');
+      return;
+    }
+    setErr('');
+    setLoading(true);
+    try {
+      await adminAPI.createChapter(examId, subjectId, {
+        chapterNumber: chapterNumber.trim() ? parseInt(chapterNumber, 10) : null,
+        chapterName: chapterName.trim() || null,
+      });
+      onSuccess?.();
+    } catch (e) {
+      setErr(e.message || 'Failed to create chapter');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="admin-form-card">
+      <p className="card-title">New chapter</p>
+      <form onSubmit={handleSubmit}>
+        <div className="form-group">
+          <label htmlFor="chapter-num">Chapter number (optional)</label>
+          <input
+            id="chapter-num"
+            type="number"
+            placeholder="e.g. 1"
+            value={chapterNumber}
+            onChange={(e) => setChapterNumber(e.target.value)}
+            min={1}
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="chapter-name">Chapter name (optional)</label>
+          <input
+            id="chapter-name"
+            type="text"
+            placeholder="e.g. Newton's Laws"
+            value={chapterName}
+            onChange={(e) => setChapterName(e.target.value)}
+          />
+        </div>
+        {err && <span className="field-error">{err}</span>}
+        <div className="form-actions">
+          <button type="submit" className="btn btn-sm btn-primary" disabled={loading}>
+            {loading ? 'Adding...' : 'Add Chapter'}
+          </button>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const ChapterItem = ({ examId, subjectId, chapter, onRefresh }) => {
+  const [editing, setEditing] = useState(false);
+  const [num, setNum] = useState(chapter.ChapterNumber ?? '');
+  const [name, setName] = useState(chapter.ChapterName ?? '');
+  const [loading, setLoading] = useState(false);
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await adminAPI.updateChapter(examId, subjectId, chapter.ChapterID, {
+        chapterNumber: num === '' ? null : parseInt(num, 10),
+        chapterName: name.trim() || null,
+      });
+      setEditing(false);
+      onRefresh?.();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Remove this chapter? Topics under it will be unlinked.')) return;
+    try {
+      await adminAPI.deleteChapter(examId, subjectId, chapter.ChapterID);
+      onRefresh?.();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const label = [chapter.ChapterNumber != null ? `Ch. ${chapter.ChapterNumber}` : '', chapter.ChapterName].filter(Boolean).join(': ') || 'Chapter';
+  return (
+    <div className="chapter-item">
+      {!editing ? (
+        <>
+          <span>{label}</span>
+          <div className="topic-actions">
+            <button type="button" className="icon-btn" onClick={() => setEditing(true)} title="Edit Chapter">
+              <Edit2 size={14} />
+            </button>
+            <button type="button" className="icon-btn danger" onClick={handleDelete} title="Delete Chapter">
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </>
+      ) : (
+        <form onSubmit={handleUpdate} className="admin-form-card" style={{ marginTop: 0, marginBottom: 0 }}>
+          <div className="form-group">
+            <label>Number</label>
+            <input type="number" value={num} onChange={(e) => setNum(e.target.value)} min={1} />
+          </div>
+          <div className="form-group">
+            <label>Name</label>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Chapter name" />
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn btn-sm btn-primary" disabled={loading}>Save</button>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setEditing(false)}>Cancel</button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+};
+
+const CreateTopicForm = ({ subject, onClose, onSubmit }) => {
   const [formData, setFormData] = useState({
     topicName: '',
     description: '',
+    chapterId: '',
   });
 
   const handleSubmit = (e) => {
@@ -1473,47 +1705,74 @@ const CreateTopicForm = ({ onClose, onSubmit }) => {
     onSubmit({
       topicName: formData.topicName.trim(),
       description: formData.description.trim() || null,
+      chapterId: formData.chapterId || null,
     });
-    setFormData({ topicName: '', description: '' });
+    setFormData({ topicName: '', description: '', chapterId: '' });
   };
 
+  const chapters = subject?.chapters || [];
+
   return (
-    <div className="inline-form">
+    <div className="admin-form-card">
+      <p className="card-title">New topic</p>
       <form onSubmit={handleSubmit}>
-        <div className="form-row">
+        <div className="form-group">
+          <label htmlFor="topic-name">Topic name <span className="required">*</span></label>
           <input
+            id="topic-name"
             type="text"
-            placeholder="Topic Name *"
+            placeholder="e.g. Newton's Laws of Motion"
             value={formData.topicName}
             onChange={(e) => setFormData({ ...formData, topicName: e.target.value })}
             required
           />
+        </div>
+        <div className="form-group">
+          <label htmlFor="topic-chapter">Chapter (optional)</label>
+          <select
+            id="topic-chapter"
+            value={formData.chapterId}
+            onChange={(e) => setFormData({ ...formData, chapterId: e.target.value })}
+          >
+            <option value="">No chapter</option>
+            {chapters.map((ch) => (
+              <option key={ch.ChapterID} value={ch.ChapterID}>
+                {[ch.ChapterNumber != null ? `Ch. ${ch.ChapterNumber}` : '', ch.ChapterName].filter(Boolean).join(': ') || ch.ChapterID}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label htmlFor="topic-desc">Description (optional)</label>
           <textarea
-            placeholder="Description (optional)"
+            id="topic-desc"
+            placeholder="Short description of this topic"
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             rows={2}
           />
-          <div className="form-actions">
-            <button type="submit" className="btn btn-sm btn-primary">
-              Add
-            </button>
-            <button type="button" className="btn btn-sm btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
-          </div>
+        </div>
+        <div className="form-actions">
+          <button type="submit" className="btn btn-sm btn-primary">
+            Add Topic
+          </button>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
         </div>
       </form>
     </div>
   );
 };
 
-const EditTopicModal = ({ topic, onClose, onSubmit }) => {
+const EditTopicModal = ({ topic, subject, onClose, onSubmit }) => {
   const [formData, setFormData] = useState({
     topicName: topic.TopicName || '',
     description: topic.Description || '',
+    chapterId: topic.ChapterID || '',
   });
   const [loading, setLoading] = useState(false);
+  const chapters = subject?.chapters || [];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1525,6 +1784,7 @@ const EditTopicModal = ({ topic, onClose, onSubmit }) => {
       await onSubmit({
         topicName: formData.topicName.trim(),
         description: formData.description.trim() || null,
+        chapterId: formData.chapterId || null,
       });
     } finally {
       setLoading(false);
@@ -1551,6 +1811,20 @@ const EditTopicModal = ({ topic, onClose, onSubmit }) => {
               onChange={(e) => setFormData({ ...formData, topicName: e.target.value })}
               required
             />
+          </div>
+          <div className="form-group">
+            <label>Chapter (optional)</label>
+            <select
+              value={formData.chapterId}
+              onChange={(e) => setFormData({ ...formData, chapterId: e.target.value })}
+            >
+              <option value="">No chapter</option>
+              {chapters.map((ch) => (
+                <option key={ch.ChapterID} value={ch.ChapterID}>
+                  {[ch.ChapterNumber != null ? `Ch. ${ch.ChapterNumber}` : '', ch.ChapterName].filter(Boolean).join(': ') || ch.ChapterID}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="form-group">
             <label>Description</label>

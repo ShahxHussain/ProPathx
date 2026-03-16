@@ -1,12 +1,45 @@
 import express from 'express';
+import os from 'os';
 import { supabase } from '../config/database.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
 import { generateToken } from '../utils/jwt.js';
 import { createLog, getClientIP, getUserAgent } from '../utils/logger.js';
+import { recordHealthSample, getRequestSeries, getHealthSeries } from '../utils/metricsStore.js';
 import { validateLogin, validateCreatePlatformUser, validateUpdatePlatformUser, validateUpdateOrganization, validateCreateOrganization } from '../middleware/validation.js';
 import { authenticate, requireSuperAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Helper functions for SystemSettings
+async function getSystemSetting(key, defaultValue = null) {
+  const { data, error } = await supabase
+    .from('SystemSettings')
+    .select('Value')
+    .eq('Key', key)
+    .single();
+
+  if (error || !data) {
+    return defaultValue;
+  }
+  return data.Value ?? defaultValue;
+}
+
+async function upsertSystemSetting(key, value, userId) {
+  const payload = {
+    Key: key,
+    Value: value,
+    UpdatedAt: new Date().toISOString(),
+    UpdatedBy: userId || null,
+  };
+
+  const { error } = await supabase
+    .from('SystemSettings')
+    .upsert(payload, { onConflict: 'Key' });
+
+  if (error) {
+    throw error;
+  }
+}
 
 /**
  * GET /api/admin/test
@@ -413,6 +446,91 @@ router.get('/dashboard/stats', authenticate, requireSuperAdmin, async (req, res)
     console.error('Dashboard stats error:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
+});
+
+/**
+ * GET /api/admin/health
+ * System health: API/DB status, uptime, and time-series for charts (SuperAdmin only).
+ */
+router.get('/health', authenticate, requireSuperAdmin, async (req, res) => {
+  const startTime = Date.now();
+  let dbLatencyMs = null;
+  let dbOk = false;
+
+  try {
+    const dbStart = Date.now();
+    const { error } = await supabase.from('SystemSettings').select('Key').limit(1);
+    dbOk = !error;
+    dbLatencyMs = Date.now() - dbStart;
+  } catch {
+    dbOk = false;
+  }
+
+  const uptimeSec = process.uptime();
+  const mem = process.memoryUsage();
+  const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
+  const loadAvg = os.loadavg()[0];
+  const cpuApprox = Math.min(100, Math.round((loadAvg || 0) * 25));
+  const assumedHeapMB = 512;
+  const memoryPct = Math.min(100, Math.round((mem.heapUsed / (assumedHeapMB * 1024 * 1024)) * 100));
+
+  const requestSeries = getRequestSeries();
+  const healthSeries = getHealthSeries();
+
+  const apiLatencyMs = Date.now() - startTime;
+  recordHealthSample({
+    latency: apiLatencyMs,
+    cpu: cpuApprox,
+    memory: memoryPct,
+    dbLatency: dbOk ? dbLatencyMs : null,
+  });
+
+  let activity = [];
+  try {
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+    const { data: logRows } = await supabase
+      .from('Logs')
+      .select('ActionType, Timestamp')
+      .gte('Timestamp', fourteenDaysAgo.toISOString());
+
+    const byDay = {};
+    (logRows || []).forEach((row) => {
+      const d = new Date(row.Timestamp);
+      d.setHours(0, 0, 0, 0);
+      const key = d.getTime();
+      const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      if (!byDay[key]) byDay[key] = { date: dateLabel, fullTime: key, logins: 0, actions: 0 };
+      if (row.ActionType === 'Login') byDay[key].logins += 1;
+      else if (['Create', 'Update', 'Delete', 'View', 'Payment', 'Attempt', 'Verification', 'Subscription', 'ResultGeneration', 'AIQuestionGeneration'].includes(row.ActionType)) {
+        byDay[key].actions += 1;
+      }
+    });
+
+    const sorted = Object.values(byDay).sort((a, b) => a.fullTime - b.fullTime);
+    activity = sorted.map(({ date, logins, actions }) => ({ date, logins, actions }));
+  } catch {
+    activity = [];
+  }
+
+  const overall = dbOk && apiLatencyMs < 2000 ? 'healthy' : 'degraded';
+
+  res.json({
+    status: overall,
+    api: 'ok',
+    apiLatency: apiLatencyMs,
+    db: dbOk ? 'ok' : 'error',
+    dbLatency: dbLatencyMs,
+    uptime: uptimeSec,
+    series: {
+      latency: healthSeries.map((p) => ({ time: p.time, fullTime: p.fullTime, latency: p.latency })),
+      cpu: healthSeries.map((p) => ({ time: p.time, fullTime: p.fullTime, cpu: p.cpu })),
+      memory: healthSeries.map((p) => ({ time: p.time, fullTime: p.fullTime, memory: p.memory })),
+      dbLatency: healthSeries.map((p) => ({ time: p.time, fullTime: p.fullTime, latency: p.dbLatency })),
+      requests: requestSeries,
+      activity,
+    },
+  });
 });
 
 /**
@@ -1345,17 +1463,24 @@ router.get('/exams/:examId', authenticate, requireSuperAdmin, async (req, res) =
       return res.status(500).json({ error: 'Failed to fetch subjects', details: subjectsError.message });
     }
 
-    // Get topics for each subject
+    // Get chapters and topics (with chapter) for each subject
     const subjectsWithTopics = await Promise.all(
       (subjects || []).map(async (subject) => {
+        const { data: chapters } = await supabase
+          .from('Chapters')
+          .select('ChapterID, ChapterNumber, ChapterName, SubjectID, CreatedAt')
+          .eq('SubjectID', subject.SubjectID)
+          .order('ChapterNumber', { ascending: true });
+
         const { data: topics, error: topicsError } = await supabase
           .from('Topics')
-          .select('*')
+          .select('*, Chapters(ChapterID, ChapterNumber, ChapterName)')
           .eq('SubjectID', subject.SubjectID)
           .order('CreatedAt', { ascending: true });
 
         return {
           ...subject,
+          chapters: chapters || [],
           topics: topics || [],
         };
       })
@@ -1671,7 +1796,7 @@ router.delete('/exams/:examId/subjects/:subjectId', authenticate, requireSuperAd
  */
 router.post('/exams/:examId/subjects/:subjectId/topics', authenticate, requireSuperAdmin, async (req, res) => {
   const { examId, subjectId } = req.params;
-  const { topicName, description } = req.body;
+  const { topicName, description, chapterId } = req.body;
   const { userId } = req.user;
   const ipAddress = getClientIP(req);
   const userAgent = getUserAgent(req);
@@ -1694,15 +1819,31 @@ router.post('/exams/:examId/subjects/:subjectId/topics', authenticate, requireSu
       return res.status(400).json({ error: 'Topic name is required' });
     }
 
+    // If chapterId provided, verify it belongs to this subject
+    if (chapterId) {
+      const { data: chapter } = await supabase
+        .from('Chapters')
+        .select('ChapterID')
+        .eq('ChapterID', chapterId)
+        .eq('SubjectID', subjectId)
+        .single();
+      if (!chapter) {
+        return res.status(400).json({ error: 'Chapter not found or does not belong to this subject' });
+      }
+    }
+
+    const insertPayload = {
+      SubjectID: subjectId,
+      TopicName: topicName.trim(),
+      Description: description || null,
+      CreatedAt: new Date().toISOString(),
+    };
+    if (chapterId) insertPayload.ChapterID = chapterId;
+
     // Create topic
     const { data: newTopic, error: topicError } = await supabase
       .from('Topics')
-      .insert({
-        SubjectID: subjectId,
-        TopicName: topicName.trim(),
-        Description: description || null,
-        CreatedAt: new Date().toISOString(),
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
@@ -1743,7 +1884,7 @@ router.put(
   requireSuperAdmin,
   async (req, res) => {
     const { examId, subjectId, topicId } = req.params;
-    const { topicName, description } = req.body;
+    const { topicName, description, chapterId } = req.body;
     const { userId } = req.user;
     const ipAddress = getClientIP(req);
     const userAgent = getUserAgent(req);
@@ -1761,10 +1902,24 @@ router.put(
         return res.status(404).json({ error: 'Topic not found' });
       }
 
+      // If chapterId provided, verify it belongs to this subject (null to unlink)
+      if (chapterId !== undefined && chapterId !== null && chapterId !== '') {
+        const { data: chapter } = await supabase
+          .from('Chapters')
+          .select('ChapterID')
+          .eq('ChapterID', chapterId)
+          .eq('SubjectID', subjectId)
+          .single();
+        if (!chapter) {
+          return res.status(400).json({ error: 'Chapter not found or does not belong to this subject' });
+        }
+      }
+
       // Build update object
       const updateData = {};
       if (topicName) updateData.TopicName = topicName.trim();
       if (description !== undefined) updateData.Description = description || null;
+      if (chapterId !== undefined) updateData.ChapterID = chapterId === '' || chapterId === null ? null : chapterId;
 
       // Update topic
       const { data: updatedTopic, error: updateError } = await supabase
@@ -1854,6 +2009,205 @@ router.delete(
     } catch (error) {
       console.error('Delete topic error:', error);
       res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * ============================================
+ * CHAPTERS (per subject) - SuperAdmin only
+ * ============================================
+ */
+
+/**
+ * GET /api/admin/exams/:examId/subjects/:subjectId/chapters
+ * List chapters for a subject
+ */
+router.get(
+  '/exams/:examId/subjects/:subjectId/chapters',
+  authenticate,
+  requireSuperAdmin,
+  async (req, res) => {
+    const { subjectId } = req.params;
+    try {
+      const { data: subject } = await supabase
+        .from('Subjects')
+        .select('SubjectID')
+        .eq('SubjectID', subjectId)
+        .single();
+      if (!subject) {
+        return res.status(404).json({ error: 'Subject not found' });
+      }
+      const { data: chapters, error } = await supabase
+        .from('Chapters')
+        .select('ChapterID, SubjectID, ChapterNumber, ChapterName, CreatedAt')
+        .eq('SubjectID', subjectId)
+        .order('ChapterNumber', { ascending: true });
+      if (error) {
+        return res.status(500).json({ error: 'Failed to fetch chapters', details: error.message });
+      }
+      res.json({ chapters: chapters || [] });
+    } catch (err) {
+      console.error('List chapters error:', err);
+      res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  }
+);
+
+/**
+ * POST /api/admin/exams/:examId/subjects/:subjectId/chapters
+ * Create a chapter (SuperAdmin only). ChapterNumber and ChapterName are optional.
+ */
+router.post(
+  '/exams/:examId/subjects/:subjectId/chapters',
+  authenticate,
+  requireSuperAdmin,
+  async (req, res) => {
+    const { subjectId } = req.params;
+    const { chapterNumber, chapterName } = req.body;
+    const { userId } = req.user;
+    const ipAddress = getClientIP(req);
+    const userAgent = getUserAgent(req);
+    try {
+      const { data: subject } = await supabase
+        .from('Subjects')
+        .select('SubjectID')
+        .eq('SubjectID', subjectId)
+        .single();
+      if (!subject) {
+        return res.status(404).json({ error: 'Subject not found' });
+      }
+      const { data: newChapter, error } = await supabase
+        .from('Chapters')
+        .insert({
+          SubjectID: subjectId,
+          ChapterNumber: chapterNumber != null && chapterNumber !== '' ? parseInt(chapterNumber, 10) : null,
+          ChapterName: chapterName && chapterName.trim() ? chapterName.trim() : null,
+          CreatedBy: userId,
+          CreatedAt: new Date().toISOString(),
+        })
+        .select()
+        .single();
+      if (error) {
+        return res.status(500).json({ error: 'Failed to create chapter', details: error.message });
+      }
+      await createLog({
+        actorType: 'User',
+        actorID: userId,
+        actionType: 'Create',
+        entityType: 'System',
+        entityID: newChapter.ChapterID,
+        description: `Super Admin created chapter: ${chapterName || chapterNumber || newChapter.ChapterID}`,
+        ipAddress,
+        userAgent,
+        newData: { chapterNumber: newChapter.ChapterNumber, chapterName: newChapter.ChapterName },
+      });
+      res.status(201).json({ message: 'Chapter created successfully', chapter: newChapter });
+    } catch (err) {
+      console.error('Create chapter error:', err);
+      res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  }
+);
+
+/**
+ * PUT /api/admin/exams/:examId/subjects/:subjectId/chapters/:chapterId
+ * Update a chapter (SuperAdmin only)
+ */
+router.put(
+  '/exams/:examId/subjects/:subjectId/chapters/:chapterId',
+  authenticate,
+  requireSuperAdmin,
+  async (req, res) => {
+    const { subjectId, chapterId } = req.params;
+    const { chapterNumber, chapterName } = req.body;
+    const { userId } = req.user;
+    const ipAddress = getClientIP(req);
+    const userAgent = getUserAgent(req);
+    try {
+      const { data: existing } = await supabase
+        .from('Chapters')
+        .select('*')
+        .eq('ChapterID', chapterId)
+        .eq('SubjectID', subjectId)
+        .single();
+      if (!existing) {
+        return res.status(404).json({ error: 'Chapter not found' });
+      }
+      const updateData = {};
+      if (chapterNumber !== undefined) updateData.ChapterNumber = chapterNumber === '' || chapterNumber === null ? null : parseInt(chapterNumber, 10);
+      if (chapterName !== undefined) updateData.ChapterName = chapterName === '' || chapterName === null ? null : (chapterName && chapterName.trim()) || null;
+      const { data: updated, error } = await supabase
+        .from('Chapters')
+        .update(updateData)
+        .eq('ChapterID', chapterId)
+        .select()
+        .single();
+      if (error) {
+        return res.status(500).json({ error: 'Failed to update chapter', details: error.message });
+      }
+      await createLog({
+        actorType: 'User',
+        actorID: userId,
+        actionType: 'Update',
+        entityType: 'System',
+        entityID: chapterId,
+        description: `Super Admin updated chapter`,
+        ipAddress,
+        userAgent,
+        oldData: existing,
+        newData: updateData,
+      });
+      res.json({ message: 'Chapter updated successfully', chapter: updated });
+    } catch (err) {
+      console.error('Update chapter error:', err);
+      res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  }
+);
+
+/**
+ * DELETE /api/admin/exams/:examId/subjects/:subjectId/chapters/:chapterId
+ * Delete a chapter (SuperAdmin only). Topics linked to this chapter will have ChapterID set to null.
+ */
+router.delete(
+  '/exams/:examId/subjects/:subjectId/chapters/:chapterId',
+  authenticate,
+  requireSuperAdmin,
+  async (req, res) => {
+    const { subjectId, chapterId } = req.params;
+    const { userId } = req.user;
+    const ipAddress = getClientIP(req);
+    const userAgent = getUserAgent(req);
+    try {
+      const { data: existing } = await supabase
+        .from('Chapters')
+        .select('*')
+        .eq('ChapterID', chapterId)
+        .eq('SubjectID', subjectId)
+        .single();
+      if (!existing) {
+        return res.status(404).json({ error: 'Chapter not found' });
+      }
+      const { error: delError } = await supabase.from('Chapters').delete().eq('ChapterID', chapterId);
+      if (delError) {
+        return res.status(500).json({ error: 'Failed to delete chapter', details: delError.message });
+      }
+      await createLog({
+        actorType: 'User',
+        actorID: userId,
+        actionType: 'Delete',
+        entityType: 'System',
+        entityID: chapterId,
+        description: `Super Admin deleted chapter: ${existing.ChapterName || existing.ChapterNumber || chapterId}`,
+        ipAddress,
+        userAgent,
+        oldData: existing,
+      });
+      res.json({ message: 'Chapter deleted successfully' });
+    } catch (err) {
+      console.error('Delete chapter error:', err);
+      res.status(500).json({ error: 'Internal server error', details: err.message });
     }
   }
 );
@@ -1962,9 +2316,12 @@ router.get('/subscription-plans/:planId', authenticate, requireSuperAdmin, async
 /**
  * POST /api/admin/subscription-plans
  * Create a new subscription plan (SuperAdmin only)
+ *
+ * NOTE: With the new `Audience` column on SubscriptionPlans, SuperAdmin can now
+ * explicitly define whether a plan is for Organizations, Students, or Both.
  */
 router.post('/subscription-plans', authenticate, requireSuperAdmin, async (req, res) => {
-  const { planName, price, durationMonths, features } = req.body;
+  const { planName, price, durationMonths, features, audience } = req.body;
   const { userId } = req.user;
   const ipAddress = getClientIP(req);
   const userAgent = getUserAgent(req);
@@ -1983,7 +2340,17 @@ router.post('/subscription-plans', authenticate, requireSuperAdmin, async (req, 
       return res.status(400).json({ error: 'Duration must be at least 1 month' });
     }
 
-    // Create subscription plan
+    // Validate audience (optional, defaults to 'Organization' at DB level if not provided)
+    let planAudience = audience;
+    if (planAudience !== undefined) {
+      if (!['Organization', 'Student', 'Both'].includes(planAudience)) {
+        return res.status(400).json({ error: "Audience must be one of: 'Organization', 'Student', or 'Both'" });
+      }
+    } else {
+      planAudience = 'Organization';
+    }
+
+    // Create subscription plan (Status defaults to Active in DB; set explicitly for clarity)
     const { data: newPlan, error: planError } = await supabase
       .from('SubscriptionPlans')
       .insert({
@@ -1991,6 +2358,8 @@ router.post('/subscription-plans', authenticate, requireSuperAdmin, async (req, 
         Price: parseFloat(price),
         DurationMonths: parseInt(durationMonths),
         Features: features || {},
+        Status: 'Active',
+        Audience: planAudience,
       })
       .select()
       .single();
@@ -2006,10 +2375,10 @@ router.post('/subscription-plans', authenticate, requireSuperAdmin, async (req, 
       actionType: 'Create',
       entityType: 'Subscription',
       entityID: newPlan.PlanID,
-      description: `Super Admin created subscription plan: ${planName}`,
+      description: `Super Admin created subscription plan: ${planName} (Audience: ${planAudience})`,
       ipAddress,
       userAgent,
-      newData: { planName, price, durationMonths, features },
+      newData: { planName, price, durationMonths, features, audience: planAudience },
     });
 
     res.status(201).json({
@@ -2028,7 +2397,7 @@ router.post('/subscription-plans', authenticate, requireSuperAdmin, async (req, 
  */
 router.put('/subscription-plans/:planId', authenticate, requireSuperAdmin, async (req, res) => {
   const { planId } = req.params;
-  const { planName, price, durationMonths, features } = req.body;
+  const { planName, price, durationMonths, features, status, audience } = req.body;
   const { userId } = req.user;
   const ipAddress = getClientIP(req);
   const userAgent = getUserAgent(req);
@@ -2051,6 +2420,20 @@ router.put('/subscription-plans/:planId', authenticate, requireSuperAdmin, async
     if (price !== undefined) updateData.Price = parseFloat(price);
     if (durationMonths !== undefined) updateData.DurationMonths = parseInt(durationMonths);
     if (features !== undefined) updateData.Features = features;
+    if (status !== undefined) {
+      if (status !== 'Active' && status !== 'Inactive') {
+        return res.status(400).json({ error: 'Status must be Active or Inactive' });
+      }
+      updateData.Status = status;
+    }
+
+    // Audience update (optional)
+    if (audience !== undefined) {
+      if (!['Organization', 'Student', 'Both'].includes(audience)) {
+        return res.status(400).json({ error: "Audience must be one of: 'Organization', 'Student', or 'Both'" });
+      }
+      updateData.Audience = audience;
+    }
 
     // Update plan
     const { data: updatedPlan, error: updateError } = await supabase
@@ -2147,6 +2530,286 @@ router.delete('/subscription-plans/:planId', authenticate, requireSuperAdmin, as
     res.json({ message: 'Subscription plan deleted successfully' });
   } catch (error) {
     console.error('Delete subscription plan error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * ============================================
+ * PLATFORM SETTINGS (MAINTENANCE & ANNOUNCEMENTS)
+ * ============================================
+ */
+
+/**
+ * GET /api/admin/settings/maintenance
+ * Get current maintenance settings (SuperAdmin only)
+ */
+router.get('/settings/maintenance', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const defaultSettings = {
+      enabled: false,
+      scope: 'all', // 'all' | 'students' | 'orgs' | 'admins'
+      message: '',
+      expectedResumeAt: null,
+      allowRoles: ['SuperAdmin'],
+    };
+
+    const settings = await getSystemSetting('maintenance_settings', defaultSettings);
+    res.json({ settings });
+  } catch (error) {
+    console.error('Get maintenance settings error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/settings/maintenance
+ * Update maintenance settings (SuperAdmin only)
+ */
+router.put('/settings/maintenance', authenticate, requireSuperAdmin, async (req, res) => {
+  const { userId } = req.user;
+  const { enabled, scope, message, expectedResumeAt, allowRoles } = req.body || {};
+
+  try {
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled must be a boolean' });
+    }
+
+    const validScopes = ['all', 'students', 'orgs', 'admins'];
+    if (scope && !validScopes.includes(scope)) {
+      return res.status(400).json({ error: `scope must be one of: ${validScopes.join(', ')}` });
+    }
+
+    if (allowRoles && !Array.isArray(allowRoles)) {
+      return res.status(400).json({ error: 'allowRoles must be an array of role strings' });
+    }
+
+    const newSettings = {
+      enabled: !!enabled,
+      scope: scope || 'all',
+      message: message || '',
+      expectedResumeAt: expectedResumeAt || null,
+      allowRoles: allowRoles && Array.isArray(allowRoles) && allowRoles.length > 0 ? allowRoles : ['SuperAdmin'],
+    };
+
+    const previousSettings = await getSystemSetting('maintenance_settings', null);
+    await upsertSystemSetting('maintenance_settings', newSettings, userId);
+
+    // Log the change
+    await createLog({
+      actorType: 'User',
+      actorID: userId,
+      actionType: 'Update',
+      entityType: 'System',
+      entityID: null,
+      description: 'Updated maintenance settings',
+      previousData: previousSettings,
+      newData: newSettings,
+      ipAddress: getClientIP(req),
+      userAgent: getUserAgent(req),
+    });
+
+    res.json({ message: 'Maintenance settings updated', settings: newSettings });
+  } catch (error) {
+    console.error('Update maintenance settings error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/settings/announcements
+ * List all announcements (SuperAdmin only)
+ */
+router.get('/settings/announcements', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('Announcements')
+      .select('*')
+      .order('CreatedAt', { ascending: false });
+
+    if (error) {
+      console.error('Supabase error fetching announcements:', error);
+      return res.status(500).json({ error: 'Failed to fetch announcements', details: error.message });
+    }
+
+    res.json({ announcements: data || [] });
+  } catch (error) {
+    console.error('Get announcements error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/settings/announcements
+ * Create a new announcement (SuperAdmin only)
+ */
+router.post('/settings/announcements', authenticate, requireSuperAdmin, async (req, res) => {
+  const { userId } = req.user;
+  const { title, message, link, targetRoles, startsAt, endsAt, isActive } = req.body || {};
+
+  try {
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Title is required' });
+    }
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    if (targetRoles && !Array.isArray(targetRoles)) {
+      return res.status(400).json({ error: 'targetRoles must be an array of role strings' });
+    }
+
+    const payload = {
+      Title: title.trim(),
+      Message: message.trim(),
+      Link: link || null,
+      TargetRoles: targetRoles && targetRoles.length > 0 ? targetRoles : null,
+      StartsAt: startsAt || null,
+      EndsAt: endsAt || null,
+      IsActive: isActive !== undefined ? !!isActive : true,
+      CreatedBy: userId,
+    };
+
+    const { data, error } = await supabase
+      .from('Announcements')
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase error creating announcement:', error);
+      return res.status(500).json({ error: 'Failed to create announcement', details: error.message });
+    }
+
+    await createLog({
+      actorType: 'User',
+      actorID: userId,
+      actionType: 'Create',
+      entityType: 'System',
+      entityID: data.AnnouncementID,
+      description: `Created announcement: ${title}`,
+      newData: payload,
+      ipAddress: getClientIP(req),
+      userAgent: getUserAgent(req),
+    });
+
+    res.status(201).json({ announcement: data });
+  } catch (error) {
+    console.error('Create announcement error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/settings/announcements/:id
+ * Update an announcement (SuperAdmin only)
+ */
+router.put('/settings/announcements/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.user;
+  const { title, message, link, targetRoles, startsAt, endsAt, isActive } = req.body || {};
+
+  try {
+    const { data: existing, error: fetchError } = await supabase
+      .from('Announcements')
+      .select('*')
+      .eq('AnnouncementID', id)
+      .single();
+
+    if (fetchError || !existing) {
+      return res.status(404).json({ error: 'Announcement not found' });
+    }
+
+    if (targetRoles && !Array.isArray(targetRoles)) {
+      return res.status(400).json({ error: 'targetRoles must be an array of role strings' });
+    }
+
+    const updateData = {};
+    if (title !== undefined) updateData.Title = title.trim();
+    if (message !== undefined) updateData.Message = message.trim();
+    if (link !== undefined) updateData.Link = link || null;
+    if (targetRoles !== undefined) {
+      updateData.TargetRoles = targetRoles && targetRoles.length > 0 ? targetRoles : null;
+    }
+    if (startsAt !== undefined) updateData.StartsAt = startsAt || null;
+    if (endsAt !== undefined) updateData.EndsAt = endsAt || null;
+    if (isActive !== undefined) updateData.IsActive = !!isActive;
+
+    const { data, error: updateError } = await supabase
+      .from('Announcements')
+      .update(updateData)
+      .eq('AnnouncementID', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('Supabase error updating announcement:', updateError);
+      return res.status(500).json({ error: 'Failed to update announcement', details: updateError.message });
+    }
+
+    await createLog({
+      actorType: 'User',
+      actorID: userId,
+      actionType: 'Update',
+      entityType: 'System',
+      entityID: id,
+      description: `Updated announcement: ${data.Title}`,
+      previousData: existing,
+      newData: updateData,
+      ipAddress: getClientIP(req),
+      userAgent: getUserAgent(req),
+    });
+
+    res.json({ announcement: data });
+  } catch (error) {
+    console.error('Update announcement error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/settings/announcements/:id
+ * Delete an announcement (SuperAdmin only)
+ */
+router.delete('/settings/announcements/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.user;
+
+  try {
+    const { data: existing, error: fetchError } = await supabase
+      .from('Announcements')
+      .select('*')
+      .eq('AnnouncementID', id)
+      .single();
+
+    if (fetchError || !existing) {
+      return res.status(404).json({ error: 'Announcement not found' });
+    }
+
+    const { error: deleteError } = await supabase
+      .from('Announcements')
+      .delete()
+      .eq('AnnouncementID', id);
+
+    if (deleteError) {
+      console.error('Supabase error deleting announcement:', deleteError);
+      return res.status(500).json({ error: 'Failed to delete announcement', details: deleteError.message });
+    }
+
+    await createLog({
+      actorType: 'User',
+      actorID: userId,
+      actionType: 'Delete',
+      entityType: 'System',
+      entityID: id,
+      description: `Deleted announcement: ${existing.Title}`,
+      previousData: existing,
+      ipAddress: getClientIP(req),
+      userAgent: getUserAgent(req),
+    });
+
+    res.json({ message: 'Announcement deleted' });
+  } catch (error) {
+    console.error('Delete announcement error:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
@@ -2514,6 +3177,203 @@ router.delete('/subscription-plans/:planId/exams/:examId', authenticate, require
 });
 
 /**
+ * GET /api/admin/questions
+ * Get all questions (platform + org) with details for SuperAdmin
+ * Query: source (all|platform|organization), status (all|approved|pending|rejected), page, limit, search
+ */
+router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { source = 'all', status = 'all', page = 1, limit = 50, search = '' } = req.query;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    let query = supabase
+      .from('Questions')
+      .select(`
+        QuestionID,
+        QuestionText,
+        DifficultyLevel,
+        Explanation,
+        QuestionType,
+        Source,
+        CreatedBy,
+        CreatedByOrgUserID,
+        CreatedAt,
+        IsVerified,
+        VerifiedBy,
+        VerifiedAt,
+        ReviewerComments,
+        OrgID,
+        TopicID,
+        Topics(
+          TopicID,
+          TopicName,
+          SubjectID,
+          Subjects(
+            SubjectID,
+            SubjectName,
+            ExamID,
+            Exams(ExamID, ExamName)
+          )
+        )
+      `, { count: 'exact' })
+      .order('CreatedAt', { ascending: false });
+
+    if (source === 'platform') {
+      query = query.is('OrgID', null);
+    } else if (source === 'organization') {
+      query = query.not('OrgID', 'is', null);
+    }
+
+    if (search && search.trim()) {
+      query = query.ilike('QuestionText', `%${search.trim()}%`);
+    }
+
+    if (status === 'approved') {
+      query = query.eq('IsVerified', true);
+    } else if (status === 'rejected') {
+      query = query.eq('IsVerified', false).not('ReviewerComments', 'is', null);
+    } else if (status === 'pending') {
+      query = query.eq('IsVerified', false).is('ReviewerComments', null);
+    }
+
+    query = query.range(offset, offset + limitNum - 1);
+    const { data: questions, error: qError, count } = await query;
+
+    if (qError) {
+      return res.status(500).json({ error: 'Failed to fetch questions', details: qError.message });
+    }
+
+    const list = questions || [];
+
+    // Normalize keys from Supabase (may return PascalCase or camelCase)
+    const getQ = (q, key) => q[key] ?? q[key.charAt(0).toLowerCase() + key.slice(1)];
+    const creatorUserIds = [...new Set(list.map((q) => getQ(q, 'CreatedBy')).filter(Boolean))];
+    const createdByOrgUserIds = [...new Set(list.map((q) => getQ(q, 'CreatedByOrgUserID')).filter(Boolean))];
+    const orgIds = [...new Set(list.map((q) => getQ(q, 'OrgID')).filter(Boolean))];
+
+    const creatorUsers = new Map();
+    if (creatorUserIds.length > 0) {
+      const { data: users } = await supabase
+        .from('Users')
+        .select('UserID, FullName, Email')
+        .in('UserID', creatorUserIds);
+      (users || []).forEach((u) => creatorUsers.set(String(u.UserID), u));
+    }
+
+    const creatorOrgUsers = new Map();
+    if (createdByOrgUserIds.length > 0) {
+      const { data: orgUsers } = await supabase
+        .from('OrgUsers')
+        .select('OrgUserID, FullName, Email, OrgID')
+        .in('OrgUserID', createdByOrgUserIds);
+      (orgUsers || []).forEach((u) => creatorOrgUsers.set(String(u.OrgUserID), u));
+    }
+
+    const orgsMap = new Map();
+    if (orgIds.length > 0) {
+      const { data: orgs } = await supabase
+        .from('Organizations')
+        .select('OrgID, OrgName, OrgEmail')
+        .in('OrgID', orgIds);
+      (orgs || []).forEach((o) => orgsMap.set(String(o.OrgID), o));
+    }
+
+    const verifiedByIds = [...new Set(list.map((q) => getQ(q, 'VerifiedBy')).filter(Boolean))];
+    const verifierMap = new Map();
+    if (verifiedByIds.length > 0) {
+      const { data: verifiers } = await supabase
+        .from('Users')
+        .select('UserID, FullName, Email')
+        .in('UserID', verifiedByIds);
+      (verifiers || []).forEach((v) => verifierMap.set(String(v.UserID), v));
+    }
+
+    const enriched = list.map((q) => {
+      const topic = q.Topics;
+      const subject = topic?.Subjects;
+      const exam = subject?.Exams;
+      const qOrgId = getQ(q, 'OrgID');
+      const qCreatedBy = getQ(q, 'CreatedBy');
+      const qCreatedByOrgUserID = getQ(q, 'CreatedByOrgUserID');
+      let sourceType = qOrgId ? 'organization' : 'platform';
+      let createdByName = null;
+      let createdByEmail = null;
+      let createdByOrgName = null;
+      let createdByOrgUserName = null;
+      let createdByOrgUserEmail = null;
+
+      if (qCreatedBy && creatorUsers.has(String(qCreatedBy))) {
+        const u = creatorUsers.get(String(qCreatedBy));
+        createdByName = u.FullName;
+        createdByEmail = u.Email;
+      }
+      if (qCreatedByOrgUserID && creatorOrgUsers.has(String(qCreatedByOrgUserID))) {
+        const ou = creatorOrgUsers.get(String(qCreatedByOrgUserID));
+        createdByOrgUserName = ou.FullName;
+        createdByOrgUserEmail = ou.Email;
+        createdByName = createdByName || ou.FullName;
+        createdByEmail = createdByEmail || ou.Email;
+      }
+      if (qOrgId && orgsMap.has(String(qOrgId))) {
+        createdByOrgName = orgsMap.get(String(qOrgId)).OrgName;
+      }
+
+      let statusValue = 'pending';
+      if (q.IsVerified === true) statusValue = 'approved';
+      else if (q.ReviewerComments) statusValue = 'rejected';
+
+      const qVerifiedBy = getQ(q, 'VerifiedBy');
+      const verifier = qVerifiedBy && verifierMap.has(String(qVerifiedBy))
+        ? verifierMap.get(String(qVerifiedBy))
+        : null;
+
+      return {
+        questionId: q.QuestionID,
+        questionText: q.QuestionText,
+        questionTextSnippet: (q.QuestionText || '').substring(0, 120) + ((q.QuestionText || '').length > 120 ? '...' : ''),
+        difficultyLevel: q.DifficultyLevel,
+        questionType: q.QuestionType,
+        source: q.Source,
+        examName: exam?.ExamName || '—',
+        subjectName: subject?.SubjectName || '—',
+        topicName: topic?.TopicName || '—',
+        sourceType,
+        createdByName,
+        createdByEmail,
+        createdByOrgName,
+        createdByOrgUserName,
+        createdByOrgUserEmail,
+        createdById: qCreatedBy,
+        createdByOrgUserId: qCreatedByOrgUserID,
+        orgId: qOrgId,
+        createdAt: q.CreatedAt,
+        isVerified: q.IsVerified,
+        status: statusValue,
+        verifiedBy: verifier ? { fullName: verifier.FullName, email: verifier.Email } : null,
+        verifiedAt: q.VerifiedAt,
+        reviewerComments: q.ReviewerComments,
+        explanation: q.Explanation,
+      };
+    });
+
+    res.json({
+      questions: enriched,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: count ?? enriched.length,
+        totalPages: Math.ceil((count ?? enriched.length) / limitNum),
+      },
+    });
+  } catch (error) {
+    console.error('Get admin questions error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
  * GET /api/admin/logs
  * Get system logs with filtering (SuperAdmin only)
  * Query params:
@@ -2684,6 +3544,375 @@ router.get('/logs/stats', authenticate, requireSuperAdmin, async (req, res) => {
     res.json({ stats });
   } catch (error) {
     console.error('Get log stats error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/subscriptions
+ * Get all subscriptions with details and usage (SuperAdmin only)
+ * Query params: status (all|Active|Expired|Cancelled), entityType (all|Organization|Student), page, limit
+ */
+router.get('/subscriptions', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { status = 'all', entityType = 'all', page = 1, limit = 50 } = req.query;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    // Build query for subscriptions
+    let query = supabase
+      .from('Subscriptions')
+      .select(`
+        SubscriptionID,
+        EntityType,
+        EntityID,
+        PlanID,
+        StartDate,
+        EndDate,
+        Status,
+        ActivatedAt,
+        AutoRenew,
+        CreatedAt,
+        SubscriptionPlans (
+          PlanID,
+          PlanName,
+          Price,
+          DurationMonths,
+          Features
+        )
+      `, { count: 'exact' })
+      .order('CreatedAt', { ascending: false });
+
+    // Apply filters
+    if (status !== 'all') {
+      query = query.eq('Status', status);
+    }
+    if (entityType !== 'all') {
+      query = query.eq('EntityType', entityType);
+    }
+
+    // Apply pagination
+    query = query.range(offset, offset + limitNum - 1);
+
+    const { data: subscriptions, error: subError, count } = await query;
+
+    if (subError) {
+      return res.status(500).json({ error: 'Failed to fetch subscriptions', details: subError.message });
+    }
+
+    // Enrich subscriptions with entity details and usage
+    const enrichedSubscriptions = await Promise.all(
+      (subscriptions || []).map(async (sub) => {
+        let entityDetails = null;
+        const entityId = sub.EntityID;
+
+        // Fetch entity details based on EntityType
+        if (sub.EntityType === 'Organization' && entityId) {
+          const { data: org } = await supabase
+            .from('Organizations')
+            .select('OrgID, OrgName, OrgEmail, Phone, Address, Status')
+            .eq('OrgID', entityId)
+            .single();
+          if (org) {
+            entityDetails = {
+              id: org.OrgID,
+              name: org.OrgName,
+              email: org.OrgEmail,
+              phone: org.Phone,
+              address: org.Address,
+              status: org.Status,
+            };
+          }
+        } else if (sub.EntityType === 'Student' && entityId) {
+          const { data: student } = await supabase
+            .from('Students')
+            .select('StudentID, FullName, Email, Phone, Status')
+            .eq('StudentID', entityId)
+            .single();
+          if (student) {
+            entityDetails = {
+              id: student.StudentID,
+              name: student.FullName,
+              email: student.Email,
+              phone: student.Phone,
+              status: student.Status,
+            };
+          }
+        }
+
+        // Calculate actual usage from database tables (more accurate than UsageCounters)
+        let totalUsage = {
+          studentsEnrolled: 0,
+          testsCreated: 0,
+          questionsCreated: 0,
+          aiQuestionsGenerated: 0,
+          studentAttempts: 0,
+        };
+
+        const usageByExam = {};
+
+        // For Organization subscriptions: count from OrgID
+        // For Student subscriptions: count from StudentID
+        if (sub.EntityType === 'Organization' && entityId) {
+          // Count students enrolled (students with this OrgID)
+          const { count: studentsCount } = await supabase
+            .from('Students')
+            .select('*', { count: 'exact', head: true })
+            .eq('OrgID', entityId)
+            .eq('Status', 'Active');
+          totalUsage.studentsEnrolled = studentsCount || 0;
+
+          // Count tests created - for organization subscriptions, count all tests for that org
+          // This is more accurate since SubscriptionID might not be set on all tests
+          const { data: tests, error: testsError } = await supabase
+            .from('Tests')
+            .select('TestID, ExamID, SubscriptionID, Exams(ExamID, ExamName)')
+            .eq('OrgID', entityId);
+          
+          let relevantTests = [];
+          if (!testsError && tests) {
+            // Filter tests that match this subscription OR have no SubscriptionID set
+            // (for backward compatibility with tests created before subscription tracking)
+            relevantTests = tests.filter(
+              (t) => !t.SubscriptionID || t.SubscriptionID === sub.SubscriptionID
+            );
+            totalUsage.testsCreated = relevantTests.length;
+            
+            // Group tests by exam for usageByExam
+            relevantTests.forEach((test) => {
+              const examId = test.ExamID;
+              if (examId) {
+                if (!usageByExam[examId]) {
+                  usageByExam[examId] = {
+                    examId,
+                    examName: test.Exams?.ExamName || 'Unknown Exam',
+                    studentsEnrolled: 0,
+                    testsCreated: 0,
+                    questionsCreated: 0,
+                    aiQuestionsGenerated: 0,
+                    studentAttempts: 0,
+                  };
+                }
+                usageByExam[examId].testsCreated += 1;
+              }
+            });
+          }
+
+          // Count questions created by this organization (questions with this OrgID)
+          const { data: questions, error: questionsError } = await supabase
+            .from('Questions')
+            .select('QuestionID, Source, TopicID, Topics(SubjectID, Subjects(ExamID, Exams(ExamID, ExamName)))')
+            .eq('OrgID', entityId);
+
+          if (!questionsError && questions) {
+            totalUsage.questionsCreated = questions.length;
+            
+            // Count AI-generated questions
+            const aiQuestions = questions.filter((q) => q.Source === 'AI');
+            totalUsage.aiQuestionsGenerated = aiQuestions.length;
+
+            // Group questions by exam
+            questions.forEach((question) => {
+              const examId = question.Topics?.Subjects?.ExamID;
+              if (examId) {
+                if (!usageByExam[examId]) {
+                  usageByExam[examId] = {
+                    examId,
+                    examName: question.Topics?.Subjects?.Exams?.ExamName || 'Unknown Exam',
+                    studentsEnrolled: 0,
+                    testsCreated: 0,
+                    questionsCreated: 0,
+                    aiQuestionsGenerated: 0,
+                    studentAttempts: 0,
+                  };
+                }
+                usageByExam[examId].questionsCreated += 1;
+                if (question.Source === 'AI') {
+                  usageByExam[examId].aiQuestionsGenerated += 1;
+                }
+              }
+            });
+          }
+
+          // Count student attempts (through tests linked to this subscription)
+          const testIds = relevantTests.map((t) => t.TestID);
+          if (testIds.length > 0) {
+            const { count: attemptsCount } = await supabase
+              .from('StudentAttempts')
+              .select('*', { count: 'exact', head: true })
+              .in('TestID', testIds);
+            totalUsage.studentAttempts = attemptsCount || 0;
+
+            // Update usageByExam with student attempts per exam
+            const { data: attempts } = await supabase
+              .from('StudentAttempts')
+              .select('TestID, Tests(ExamID)')
+              .in('TestID', testIds);
+
+            if (attempts) {
+              attempts.forEach((attempt) => {
+                const examId = attempt.Tests?.ExamID;
+                if (examId && usageByExam[examId]) {
+                  usageByExam[examId].studentAttempts += 1;
+                }
+              });
+            }
+
+            // Update students enrolled per exam (students in org who have attempted tests for that exam)
+            for (const examId of Object.keys(usageByExam)) {
+              const examTests = relevantTests.filter((t) => t.ExamID === examId);
+              if (examTests.length > 0) {
+                const examTestIds = examTests.map((t) => t.TestID);
+                const { data: examAttempts } = await supabase
+                  .from('StudentAttempts')
+                  .select('StudentID')
+                  .in('TestID', examTestIds);
+                
+                if (examAttempts) {
+                  const uniqueStudents = new Set(examAttempts.map((a) => a.StudentID));
+                  usageByExam[examId].studentsEnrolled = uniqueStudents.size;
+                }
+              }
+            }
+          }
+
+        } else if (sub.EntityType === 'Student' && entityId) {
+          // For Student subscriptions: count their own usage
+          // Count tests created by this student (if they can create tests)
+          const { count: testsCount } = await supabase
+            .from('Tests')
+            .select('*', { count: 'exact', head: true })
+            .eq('SubscriptionID', sub.SubscriptionID);
+          totalUsage.testsCreated = testsCount || 0;
+
+          // Count student attempts
+          const { count: attemptsCount } = await supabase
+            .from('StudentAttempts')
+            .select('*', { count: 'exact', head: true })
+            .eq('StudentID', entityId);
+          totalUsage.studentAttempts = attemptsCount || 0;
+
+          // Get tests for this subscription to group by exam
+          const { data: tests } = await supabase
+            .from('Tests')
+            .select('TestID, ExamID, Exams(ExamID, ExamName)')
+            .eq('SubscriptionID', sub.SubscriptionID);
+
+          if (tests) {
+            tests.forEach((test) => {
+              const examId = test.ExamID;
+              if (examId) {
+                if (!usageByExam[examId]) {
+                  usageByExam[examId] = {
+                    examId,
+                    examName: test.Exams?.ExamName || 'Unknown Exam',
+                    studentsEnrolled: 0,
+                    testsCreated: 0,
+                    questionsCreated: 0,
+                    aiQuestionsGenerated: 0,
+                    studentAttempts: 0,
+                  };
+                }
+                usageByExam[examId].testsCreated += 1;
+              }
+            });
+
+            // Count attempts per exam
+            const testIds = tests.map((t) => t.TestID);
+            const { data: attempts } = await supabase
+              .from('StudentAttempts')
+              .select('TestID, Tests(ExamID)')
+              .eq('StudentID', entityId)
+              .in('TestID', testIds);
+
+            if (attempts) {
+              attempts.forEach((attempt) => {
+                const examId = attempt.Tests?.ExamID;
+                if (examId && usageByExam[examId]) {
+                  usageByExam[examId].studentAttempts += 1;
+                }
+              });
+            }
+          }
+        }
+
+        // Also fetch UsageCounters for reference (may have additional tracking)
+        const { data: usageCounters } = await supabase
+          .from('UsageCounters')
+          .select(`
+            UsageID,
+            ExamID,
+            MonthKey,
+            StudentsEnrolled,
+            TestsCreated,
+            TestsCreatedToday,
+            QuestionsCreated,
+            AIQuestionsGenerated,
+            StudentAttempts,
+            LastResetAt,
+            UpdatedAt,
+            Exams (
+              ExamID,
+              ExamName
+            )
+          `)
+          .eq('SubscriptionID', sub.SubscriptionID)
+          .order('MonthKey', { ascending: false })
+          .order('UpdatedAt', { ascending: false });
+
+        // Fetch payment information
+        const { data: payments } = await supabase
+          .from('Payments')
+          .select('PaymentID, Amount, PaymentDate, PaymentStatus, PaymentMethod, TransactionID')
+          .eq('SubscriptionID', sub.SubscriptionID)
+          .order('PaymentDate', { ascending: false });
+
+        const totalPaid = (payments || [])
+          .filter((p) => p.PaymentStatus === 'Completed')
+          .reduce((sum, p) => sum + parseFloat(p.Amount || 0), 0);
+
+        return {
+          subscriptionId: sub.SubscriptionID,
+          entityType: sub.EntityType,
+          entityId: sub.EntityID,
+          entityDetails,
+          plan: sub.SubscriptionPlans
+            ? {
+                planId: sub.SubscriptionPlans.PlanID,
+                planName: sub.SubscriptionPlans.PlanName,
+                price: sub.SubscriptionPlans.Price,
+                durationMonths: sub.SubscriptionPlans.DurationMonths,
+                features: sub.SubscriptionPlans.Features,
+              }
+            : null,
+          startDate: sub.StartDate,
+          endDate: sub.EndDate,
+          status: sub.Status,
+          activatedAt: sub.ActivatedAt,
+          autoRenew: sub.AutoRenew,
+          createdAt: sub.CreatedAt,
+          totalUsage,
+          usageByExam: Object.values(usageByExam),
+          usageCounters: usageCounters || [],
+          payments: payments || [],
+          totalPaid,
+          paymentCount: payments?.length || 0,
+        };
+      })
+    );
+
+    res.json({
+      subscriptions: enrichedSubscriptions,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limitNum),
+      },
+    });
+  } catch (error) {
+    console.error('Get subscriptions error:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });

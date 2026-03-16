@@ -1,0 +1,140 @@
+/* System Health page */
+.health-page {
+  padding: 1.5rem 2rem 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.health-header {
+  margin-bottom: 1.5rem;
+}
+
+.health-header h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 0.25rem 0;
+}
+
+.health-subtitle {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Status strip */
+.health-status-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.health-status-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.health-status-card.ok {
+  border-left: 4px solid #22c55e;
+}
+
+.health-status-card.ok svg {
+  color: #22c55e;
+}
+
+.health-status-card.error {
+  border-left: 4px solid #ef4444;
+}
+
+.health-status-card.error svg {
+  color: #ef4444;
+}
+
+.health-status-card.warn {
+  border-left: 4px solid #eab308;
+}
+
+.health-status-card.warn svg {
+  color: #eab308;
+}
+
+.health-status-card.overall {
+  font-weight: 600;
+}
+
+.health-status-label {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  margin-bottom: 0.2rem;
+}
+
+.health-status-value {
+  font-size: 0.95rem;
+  color: #111827;
+}
+
+/* Chart cards */
+.health-chart-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.health-chart-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 1rem 0;
+}
+
+.health-chart-card h2 svg {
+  color: #dc2626;
+}
+
+.health-chart {
+  min-height: 260px;
+}
+
+.health-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.health-loading {
+  text-align: center;
+  padding: 3rem;
+  color: #6b7280;
+}
+
+.health-footer {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  margin-top: 1.5rem;
+}
+
+.health-footer strong {
+  color: #6b7280;
+}

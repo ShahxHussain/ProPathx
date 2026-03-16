@@ -98,6 +98,11 @@ const Approved = () => {
                     {question.TopicName && (
                       <span className="badge badge-subject">{question.TopicName}</span>
                     )}
+                    {(question.ChapterNumber != null || question.ChapterName) && (
+                      <span className="badge badge-subject">
+                        Ch. {[question.ChapterNumber, question.ChapterName].filter(Boolean).join(': ')}
+                      </span>
+                    )}
                     <span className="question-date">
                       Approved: {question.VerifiedAt ? new Date(question.VerifiedAt).toLocaleDateString() : 'N/A'}
                     </span>

@@ -19,9 +19,12 @@ import {
   Bell,
   ScrollText,
   Package,
+  ListChecks,
+  CreditCard,
 } from 'lucide-react';
 import { orgAuth } from '../../services/api';
 import NotificationBell from '../NotificationBell';
+import AnnouncementBanner from '../AnnouncementBanner';
 import './AdminLayout.css';
 
 const AdminLayout = () => {
@@ -57,7 +60,9 @@ const AdminLayout = () => {
     { icon: Users, label: 'Users', path: '/admin/users' },
     { icon: UserPlus, label: 'Create Platform User', path: '/admin/create-platform-user' },
     { icon: FileText, label: 'Exams & Content', path: '/admin/exams' },
+    { icon: ListChecks, label: 'Question Bank', path: '/admin/questions' },
     { icon: Package, label: 'Subscription Plans', path: '/admin/subscription-plans' },
+    { icon: CreditCard, label: 'Subscriptions & Usage', path: '/admin/subscriptions' },
     { icon: ScrollText, label: 'System Logs', path: '/admin/logs' },
     { icon: Bell, label: 'Create Notification', path: '/admin/create-notification' },
     { icon: DollarSign, label: 'Revenue & Payments', path: '/admin/revenue' },
@@ -118,6 +123,7 @@ const AdminLayout = () => {
 
       {/* Main Content */}
       <main className="dashboard-main">
+        <AnnouncementBanner />
         <div className="dashboard-header">
           <button
             className="mobile-menu-toggle"

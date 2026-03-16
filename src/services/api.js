@@ -179,6 +179,28 @@ export const orgDashboard = {
   },
 
   /**
+   * Get exams included in this organization's active subscription(s) only (OrgAdmin).
+   * Use for Question Bank filter, test creation, etc.
+   * @returns {Promise<Object>} { exams: Array }
+   */
+  getSubscriptionExams: async () => {
+    return request('/api/org/auth/exams/subscription', {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Get exam details with subjects and topics (OrgAdmin only)
+   * @param {string} examId - Exam ID
+   * @returns {Promise<Object>} { exam, subjects }
+   */
+  getExamDetails: async (examId) => {
+    return request(`/api/org/auth/exams/${examId}`, {
+      method: 'GET',
+    });
+  },
+
+  /**
    * Get organization logs with filtering (OrgAdmin only)
    * @param {Object} filters - Filter options
    * @param {string} filters.startDate - Start date (ISO string)
@@ -248,6 +270,37 @@ export const orgDashboard = {
       method: 'DELETE',
     });
   },
+
+  /**
+   * Get this organization's question bank (OrgAdmin only)
+   * @param {Object} params - status, page, limit, search, examId, dateFrom (YYYY-MM-DD), dateTo (YYYY-MM-DD)
+   * @returns {Promise<Object>} Questions list and pagination
+   */
+  getQuestions: async (params = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.status) searchParams.append('status', params.status);
+    if (params.page) searchParams.append('page', params.page.toString());
+    if (params.limit) searchParams.append('limit', params.limit.toString());
+    if (params.search) searchParams.append('search', params.search);
+    if (params.examId) searchParams.append('examId', params.examId);
+    if (params.dateFrom) searchParams.append('dateFrom', params.dateFrom);
+    if (params.dateTo) searchParams.append('dateTo', params.dateTo);
+    const queryString = searchParams.toString();
+    return request(`/api/org/auth/questions${queryString ? `?${queryString}` : ''}`, {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Delete an organization question (OrgAdmin only). Fails if question is used in any test.
+   * @param {string} questionId - Question UUID
+   * @returns {Promise<Object>} Success message
+   */
+  deleteQuestion: async (questionId) => {
+    return request(`/api/org/auth/questions/${questionId}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 /**
@@ -290,6 +343,28 @@ export const testAPI = {
   getTestDetails: async (testId) => {
     return request(`/api/org/tests/${testId}`, {
       method: 'GET',
+    });
+  },
+
+  /**
+   * Get question binding config for a test (custom | auto | hybrid, autoPercent for hybrid)
+   * @param {string} testId - Test ID
+   * @returns {Promise<Object>} { bindingType, autoPercent }
+   */
+  getBindingConfig: async (testId) => {
+    return request(`/api/org/tests/${testId}/binding-config`, { method: 'GET' });
+  },
+
+  /**
+   * Set question binding config. No DB change; stored in server memory.
+   * @param {string} testId - Test ID
+   * @param {Object} config - { bindingType: 'custom'|'auto'|'hybrid', autoPercent?: number }
+   * @returns {Promise<Object>} { bindingType, autoPercent }
+   */
+  setBindingConfig: async (testId, config) => {
+    return request(`/api/org/tests/${testId}/binding-config`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
     });
   },
 
@@ -378,6 +453,92 @@ export const testAPI = {
     return request(`/api/org/tests/${testId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
+    });
+  },
+
+  /**
+   * Get questions available to add to a test (same exam, org, not already in test)
+   * @param {string} testId - Test ID
+   * @param {Object} params - subjectId, topicId, difficulty, approvedOnly, search, page, limit
+   * @returns {Promise<Object>} { questions, currentCount, maxQuestionsPerTest, canAddMore, pagination }
+   */
+  getAvailableQuestions: async (testId, params = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.subjectId) searchParams.append('subjectId', params.subjectId);
+    if (params.topicId) searchParams.append('topicId', params.topicId);
+    if (params.difficulty) searchParams.append('difficulty', params.difficulty);
+    if (params.approvedOnly) searchParams.append('approvedOnly', params.approvedOnly);
+    if (params.search) searchParams.append('search', params.search);
+    if (params.customOnly) searchParams.append('customOnly', '1');
+    if (params.questionType) searchParams.append('questionType', params.questionType);
+    if (params.page) searchParams.append('page', params.page.toString());
+    if (params.limit) searchParams.append('limit', params.limit.toString());
+    const qs = searchParams.toString();
+    return request(`/api/org/tests/${testId}/questions/available${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+
+  /**
+   * Add questions to a test
+   * @param {string} testId - Test ID
+   * @param {string[]} questionIds - Array of question UUIDs
+   * @returns {Promise<Object>} { message, added, totalQuestions }
+   */
+  addQuestionsToTest: async (testId, questionIds) => {
+    return request(`/api/org/tests/${testId}/questions`, {
+      method: 'POST',
+      body: JSON.stringify({ questionIds }),
+    });
+  },
+
+  /**
+   * Remove a question from a test
+   * @param {string} testId - Test ID
+   * @param {string} questionId - Question ID
+   * @returns {Promise<Object>} { message, totalQuestions }
+   */
+  removeQuestionFromTest: async (testId, questionId) => {
+    return request(`/api/org/tests/${testId}/questions/${questionId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /**
+   * Bulk add N questions by topic/criteria
+   * @param {string} testId - Test ID
+   * @param {Object} params - topicId?, subjectId?, difficulty?, approvedOnly?, count
+   * @returns {Promise<Object>} { message, added, totalQuestions }
+   */
+  bulkAddQuestions: async (testId, params) => {
+    return request(`/api/org/tests/${testId}/questions/bulk`, {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  /**
+   * Copy questions from another test (same org, same exam)
+   * @param {string} testId - Target test ID
+   * @param {string} sourceTestId - Source test ID
+   * @param {string[]} [questionIds] - Optional subset; if omitted, copy all
+   * @returns {Promise<Object>} { message, added, totalQuestions }
+   */
+  copyQuestionsFromTest: async (testId, sourceTestId, questionIds) => {
+    return request(`/api/org/tests/${testId}/questions/copy-from`, {
+      method: 'POST',
+      body: JSON.stringify({ sourceTestId, questionIds: questionIds || undefined }),
+    });
+  },
+
+  /**
+   * Reorder questions in test
+   * @param {string} testId - Test ID
+   * @param {string[]} questionIds - Full list of question IDs in desired order
+   * @returns {Promise<Object>} { message, questionIds }
+   */
+  reorderQuestions: async (testId, questionIds) => {
+    return request(`/api/org/tests/${testId}/questions/reorder`, {
+      method: 'PUT',
+      body: JSON.stringify({ questionIds }),
     });
   },
 };
@@ -567,6 +728,16 @@ export const adminAPI = {
    */
   getDashboardStats: async () => {
     return request('/api/admin/dashboard/stats', {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Get system health (status, uptime, series for charts). SuperAdmin only.
+   * @returns {Promise<Object>} { status, api, apiLatency, db, dbLatency, uptime, series }
+   */
+  getHealth: async () => {
+    return request('/api/admin/health', {
       method: 'GET',
     });
   },
@@ -826,6 +997,30 @@ export const adminAPI = {
   },
 
   /**
+   * Chapters (per subject) - SuperAdmin only
+   */
+  getChapters: async (examId, subjectId) => {
+    return request(`/api/admin/exams/${examId}/subjects/${subjectId}/chapters`);
+  },
+  createChapter: async (examId, subjectId, data) => {
+    return request(`/api/admin/exams/${examId}/subjects/${subjectId}/chapters`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  updateChapter: async (examId, subjectId, chapterId, data) => {
+    return request(`/api/admin/exams/${examId}/subjects/${subjectId}/chapters/${chapterId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+  deleteChapter: async (examId, subjectId, chapterId) => {
+    return request(`/api/admin/exams/${examId}/subjects/${subjectId}/chapters/${chapterId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /**
    * Get system logs with filtering (SuperAdmin only)
    * @param {Object} filters - Filter options
    * @param {string} filters.startDate - Start date (ISO string)
@@ -867,6 +1062,24 @@ export const adminAPI = {
 
     const queryString = params.toString();
     return request(`/api/admin/logs/stats${queryString ? `?${queryString}` : ''}`, {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Get all questions for SuperAdmin (platform + org) with details
+   * @param {Object} params - source (all|platform|organization), status (all|approved|pending|rejected), page, limit, search
+   * @returns {Promise<Object>} Questions list and pagination
+   */
+  getQuestions: async (params = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.source) searchParams.append('source', params.source);
+    if (params.status) searchParams.append('status', params.status);
+    if (params.page) searchParams.append('page', params.page.toString());
+    if (params.limit) searchParams.append('limit', params.limit.toString());
+    if (params.search) searchParams.append('search', params.search);
+    const queryString = searchParams.toString();
+    return request(`/api/admin/questions${queryString ? `?${queryString}` : ''}`, {
       method: 'GET',
     });
   },
@@ -940,6 +1153,89 @@ export const adminAPI = {
 
   /**
    * ============================================
+   * PLATFORM SETTINGS (SuperAdmin)
+   * ============================================
+   */
+
+  /**
+   * Get maintenance settings (SuperAdmin only)
+   */
+  getMaintenanceSettings: async () => {
+    return request('/api/admin/settings/maintenance', {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Update maintenance settings (SuperAdmin only)
+   * @param {Object} settings
+   */
+  updateMaintenanceSettings: async (settings) => {
+    return request('/api/admin/settings/maintenance', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  },
+
+  /**
+   * Get all announcements (SuperAdmin only)
+   */
+  getAnnouncements: async () => {
+    return request('/api/admin/settings/announcements', {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Create announcement (SuperAdmin only)
+   */
+  createAnnouncement: async (announcement) => {
+    return request('/api/admin/settings/announcements', {
+      method: 'POST',
+      body: JSON.stringify(announcement),
+    });
+  },
+
+  /**
+   * Update announcement (SuperAdmin only)
+   */
+  updateAnnouncement: async (id, announcement) => {
+    return request(`/api/admin/settings/announcements/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(announcement),
+    });
+  },
+
+  /**
+   * Delete announcement (SuperAdmin only)
+   */
+  deleteAnnouncement: async (id) => {
+    return request(`/api/admin/settings/announcements/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /**
+   * Public maintenance settings (no auth) – used to redirect users to maintenance page on login.
+   */
+  getPublicMaintenanceSettings: async () => {
+    return request('/api/org/auth/maintenance-public', {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Public active announcements for a role (no auth required).
+   */
+  getActiveAnnouncements: async (role) => {
+    const query = role ? `?role=${encodeURIComponent(role)}` : '';
+    return request(`/api/org/auth/announcements/active${query}`, {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * ============================================
    * SUBSCRIPTION PLAN EXAMS MANAGEMENT
    * ============================================
    */
@@ -999,6 +1295,23 @@ export const adminAPI = {
   unlinkExamFromPlan: async (planId, examId) => {
     return request(`/api/admin/subscription-plans/${planId}/exams/${examId}`, {
       method: 'DELETE',
+    });
+  },
+
+  /**
+   * Get all subscriptions with details and usage (SuperAdmin only)
+   * @param {Object} params - Query parameters (status, entityType, page, limit)
+   * @returns {Promise<Object>} Subscriptions list with usage data
+   */
+  getSubscriptions: async (params = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.status) searchParams.append('status', params.status);
+    if (params.entityType) searchParams.append('entityType', params.entityType);
+    if (params.page) searchParams.append('page', params.page);
+    if (params.limit) searchParams.append('limit', params.limit);
+    const queryString = searchParams.toString();
+    return request(`/api/admin/subscriptions${queryString ? `?${queryString}` : ''}`, {
+      method: 'GET',
     });
   },
 };
@@ -1252,6 +1565,7 @@ export const questionAPI = {
         subjectId,
         topicName: topicData.topicName,
         description: topicData.description || null,
+        chapterId: topicData.chapterId || null,
       }),
     });
   },
@@ -1492,6 +1806,40 @@ export const studentDashboardAPI = {
   getAssignments: async () => {
     return request('/api/student/assignments', {
       method: 'GET',
+    });
+  },
+
+  /**
+   * Get tests currently available for the student to attempt
+   * (filtered by assignment + time window + test status)
+   */
+  getAvailableTests: async () => {
+    return request('/api/student/tests', {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Start or resume an attempt for a test
+   * @param {string} testId
+   */
+  startAttempt: async (testId) => {
+    return request(`/api/student/tests/${testId}/attempts`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  /**
+   * Submit answers for an attempt
+   * @param {string} testId
+   * @param {string} attemptId
+   * @param {Array} answers - [{ questionId, selectedOptionIds: [] }]
+   */
+  submitAttempt: async (testId, attemptId, answers) => {
+    return request(`/api/student/tests/${testId}/attempts/${attemptId}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
     });
   },
 };

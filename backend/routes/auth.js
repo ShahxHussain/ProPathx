@@ -5,8 +5,35 @@ import { generateToken } from '../utils/jwt.js';
 import { createLog, getClientIP, getUserAgent } from '../utils/logger.js';
 import { validateOrgSignup, validateLogin } from '../middleware/validation.js';
 import { authenticate, requireRole, verifyActiveStatus } from '../middleware/auth.js';
+import { validateSubscriptionForQuestionCreation } from '../utils/subscription.js';
 
 const router = express.Router();
+
+// Lightweight helper to read maintenance settings for public use (no auth required)
+async function getPublicMaintenanceSettings() {
+  const defaultSettings = {
+    enabled: false,
+    scope: 'all',
+    message: '',
+    expectedResumeAt: null,
+    allowRoles: ['SuperAdmin'],
+  };
+
+  const { data, error } = await supabase
+    .from('SystemSettings')
+    .select('Value')
+    .eq('Key', 'maintenance_settings')
+    .single();
+
+  if (error || !data || !data.Value) {
+    return defaultSettings;
+  }
+
+  return {
+    ...defaultSettings,
+    ...data.Value,
+  };
+}
 
 /**
  * Helper function to enrich logs with actor names
@@ -71,6 +98,63 @@ async function enrichLogsWithActorNames(logs) {
     })
   );
 }
+
+/**
+ * GET /api/settings/maintenance-public
+ * Public endpoint: returns current maintenance settings for clients.
+ */
+router.get('/maintenance-public', async (req, res) => {
+  try {
+    const settings = await getPublicMaintenanceSettings();
+    res.json({ settings });
+  } catch (error) {
+    console.error('Get public maintenance settings error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * GET /api/org/auth/announcements/active
+ * Public endpoint: returns active announcements for a given role (query param).
+ */
+router.get('/announcements/active', async (req, res) => {
+  try {
+    const role = req.query.role || null;
+    const now = new Date();
+
+    const { data, error } = await supabase
+      .from('Announcements')
+      .select('*')
+      .eq('IsActive', true)
+      .order('CreatedAt', { ascending: false });
+
+    if (error) {
+      console.error('Supabase error fetching active announcements:', error);
+      return res.status(500).json({ error: 'Failed to fetch active announcements', details: error.message });
+    }
+
+    const effectiveRole = role || null;
+
+    const filtered = (data || []).filter((a) => {
+      // Time window check (in JS to avoid complex OR chaining)
+      const startsAtOk = !a.StartsAt || new Date(a.StartsAt) <= now;
+      const endsAtOk = !a.EndsAt || new Date(a.EndsAt) >= now;
+      if (!startsAtOk || !endsAtOk) return false;
+
+      // Role targeting
+      if (!a.TargetRoles || a.TargetRoles.length === 0) {
+        return true; // visible to everyone
+      }
+      if (!effectiveRole) return false;
+      return a.TargetRoles.includes(effectiveRole);
+    });
+
+    res.json({ announcements: filtered });
+  } catch (error) {
+    console.error('Get active announcements error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
 
 /**
  * POST /api/org/auth/signup
@@ -242,11 +326,12 @@ router.post('/login', validateLogin, async (req, res, next) => {
         .update({ LastLogin: new Date().toISOString() })
         .eq('OrgUserID', orgUser.OrgUserID);
 
-      // Generate JWT token
+      // Generate JWT token (include orgUserId so question creation can record creator)
       const token = generateToken({
         actorType: 'OrgUser',
         orgId: organization.OrgID,
-        orgUserId: orgUser.OrgUserID,
+        orgUserId: String(orgUser.OrgUserID),
+        org_user_id: String(orgUser.OrgUserID),
         role: orgUser.Role,
       });
 
@@ -673,6 +758,337 @@ router.get('/exams/explore', authenticate, requireRole(['OrgAdmin']), verifyActi
 });
 
 /**
+ * GET /api/org/auth/exams/subscription
+ * Get exams that are included in this organization's active subscription(s) only (OrgAdmin).
+ * Use this for Question Bank filter, test creation, etc. — not all platform exams.
+ */
+router.get('/exams/subscription', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  try {
+    const { orgId } = req.user;
+    if (!orgId) {
+      return res.status(403).json({ error: 'Organization ID not found' });
+    }
+    const validation = await validateSubscriptionForQuestionCreation(orgId);
+    if (!validation.valid || !validation.availableExamIds || validation.availableExamIds.length === 0) {
+      return res.json({ exams: [] });
+    }
+    const examIds = validation.availableExamIds;
+    const { data: exams, error: examsError } = await supabase
+      .from('Exams')
+      .select('ExamID, ExamName, Description, Syllabus, NoOfSubjects, CreatedAt')
+      .in('ExamID', examIds)
+      .order('ExamName', { ascending: true });
+
+    if (examsError) {
+      return res.status(500).json({ error: 'Failed to fetch exams', details: examsError.message });
+    }
+    const list = exams || [];
+    const examsWithDetails = await Promise.all(
+      list.map(async (exam) => {
+        const { count: subjectCount } = await supabase
+          .from('Subjects')
+          .select('*', { count: 'exact', head: true })
+          .eq('ExamID', exam.ExamID);
+        return {
+          ...exam,
+          SubjectCount: subjectCount || 0,
+        };
+      })
+    );
+    res.json({ exams: examsWithDetails });
+  } catch (error) {
+    console.error('Subscription exams error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * GET /api/org/auth/exams/:examId
+ * Get exam details with subjects and topics (OrgAdmin read-only, for question bank / bulk add)
+ */
+router.get('/exams/:examId', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const { data: exam, error: examError } = await supabase
+      .from('Exams')
+      .select('ExamID, ExamName, Description, Syllabus')
+      .eq('ExamID', examId)
+      .single();
+
+    if (examError || !exam) {
+      return res.status(404).json({ error: 'Exam not found' });
+    }
+
+    const { data: subjects, error: subError } = await supabase
+      .from('Subjects')
+      .select('SubjectID, SubjectName, Description, ExamID')
+      .eq('ExamID', examId);
+
+    if (subError) {
+      return res.status(500).json({ error: 'Failed to load subjects', details: subError.message });
+    }
+
+    const subjectsWithTopics = await Promise.all(
+      (subjects || []).map(async (sub) => {
+        const { data: topics } = await supabase
+          .from('Topics')
+          .select('TopicID, TopicName, Description, SubjectID, ChapterID, Chapters(ChapterID, ChapterNumber, ChapterName)')
+          .eq('SubjectID', sub.SubjectID);
+        return { ...sub, topics: topics || [] };
+      })
+    );
+
+    res.json({
+      exam: { ...exam, subjects: subjectsWithTopics },
+      subjects: subjectsWithTopics,
+    });
+  } catch (error) {
+    console.error('Get exam details error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * GET /api/org/auth/questions
+ * Get this organization's question bank only (OrgAdmin only)
+ * Query: status (all|approved|pending|rejected), page, limit, search, examId, dateFrom (YYYY-MM-DD), dateTo (YYYY-MM-DD)
+ */
+router.get('/questions', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  try {
+    const { orgId } = req.user;
+    if (!orgId) {
+      return res.status(403).json({ error: 'Organization ID not found' });
+    }
+    const { status = 'all', page = 1, limit = 50, search = '', examId, dateFrom, dateTo } = req.query;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    let query = supabase
+      .from('Questions')
+      .select(`
+        QuestionID,
+        QuestionText,
+        DifficultyLevel,
+        Explanation,
+        QuestionType,
+        Source,
+        CreatedByOrgUserID,
+        CreatedAt,
+        IsVerified,
+        VerifiedBy,
+        VerifiedAt,
+        ReviewerComments,
+        TopicID,
+        Topics(
+          TopicID,
+          TopicName,
+          SubjectID,
+          Subjects(
+            SubjectID,
+            SubjectName,
+            ExamID,
+            Exams(ExamID, ExamName)
+          )
+        )
+      `, { count: 'exact' })
+      .eq('OrgID', orgId)
+      .order('CreatedAt', { ascending: false });
+
+    if (search && search.trim()) {
+      query = query.ilike('QuestionText', `%${search.trim()}%`);
+    }
+    if (status === 'approved') {
+      query = query.eq('IsVerified', true);
+    } else if (status === 'rejected') {
+      query = query.eq('IsVerified', false).not('ReviewerComments', 'is', null);
+    } else if (status === 'pending') {
+      query = query.eq('IsVerified', false).is('ReviewerComments', null);
+    }
+
+    if (examId && examId.trim()) {
+      const { data: subjects } = await supabase.from('Subjects').select('SubjectID').eq('ExamID', examId.trim());
+      const subjectIds = (subjects || []).map((s) => s.SubjectID);
+      if (subjectIds.length > 0) {
+        const { data: topics } = await supabase.from('Topics').select('TopicID').in('SubjectID', subjectIds);
+        const topicIds = (topics || []).map((t) => t.TopicID);
+        if (topicIds.length > 0) {
+          query = query.in('TopicID', topicIds);
+        } else {
+          query = query.eq('TopicID', '00000000-0000-0000-0000-000000000000');
+        }
+      } else {
+        query = query.eq('TopicID', '00000000-0000-0000-0000-000000000000');
+      }
+    }
+
+    if (dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) {
+      query = query.gte('CreatedAt', `${dateFrom}T00:00:00.000Z`);
+    }
+    if (dateTo && /^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
+      query = query.lte('CreatedAt', `${dateTo}T23:59:59.999Z`);
+    }
+
+    query = query.range(offset, offset + limitNum - 1);
+    const { data: questions, error: qError, count } = await query;
+
+    if (qError) {
+      return res.status(500).json({ error: 'Failed to fetch questions', details: qError.message });
+    }
+
+    const list = questions || [];
+    const getQ = (q, key) => q[key] ?? q[key.charAt(0).toLowerCase() + key.slice(1)];
+    const createdByOrgUserIds = [...new Set(list.map((q) => getQ(q, 'CreatedByOrgUserID')).filter(Boolean))];
+    const verifiedByIds = [...new Set(list.map((q) => getQ(q, 'VerifiedBy')).filter(Boolean))];
+
+    const creatorOrgUsers = new Map();
+    if (createdByOrgUserIds.length > 0) {
+      const { data: orgUsers } = await supabase
+        .from('OrgUsers')
+        .select('OrgUserID, FullName, Email')
+        .in('OrgUserID', createdByOrgUserIds);
+      (orgUsers || []).forEach((u) => creatorOrgUsers.set(String(u.OrgUserID), u));
+    }
+
+    const verifierMap = new Map();
+    if (verifiedByIds.length > 0) {
+      const { data: verifiers } = await supabase
+        .from('Users')
+        .select('UserID, FullName, Email')
+        .in('UserID', verifiedByIds);
+      (verifiers || []).forEach((v) => verifierMap.set(String(v.UserID), v));
+    }
+
+    const enriched = list.map((q) => {
+      const topic = q.Topics;
+      const subject = topic?.Subjects;
+      const exam = subject?.Exams;
+      const qCreatedByOrgUserID = getQ(q, 'CreatedByOrgUserID');
+      const qVerifiedBy = getQ(q, 'VerifiedBy');
+      let createdByOrgUserName = null;
+      let createdByOrgUserEmail = null;
+      if (qCreatedByOrgUserID && creatorOrgUsers.has(String(qCreatedByOrgUserID))) {
+        const ou = creatorOrgUsers.get(String(qCreatedByOrgUserID));
+        createdByOrgUserName = ou.FullName;
+        createdByOrgUserEmail = ou.Email;
+      }
+      let statusValue = 'pending';
+      if (q.IsVerified === true) statusValue = 'approved';
+      else if (q.ReviewerComments) statusValue = 'rejected';
+      const verifier = qVerifiedBy && verifierMap.has(String(qVerifiedBy))
+        ? verifierMap.get(String(qVerifiedBy))
+        : null;
+
+      return {
+        questionId: q.QuestionID,
+        questionText: q.QuestionText,
+        questionTextSnippet: (q.QuestionText || '').substring(0, 120) + ((q.QuestionText || '').length > 120 ? '...' : ''),
+        difficultyLevel: q.DifficultyLevel,
+        questionType: q.QuestionType,
+        source: q.Source,
+        examName: exam?.ExamName || '—',
+        subjectName: subject?.SubjectName || '—',
+        topicName: topic?.TopicName || '—',
+        createdByOrgUserName,
+        createdByOrgUserEmail,
+        createdAt: q.CreatedAt,
+        isVerified: q.IsVerified,
+        status: statusValue,
+        verifiedBy: verifier ? { fullName: verifier.FullName, email: verifier.Email } : null,
+        verifiedAt: q.VerifiedAt,
+        reviewerComments: q.ReviewerComments,
+        explanation: q.Explanation,
+      };
+    });
+
+    res.json({
+      questions: enriched,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: count ?? 0,
+        totalPages: Math.ceil((count ?? 0) / limitNum),
+      },
+    });
+  } catch (error) {
+    console.error('Get org questions error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * DELETE /api/org/auth/questions/:questionId
+ * Delete an organization question (OrgAdmin only). Question must belong to the org and not be used in any test.
+ */
+router.delete('/questions/:questionId', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  try {
+    const { orgId } = req.user;
+    const { questionId } = req.params;
+    if (!orgId) {
+      return res.status(403).json({ error: 'Organization ID not found' });
+    }
+
+    const { data: existingQuestion, error: checkError } = await supabase
+      .from('Questions')
+      .select('QuestionID, OrgID, QuestionText')
+      .eq('QuestionID', questionId)
+      .single();
+
+    if (checkError || !existingQuestion) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+
+    if (existingQuestion.OrgID !== orgId) {
+      return res.status(403).json({ error: 'You can only delete questions belonging to your organization' });
+    }
+
+    const { data: testQuestions, error: testError } = await supabase
+      .from('TestQuestions')
+      .select('TestID')
+      .eq('QuestionID', questionId)
+      .limit(1);
+
+    if (testError) {
+      return res.status(500).json({ error: 'Failed to check question usage', details: testError.message });
+    }
+    if (testQuestions && testQuestions.length > 0) {
+      return res.status(400).json({
+        error: 'Cannot delete question that is used in tests. Remove it from tests first.',
+      });
+    }
+
+    const { error: deleteError } = await supabase
+      .from('Questions')
+      .delete()
+      .eq('QuestionID', questionId);
+
+    if (deleteError) {
+      return res.status(500).json({ error: 'Failed to delete question', details: deleteError.message });
+    }
+
+    const ipAddress = getClientIP(req);
+    const userAgent = getUserAgent(req);
+    const actorID = req.user.orgUserId ?? req.user.org_user_id ?? req.user.userId;
+    await createLog({
+      actorType: 'OrgUser',
+      actorID: actorID,
+      actionType: 'Delete',
+      entityType: 'Question',
+      entityID: questionId,
+      description: `OrgAdmin deleted question: ${(existingQuestion.QuestionText || '').substring(0, 50)}...`,
+      ipAddress,
+      userAgent,
+      previousData: existingQuestion,
+    });
+
+    res.json({ message: 'Question deleted successfully' });
+  } catch (error) {
+    console.error('Delete org question error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
  * GET /api/org/auth/logs
  * Get organization logs with filtering (OrgAdmin only)
  * Query params:
@@ -806,10 +1222,11 @@ router.get('/logs', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus,
  */
 router.get('/subscription-plans', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
   try {
-    // Get all subscription plans
+    // Get only Active subscription plans (disabled plans are hidden from org selection; existing subscriptions are unaffected)
     const { data: plans, error: plansError } = await supabase
       .from('SubscriptionPlans')
       .select('*')
+      .eq('Status', 'Active')
       .order('PlanName', { ascending: true });
 
     if (plansError) {
@@ -899,7 +1316,7 @@ router.post('/subscriptions', authenticate, requireRole(['OrgAdmin']), verifyAct
       return res.status(400).json({ error: 'PlanID is required' });
     }
 
-    // Check if plan exists
+    // Check if plan exists and is Active (disabled plans cannot be chosen for new subscriptions)
     const { data: plan, error: planError } = await supabase
       .from('SubscriptionPlans')
       .select('*')
@@ -908,6 +1325,9 @@ router.post('/subscriptions', authenticate, requireRole(['OrgAdmin']), verifyAct
 
     if (planError || !plan) {
       return res.status(404).json({ error: 'Subscription plan not found' });
+    }
+    if (plan.Status === 'Inactive') {
+      return res.status(400).json({ error: 'This subscription plan is not available for new subscriptions' });
     }
 
     // Check if organization already has an active subscription

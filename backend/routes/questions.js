@@ -102,6 +102,259 @@ router.get(
 );
 
 /**
+ * GET /api/questions/exams/list
+ * Get list of exams, subjects, and topics
+ * - Organization Subject Expert: Only exams from active subscription
+ * - Platform Subject Expert: All exams (no subscription required)
+ */
+router.get(
+  '/exams/list',
+  authenticate,
+  requireRole(['Subject Expert']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { orgId, actorType } = req.user;
+
+    try {
+      let examsQuery;
+      let availableExamIds = null;
+
+      // For Organization Subject Expert: Filter by subscription
+      if (actorType === 'OrgUser' && orgId) {
+        // Validate subscription and get available exam IDs
+        const subscriptionValidation = await validateSubscriptionForQuestionCreation(orgId);
+
+        if (!subscriptionValidation.valid) {
+          return res.json({
+            exams: [],
+            subscriptionStatus: {
+              hasActiveSubscription: false,
+              message: subscriptionValidation.message
+            }
+          });
+        }
+
+        availableExamIds = subscriptionValidation.availableExamIds;
+
+        if (availableExamIds && availableExamIds.length > 0) {
+          examsQuery = supabase
+            .from('Exams')
+            .select('ExamID, ExamName, Description, NoOfSubjects')
+            .in('ExamID', availableExamIds)
+            .order('ExamName', { ascending: true });
+        } else {
+          return res.json({
+            exams: [],
+            subscriptionStatus: {
+              hasActiveSubscription: true,
+              message: 'No exams are available in your subscription plans. Please contact support.'
+            }
+          });
+        }
+      } else if (actorType === 'OrgUser' && !orgId) {
+        return res.json({ exams: [] });
+      } else {
+        // Platform-level Subject Expert: All exams, no subscription required
+        examsQuery = supabase
+          .from('Exams')
+          .select('ExamID, ExamName, Description, NoOfSubjects')
+          .order('ExamName', { ascending: true });
+      }
+
+      const { data: exams, error: examsError } = await examsQuery;
+
+      if (examsError) {
+        return res.status(500).json({ error: 'Failed to fetch exams', details: examsError.message });
+      }
+
+      const examsWithDetails = await Promise.all(
+        (exams || []).map(async (exam) => {
+          const { data: subjects, error: subjectsError } = await supabase
+            .from('Subjects')
+            .select('SubjectID, SubjectName, Description, Weightage, ExamID')
+            .eq('ExamID', exam.ExamID)
+            .order('SubjectName', { ascending: true });
+
+          if (subjectsError) {
+            return { ...exam, subjects: [] };
+          }
+
+          const subjectsWithTopics = await Promise.all(
+            (subjects || []).map(async (subject) => {
+              const { data: chapters } = await supabase
+                .from('Chapters')
+                .select('ChapterID, ChapterNumber, ChapterName, SubjectID')
+                .eq('SubjectID', subject.SubjectID)
+                .order('ChapterNumber', { ascending: true });
+
+              const { data: topics, error: topicsError } = await supabase
+                .from('Topics')
+                .select('TopicID, TopicName, Description, SubjectID, ChapterID, Chapters(ChapterID, ChapterNumber, ChapterName)')
+                .eq('SubjectID', subject.SubjectID)
+                .order('TopicName', { ascending: true });
+
+              return {
+                ...subject,
+                chapters: chapters || [],
+                topics: topics || [],
+              };
+            })
+          );
+
+          return {
+            ...exam,
+            subjects: subjectsWithTopics,
+          };
+        })
+      );
+
+      const response = { exams: examsWithDetails };
+
+      if (actorType === 'OrgUser' && orgId) {
+        const subscriptionValidation = await validateSubscriptionForQuestionCreation(orgId);
+        response.subscriptionStatus = {
+          hasActiveSubscription: subscriptionValidation.valid,
+          message: subscriptionValidation.valid ? null : subscriptionValidation.message
+        };
+      }
+
+      res.json(response);
+    } catch (error) {
+      console.error('Get exams list error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * GET /api/questions/subscription/status
+ * Organization Subject Expert only; Platform experts don't need subscription
+ */
+router.get(
+  '/subscription/status',
+  authenticate,
+  requireRole(['Subject Expert']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { orgId, actorType } = req.user;
+
+    try {
+      if (actorType !== 'OrgUser' || !orgId) {
+        return res.status(400).json({
+          error: 'This endpoint is only available for Organization Subject Experts'
+        });
+      }
+
+      const status = await getSubscriptionStatus(orgId);
+
+      res.json(status);
+    } catch (error) {
+      console.error('Get subscription status error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * GET /api/questions/dashboard/stats
+ * Dashboard statistics for Subject Expert
+ */
+router.get(
+  '/dashboard/stats',
+  authenticate,
+  requireRole(['Subject Expert']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { userId, orgId, actorType } = req.user;
+
+    try {
+      let questionsQuery = supabase
+        .from('Questions')
+        .select('QuestionID, QuestionText, IsVerified, ReviewerComments, CreatedAt, TimesUsed, TimesCorrect, TimesIncorrect, DifficultyLevel');
+
+      if (actorType === 'OrgUser' && orgId) {
+        questionsQuery = questionsQuery.eq('OrgID', orgId);
+      } else if (actorType === 'User') {
+        questionsQuery = questionsQuery.eq('CreatedBy', userId);
+      }
+
+      const { data: questions, error: questionsError } = await questionsQuery;
+
+      if (questionsError) {
+        return res.status(500).json({ error: 'Failed to fetch questions', details: questionsError.message });
+      }
+
+      const questionsList = questions || [];
+      const total = questionsList.length;
+      const approved = questionsList.filter((q) => q.IsVerified === true).length;
+      const pending = questionsList.filter((q) => !q.IsVerified && !q.ReviewerComments).length;
+      const rejected = questionsList.filter((q) => q.ReviewerComments && !q.IsVerified).length;
+      const qualityScore = total > 0 ? Math.round((approved / total) * 100) : 0;
+
+      const recentQuestions = questionsList
+        .sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt))
+        .slice(0, 5)
+        .map((q) => ({
+          QuestionID: q.QuestionID,
+          QuestionText: q.QuestionText,
+          CreatedAt: q.CreatedAt,
+          IsVerified: q.IsVerified,
+          ReviewerComments: q.ReviewerComments,
+          DifficultyLevel: q.DifficultyLevel,
+        }));
+
+      const statusData = [
+        { status: 'Approved', count: approved },
+        { status: 'Pending', count: pending },
+        { status: 'Rejected', count: rejected },
+      ];
+
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const questionsByDate = {};
+      questionsList
+        .filter((q) => new Date(q.CreatedAt) >= thirtyDaysAgo)
+        .forEach((q) => {
+          const dateObj = new Date(q.CreatedAt);
+          const dateKey = dateObj.toISOString().split('T')[0];
+          const dateLabel = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          if (!questionsByDate[dateKey]) {
+            questionsByDate[dateKey] = { date: dateLabel, count: 0 };
+          }
+          questionsByDate[dateKey].count += 1;
+        });
+
+      const trendData = Object.entries(questionsByDate)
+        .map(([dateKey, data]) => ({ date: data.date, count: data.count, dateKey }))
+        .sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+        .map(({ date, count }) => ({ date, count }));
+
+      const totalUsed = questionsList.reduce((sum, q) => sum + (q.TimesUsed || 0), 0);
+      const totalCorrect = questionsList.reduce((sum, q) => sum + (q.TimesCorrect || 0), 0);
+      const accuracyRate = totalUsed > 0 ? Math.round((totalCorrect / totalUsed) * 100) : 0;
+
+      res.json({
+        stats: {
+          total,
+          approved,
+          pending,
+          rejected,
+          qualityScore,
+          totalUsed,
+          accuracyRate,
+        },
+        recentQuestions,
+        statusData,
+        trendData,
+      });
+    } catch (error) {
+      console.error('Dashboard stats error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
  * GET /api/questions/:questionId
  * Get question details with options
  */
@@ -115,7 +368,7 @@ router.get(
     const { userId, orgId, actorType } = req.user;
 
     try {
-      // Get question
+      // Get question (include Chapter via Topic for Subject Expert view)
       const { data: question, error: questionError } = await supabase
         .from('Questions')
         .select(`
@@ -123,6 +376,8 @@ router.get(
           Topics!inner(
             TopicID,
             TopicName,
+            ChapterID,
+            Chapters(ChapterID, ChapterNumber, ChapterName),
             Subjects!inner(
               SubjectID,
               SubjectName,
@@ -158,12 +413,17 @@ router.get(
         return res.status(500).json({ error: 'Failed to fetch options', details: optionsError.message });
       }
 
+      const ch = question.Topics?.Chapters;
+      const chapter = ch && (Array.isArray(ch) ? ch[0] : ch);
       res.json({
         question: {
           ...question,
           ExamName: question.Topics?.Subjects?.Exams?.ExamName,
           SubjectName: question.Topics?.Subjects?.SubjectName,
           TopicName: question.Topics?.TopicName,
+          ChapterID: question.Topics?.ChapterID,
+          ChapterNumber: chapter?.ChapterNumber,
+          ChapterName: chapter?.ChapterName,
         },
         options: options || [],
       });
@@ -194,7 +454,8 @@ router.post(
       source,
       examId, // Added to validate exam access for Organization Subject Experts
     } = req.body;
-    const { userId, orgId: userOrgId, orgUserId, actorType } = req.user;
+    const { userId, orgId: userOrgId, actorType } = req.user;
+    const orgUserId = req.user.orgUserId ?? req.user.org_user_id ?? null;
     const ipAddress = getClientIP(req);
     const userAgent = getUserAgent(req);
 
@@ -316,19 +577,17 @@ router.post(
       // Determine question ownership based on expert type
       let finalCreatedBy = null;
       let finalOrgID = null;
+      let finalCreatedByOrgUserID = null;
 
       if (actorType === 'User') {
-        // Platform Subject Expert - can set CreatedBy to UserID
         finalCreatedBy = userId;
-        finalOrgID = null; // Platform questions don't belong to any organization
+        finalOrgID = null;
       } else if (actorType === 'OrgUser') {
-        // Organization Subject Expert
-        // CreatedBy references Users.UserID, not OrgUsers.OrgUserID, so set to null
         finalCreatedBy = null;
-        finalOrgID = userOrgId; // Set OrgID to track organization ownership
+        finalOrgID = userOrgId ?? null;
+        finalCreatedByOrgUserID = orgUserId ? String(orgUserId) : null;
       }
 
-      // Create question
       const questionData = {
         TopicID: topicId || null,
         QuestionText: questionText.trim(),
@@ -336,11 +595,14 @@ router.post(
         Explanation: explanation?.trim() || null,
         QuestionType: questionType || 'Single Correct',
         CreatedBy: finalCreatedBy,
-        OrgID: finalOrgID, // Set OrgID for Organization Subject Experts
+        OrgID: finalOrgID,
         Source: source || 'Self',
         IsVerified: false,
         CreatedAt: new Date().toISOString(),
       };
+      if (actorType === 'OrgUser') {
+        questionData.CreatedByOrgUserID = finalCreatedByOrgUserID;
+      }
 
       const { data: newQuestion, error: questionError } = await supabase
         .from('Questions')
@@ -636,130 +898,6 @@ router.delete(
 );
 
 /**
- * GET /api/questions/exams/list
- * Get list of exams, subjects, and topics
- * - Organization Subject Expert: Only exams from active subscription
- * - Platform Subject Expert: All exams
- */
-router.get(
-  '/exams/list',
-  authenticate,
-  requireRole(['Subject Expert']),
-  verifyActiveStatus,
-  async (req, res) => {
-    const { orgId, actorType } = req.user;
-
-    try {
-      let examsQuery;
-      let availableExamIds = null;
-
-      // For Organization Subject Expert: Filter by subscription
-      if (actorType === 'OrgUser' && orgId) {
-        // Validate subscription and get available exam IDs
-        const subscriptionValidation = await validateSubscriptionForQuestionCreation(orgId);
-        
-        if (!subscriptionValidation.valid) {
-          // Return empty list if no active subscription
-          return res.json({ 
-            exams: [],
-            subscriptionStatus: {
-              hasActiveSubscription: false,
-              message: subscriptionValidation.message
-            }
-          });
-        }
-
-        availableExamIds = subscriptionValidation.availableExamIds;
-        
-        // Build query for exams in ALL subscriptions
-        if (availableExamIds && availableExamIds.length > 0) {
-          examsQuery = supabase
-            .from('Exams')
-            .select('ExamID, ExamName, Description, NoOfSubjects')
-            .in('ExamID', availableExamIds)
-            .order('ExamName', { ascending: true });
-        } else {
-          // No exams available in any subscription
-          return res.json({ 
-            exams: [],
-            subscriptionStatus: {
-              hasActiveSubscription: true,
-              message: 'No exams are available in your subscription plans. Please contact support.'
-            }
-          });
-        }
-      } else if (actorType === 'OrgUser' && !orgId) {
-        // If OrgUser but no orgId, return empty
-        return res.json({ exams: [] });
-      } else {
-        // Platform-level Subject Expert: Show all exams
-        examsQuery = supabase
-          .from('Exams')
-          .select('ExamID, ExamName, Description, NoOfSubjects')
-          .order('ExamName', { ascending: true });
-      }
-
-      const { data: exams, error: examsError } = await examsQuery;
-
-      if (examsError) {
-        return res.status(500).json({ error: 'Failed to fetch exams', details: examsError.message });
-      }
-
-      // For each exam, get subjects and topics
-      const examsWithDetails = await Promise.all(
-        (exams || []).map(async (exam) => {
-          const { data: subjects, error: subjectsError } = await supabase
-            .from('Subjects')
-            .select('SubjectID, SubjectName, Description, Weightage, ExamID')
-            .eq('ExamID', exam.ExamID)
-            .order('SubjectName', { ascending: true });
-
-          if (subjectsError) {
-            return { ...exam, subjects: [] };
-          }
-
-          const subjectsWithTopics = await Promise.all(
-            (subjects || []).map(async (subject) => {
-              const { data: topics, error: topicsError } = await supabase
-                .from('Topics')
-                .select('TopicID, TopicName, Description, SubjectID')
-                .eq('SubjectID', subject.SubjectID)
-                .order('TopicName', { ascending: true });
-
-              return {
-                ...subject,
-                topics: topics || [],
-              };
-            })
-          );
-
-          return {
-            ...exam,
-            subjects: subjectsWithTopics,
-          };
-        })
-      );
-
-      const response = { exams: examsWithDetails };
-      
-      // Include subscription status for Organization Subject Experts
-      if (actorType === 'OrgUser' && orgId) {
-        const subscriptionValidation = await validateSubscriptionForQuestionCreation(orgId);
-        response.subscriptionStatus = {
-          hasActiveSubscription: subscriptionValidation.valid,
-          message: subscriptionValidation.valid ? null : subscriptionValidation.message
-        };
-      }
-
-      res.json(response);
-    } catch (error) {
-      console.error('Get exams list error:', error);
-      res.status(500).json({ error: 'Internal server error', details: error.message });
-    }
-  }
-);
-
-/**
  * POST /api/questions/topics
  * Create a topic for a subject (Subject Expert only)
  * Used when creating questions and need to create a new topic
@@ -770,7 +908,7 @@ router.post(
   requireRole(['Subject Expert']),
   verifyActiveStatus,
   async (req, res) => {
-    const { examId, subjectId, topicName, description } = req.body;
+    const { examId, subjectId, topicName, description, chapterId } = req.body;
     const { orgUserId, userId, actorType, orgId } = req.user;
     const ipAddress = getClientIP(req);
     const userAgent = getUserAgent(req);
@@ -815,11 +953,24 @@ router.post(
         }
       }
 
+      // If chapterId provided, verify it belongs to this subject
+      let finalChapterId = null;
+      if (chapterId) {
+        const { data: chapter, error: chapterErr } = await supabase
+          .from('Chapters')
+          .select('ChapterID')
+          .eq('ChapterID', chapterId)
+          .eq('SubjectID', subjectId)
+          .single();
+        if (!chapterErr && chapter) finalChapterId = chapterId;
+      }
+
       // Create topic
       const { data: newTopic, error: topicError } = await supabase
         .from('Topics')
         .insert({
           SubjectID: subjectId,
+          ChapterID: finalChapterId,
           TopicName: topicName.trim(),
           Description: description || null,
           CreatedBy: null,
@@ -852,152 +1003,6 @@ router.post(
       });
     } catch (error) {
       console.error('Create topic error:', error);
-      res.status(500).json({ error: 'Internal server error', details: error.message });
-    }
-  }
-);
-
-/**
- * GET /api/questions/subscription/status
- * Get subscription status for Organization Subject Expert
- * Platform Subject Experts don't need this endpoint
- */
-router.get(
-  '/subscription/status',
-  authenticate,
-  requireRole(['Subject Expert']),
-  verifyActiveStatus,
-  async (req, res) => {
-    const { orgId, actorType } = req.user;
-
-    try {
-      // Only for Organization Subject Experts
-      if (actorType !== 'OrgUser' || !orgId) {
-        return res.status(400).json({ 
-          error: 'This endpoint is only available for Organization Subject Experts' 
-        });
-      }
-
-      const status = await getSubscriptionStatus(orgId);
-
-      res.json(status);
-    } catch (error) {
-      console.error('Get subscription status error:', error);
-      res.status(500).json({ error: 'Internal server error', details: error.message });
-    }
-  }
-);
-
-/**
- * GET /api/questions/dashboard/stats
- * Get dashboard statistics for Subject Expert
- */
-router.get(
-  '/dashboard/stats',
-  authenticate,
-  requireRole(['Subject Expert']),
-  verifyActiveStatus,
-  async (req, res) => {
-    const { userId, orgId, actorType } = req.user;
-
-    try {
-      // Build base query for questions
-      let questionsQuery = supabase
-        .from('Questions')
-        .select('QuestionID, QuestionText, IsVerified, ReviewerComments, CreatedAt, TimesUsed, TimesCorrect, TimesIncorrect, DifficultyLevel');
-
-      // Filter by organization if user is OrgUser
-      if (actorType === 'OrgUser' && orgId) {
-        questionsQuery = questionsQuery.eq('OrgID', orgId);
-      } else if (actorType === 'User') {
-        // Platform-level Subject Expert - only their questions
-        questionsQuery = questionsQuery.eq('CreatedBy', userId);
-      }
-
-      const { data: questions, error: questionsError } = await questionsQuery;
-
-      if (questionsError) {
-        return res.status(500).json({ error: 'Failed to fetch questions', details: questionsError.message });
-      }
-
-      const questionsList = questions || [];
-
-      // Calculate statistics
-      const total = questionsList.length;
-      const approved = questionsList.filter((q) => q.IsVerified === true).length;
-      const pending = questionsList.filter((q) => !q.IsVerified && !q.ReviewerComments).length;
-      const rejected = questionsList.filter((q) => q.ReviewerComments && !q.IsVerified).length;
-
-      // Calculate quality score (approval rate)
-      const qualityScore = total > 0 ? Math.round((approved / total) * 100) : 0;
-
-      // Get recent questions (last 5)
-      const recentQuestions = questionsList
-        .sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt))
-        .slice(0, 5)
-        .map((q) => ({
-          QuestionID: q.QuestionID,
-          QuestionText: q.QuestionText,
-          CreatedAt: q.CreatedAt,
-          IsVerified: q.IsVerified,
-          ReviewerComments: q.ReviewerComments,
-          DifficultyLevel: q.DifficultyLevel,
-        }));
-
-      // Get questions by status for chart
-      const statusData = [
-        { status: 'Approved', count: approved },
-        { status: 'Pending', count: pending },
-        { status: 'Rejected', count: rejected },
-      ];
-
-      // Get questions created over last 30 days for trend chart
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      const questionsByDate = {};
-      questionsList
-        .filter((q) => new Date(q.CreatedAt) >= thirtyDaysAgo)
-        .forEach((q) => {
-          const dateObj = new Date(q.CreatedAt);
-          const dateKey = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD format for sorting
-          const dateLabel = dateObj.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-          });
-          if (!questionsByDate[dateKey]) {
-            questionsByDate[dateKey] = { date: dateLabel, count: 0 };
-          }
-          questionsByDate[dateKey].count += 1;
-        });
-
-      const trendData = Object.entries(questionsByDate)
-        .map(([dateKey, data]) => ({ date: data.date, count: data.count, dateKey }))
-        .sort((a, b) => a.dateKey.localeCompare(b.dateKey))
-        .map(({ date, count }) => ({ date, count }));
-
-      // Get performance metrics
-      const totalUsed = questionsList.reduce((sum, q) => sum + (q.TimesUsed || 0), 0);
-      const totalCorrect = questionsList.reduce((sum, q) => sum + (q.TimesCorrect || 0), 0);
-      const totalIncorrect = questionsList.reduce((sum, q) => sum + (q.TimesIncorrect || 0), 0);
-      const accuracyRate = totalUsed > 0 ? Math.round((totalCorrect / totalUsed) * 100) : 0;
-
-      res.json({
-        stats: {
-          total,
-          approved,
-          pending,
-          rejected,
-          qualityScore,
-          totalUsed,
-          accuracyRate,
-        },
-        recentQuestions,
-        statusData,
-        trendData,
-      });
-    } catch (error) {
-      console.error('Dashboard stats error:', error);
       res.status(500).json({ error: 'Internal server error', details: error.message });
     }
   }

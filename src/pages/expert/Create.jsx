@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, Save, AlertCircle, CheckCircle2, Loader2, Info, AlertTriangle } from 'lucide-react';
+import { Plus, X, Save, AlertCircle, CheckCircle2, Loader2, Info, AlertTriangle, Code } from 'lucide-react';
 import { questionAPI, examAPI, orgAuth } from '../../services/api';
+import LaTeXEditor from '../../components/LaTeXEditor';
 import './Create.css';
 
 const Create = () => {
   const [formData, setFormData] = useState({
     examId: '',
     subjectId: '',
+    chapterId: '',
     topicMode: 'existing', // 'existing', 'null', 'new'
     topicId: '',
     newTopicName: '',
@@ -33,6 +35,15 @@ const Create = () => {
   const [draftSaved, setDraftSaved] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [loadingSubscription, setLoadingSubscription] = useState(false);
+  const [latexEnabled, setLatexEnabled] = useState(() => {
+    // Load LaTeX preference from localStorage, default to false
+    try {
+      const saved = localStorage.getItem('latexEditorEnabled');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
   
   // Get current user to determine expert type
   const user = orgAuth.getCurrentUser();
@@ -138,6 +149,11 @@ const Create = () => {
     setDraftSaved(false);
   };
 
+  const handleToggleLaTeX = (enabled) => {
+    setLatexEnabled(enabled);
+    localStorage.setItem('latexEditorEnabled', enabled.toString());
+  };
+
   const handleChange = (field, value) => {
     setFormData((prev) => {
       const updated = { ...prev, [field]: value };
@@ -145,6 +161,7 @@ const Create = () => {
       // Reset dependent fields when parent changes
       if (field === 'examId') {
         updated.subjectId = '';
+        updated.chapterId = '';
         updated.topicMode = 'existing';
         updated.topicId = '';
         updated.newTopicName = '';
@@ -152,12 +169,17 @@ const Create = () => {
         setSelectedExam(examsList.find(e => e.ExamID === value) || null);
         setSelectedSubject(null);
       } else if (field === 'subjectId') {
+        updated.chapterId = '';
         updated.topicMode = 'existing';
         updated.topicId = '';
         updated.newTopicName = '';
         updated.newTopicDescription = '';
         const exam = examsList.find(e => e.ExamID === formData.examId);
         setSelectedSubject(exam?.subjects?.find(s => s.SubjectID === value) || null);
+      } else if (field === 'chapterId') {
+        updated.topicId = '';
+        updated.newTopicName = '';
+        updated.newTopicDescription = '';
       } else if (field === 'topicMode') {
         // Reset topic fields when mode changes
         updated.topicId = '';
@@ -292,6 +314,7 @@ const Create = () => {
             {
               topicName: formData.newTopicName.trim(),
               description: formData.newTopicDescription.trim() || null,
+              chapterId: formData.chapterId || null,
             }
           );
           finalTopicId = topicResponse.topic.TopicID;
@@ -326,6 +349,7 @@ const Create = () => {
       const resetForm = {
         examId: '',
         subjectId: '',
+        chapterId: '',
         topicMode: 'existing',
         topicId: '',
         newTopicName: '',
@@ -479,6 +503,22 @@ const Create = () => {
                 <span className="field-error">{validationErrors.subjectId}</span>
               )}
             </label>
+
+            <label>
+              <span>Chapter (optional)</span>
+              <select
+                value={formData.chapterId}
+                onChange={(e) => handleChange('chapterId', e.target.value)}
+                disabled={!formData.subjectId || loadingExams}
+              >
+                <option value="">No chapter / Any</option>
+                {selectedSubjectData?.chapters?.map((ch) => (
+                  <option key={ch.ChapterID} value={ch.ChapterID}>
+                    {[ch.ChapterNumber != null ? `Ch. ${ch.ChapterNumber}` : '', ch.ChapterName].filter(Boolean).join(': ') || ch.ChapterName || 'Unnamed'}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <label>
@@ -509,11 +549,21 @@ const Create = () => {
                 className={validationErrors.topicId ? 'error' : ''}
               >
                 <option value="">Select a topic</option>
-                {selectedSubjectData?.topics?.map((topic) => (
-                  <option key={topic.TopicID} value={topic.TopicID}>
-                    {topic.TopicName}
-                  </option>
-                ))}
+                {(formData.chapterId
+                  ? selectedSubjectData?.topics?.filter((t) => (t.ChapterID || t.Chapters?.ChapterID) === formData.chapterId)
+                  : selectedSubjectData?.topics
+                )?.map((topic) => {
+                  const ch = topic.Chapters;
+                  const chapter = ch && (Array.isArray(ch) ? ch[0] : ch);
+                  const chapterLabel = chapter
+                    ? [chapter.ChapterNumber != null ? `Ch. ${chapter.ChapterNumber}` : '', chapter.ChapterName].filter(Boolean).join(': ') || ''
+                    : '';
+                  return (
+                    <option key={topic.TopicID} value={topic.TopicID}>
+                      {topic.TopicName}{chapterLabel ? ` (${chapterLabel})` : ''}
+                    </option>
+                  );
+                })}
               </select>
               {validationErrors.topicId && (
                 <span className="field-error">{validationErrors.topicId}</span>
@@ -559,14 +609,23 @@ const Create = () => {
         <div className="form-section">
           <h2>Question Details</h2>
 
-          <label>
-            <span>Question Text *</span>
-            <textarea
+          {latexEnabled && (
+            <div className="latex-global-help">
+              <Code size={14} />
+              <span>Press <kbd>Ctrl+M</kbd> (or <kbd>Cmd+M</kbd> on Mac) to open Math menu</span>
+            </div>
+          )}
+
+          <div>
+            <LaTeXEditor
               value={formData.questionText}
-              onChange={(e) => handleChange('questionText', e.target.value)}
-              placeholder="Enter your question here... (Minimum 10 characters)"
+              onChange={(value) => handleChange('questionText', value)}
+              placeholder={latexEnabled ? "Enter your question here... Use the Math button to insert mathematical expressions" : "Enter your question here... (Minimum 10 characters)"}
+              label="Question Text *"
               rows={4}
-              required
+              showPreview={latexEnabled}
+              enableLaTeX={latexEnabled}
+              onToggleLaTeX={handleToggleLaTeX}
               className={validationErrors.questionText ? 'error' : ''}
             />
             <div className="field-hint">
@@ -579,7 +638,7 @@ const Create = () => {
             {validationErrors.questionText && (
               <span className="field-error">{validationErrors.questionText}</span>
             )}
-          </label>
+          </div>
 
           <div className="form-row">
             <label>
@@ -634,18 +693,20 @@ const Create = () => {
             </label>
           </div>
 
-          <label>
-            <span>Explanation (Optional)</span>
-            <textarea
+          <div>
+            <LaTeXEditor
               value={formData.explanation}
-              onChange={(e) => handleChange('explanation', e.target.value)}
-              placeholder="Explain why the correct answer(s) is/are correct..."
+              onChange={(value) => handleChange('explanation', value)}
+              placeholder={latexEnabled ? "Explain why the correct answer(s) is/are correct... Use the Math button to insert mathematical expressions" : "Explain why the correct answer(s) is/are correct..."}
+              label="Explanation (Optional)"
               rows={3}
+              showPreview={latexEnabled}
+              enableLaTeX={latexEnabled}
             />
             <div className="field-hint">
               Providing an explanation helps students understand the concept better
             </div>
-          </label>
+          </div>
         </div>
 
         <div className="form-section">
@@ -693,13 +754,18 @@ const Create = () => {
                       className="option-checkbox"
                       disabled={!isValid}
                     />
-                    <input
-                      type="text"
-                      value={option.text}
-                      onChange={(e) => handleOptionChange(index, 'text', e.target.value)}
-                      placeholder={`Option ${index + 1}${option.isCorrect ? ' (Correct)' : ''}`}
-                      className="option-input"
-                    />
+                    <div style={{ flex: 1, minWidth: 0, width: '100%' }}>
+                      <LaTeXEditor
+                        value={option.text}
+                        onChange={(value) => handleOptionChange(index, 'text', value)}
+                        placeholder={latexEnabled ? `Option ${index + 1}${option.isCorrect ? ' (Correct)' : ''} - Use Math button for expressions` : `Option ${index + 1}${option.isCorrect ? ' (Correct)' : ''}`}
+                        label=""
+                        rows={2}
+                        showPreview={latexEnabled}
+                        enableLaTeX={latexEnabled}
+                        className="option-latex-editor"
+                      />
+                    </div>
                     {formData.options.length > 2 && (
                       <button
                         type="button"

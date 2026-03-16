@@ -223,6 +223,11 @@ const QuestionCard = ({ question, onViewDetails, onApprove, onReject }) => {
             {question.TopicName && (
               <span className="badge badge-subject">{question.TopicName}</span>
             )}
+            {(question.ChapterNumber != null || question.ChapterName) && (
+              <span className="badge badge-subject">
+                Ch. {[question.ChapterNumber, question.ChapterName].filter(Boolean).join(': ')}
+              </span>
+            )}
             <span className="question-date">
               {new Date(question.CreatedAt).toLocaleDateString()}
             </span>
@@ -290,6 +295,11 @@ const QuestionDetailsModal = ({ questionData, onClose, onApprove, onReject, show
               {question.TopicName && (
                 <div>
                   <strong>Topic:</strong> {question.TopicName}
+                </div>
+              )}
+              {(question.ChapterNumber != null || question.ChapterName) && (
+                <div>
+                  <strong>Chapter:</strong> {[question.ChapterNumber, question.ChapterName].filter(Boolean).join(' — ')}
                 </div>
               )}
             </div>

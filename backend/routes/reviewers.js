@@ -141,6 +141,8 @@ router.get(
           Topics(
             TopicID,
             TopicName,
+            ChapterID,
+            Chapters(ChapterID, ChapterNumber, ChapterName),
             Subjects(
               SubjectID,
               SubjectName,
@@ -174,23 +176,29 @@ router.get(
         return res.status(500).json({ error: 'Failed to fetch questions', details: questionsError.message });
       }
 
-      // Format questions
-      const formattedQuestions = (questions || []).map((q) => ({
-        QuestionID: q.QuestionID,
-        QuestionText: q.QuestionText,
-        DifficultyLevel: q.DifficultyLevel,
-        QuestionType: q.QuestionType,
-        Explanation: q.Explanation,
-        CreatedAt: q.CreatedAt,
-        IsVerified: q.IsVerified,
-        ReviewerComments: q.ReviewerComments,
-        VerifiedBy: q.VerifiedBy,
-        VerifiedAt: q.VerifiedAt,
-        ExamName: q.Topics?.Subjects?.Exams?.ExamName,
-        SubjectName: q.Topics?.Subjects?.SubjectName,
-        TopicName: q.Topics?.TopicName,
-        CreatedBy: q.CreatedBy,
-      }));
+      // Format questions (include chapter for reviewer)
+      const formattedQuestions = (questions || []).map((q) => {
+        const ch = q.Topics?.Chapters;
+        const chapter = Array.isArray(ch) ? ch[0] : ch;
+        return {
+          QuestionID: q.QuestionID,
+          QuestionText: q.QuestionText,
+          DifficultyLevel: q.DifficultyLevel,
+          QuestionType: q.QuestionType,
+          Explanation: q.Explanation,
+          CreatedAt: q.CreatedAt,
+          IsVerified: q.IsVerified,
+          ReviewerComments: q.ReviewerComments,
+          VerifiedBy: q.VerifiedBy,
+          VerifiedAt: q.VerifiedAt,
+          ExamName: q.Topics?.Subjects?.Exams?.ExamName,
+          SubjectName: q.Topics?.Subjects?.SubjectName,
+          TopicName: q.Topics?.TopicName,
+          ChapterNumber: chapter?.ChapterNumber,
+          ChapterName: chapter?.ChapterName,
+          CreatedBy: q.CreatedBy,
+        };
+      });
 
       res.json({ questions: formattedQuestions });
     } catch (error) {
@@ -214,7 +222,7 @@ router.get(
     const { orgId, actorType } = req.user;
 
     try {
-      // Get question
+      // Get question (include Chapter for reviewer verify view)
       const { data: question, error: questionError } = await supabase
         .from('Questions')
         .select(`
@@ -222,6 +230,8 @@ router.get(
           Topics(
             TopicID,
             TopicName,
+            ChapterID,
+            Chapters(ChapterID, ChapterNumber, ChapterName),
             Subjects(
               SubjectID,
               SubjectName,
@@ -288,12 +298,17 @@ router.get(
         }
       }
 
+      const ch = question.Topics?.Chapters;
+      const chapter = ch && (Array.isArray(ch) ? ch[0] : ch);
       res.json({
         question: {
           ...question,
           ExamName: question.Topics?.Subjects?.Exams?.ExamName,
           SubjectName: question.Topics?.Subjects?.SubjectName,
           TopicName: question.Topics?.TopicName,
+          ChapterID: question.Topics?.ChapterID,
+          ChapterNumber: chapter?.ChapterNumber,
+          ChapterName: chapter?.ChapterName,
         },
         options: options || [],
         creator: creatorInfo,

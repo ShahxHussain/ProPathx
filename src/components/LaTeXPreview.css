@@ -1,0 +1,31 @@
+.latex-preview {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--background, #f8f9fa);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 8px;
+  border-left: 3px solid #8b5cf6;
+}
+
+.latex-preview-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #666);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.latex-preview-content {
+  font-size: 14px;
+  color: var(--text, #333);
+  line-height: 1.6;
+}
+
+.latex-preview-content .katex {
+  font-size: 1.1em;
+}
+
+.latex-preview-content .katex-display {
+  margin: 12px 0;
+}

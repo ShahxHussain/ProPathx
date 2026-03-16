@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Link2, X, DollarSign, Calendar, Package, Settings, Eye, Search, Filter } from 'lucide-react';
+import { Plus, Edit2, Trash2, Link2, X, DollarSign, Calendar, Package, Settings, Eye, Search, Filter, ToggleLeft, ToggleRight } from 'lucide-react';
 import { adminAPI } from '../../services/api';
 import './SubscriptionPlans.css';
 
@@ -132,6 +132,19 @@ const SubscriptionPlans = () => {
     } catch (err) {
       console.error('Failed to delete subscription plan:', err);
       setError(err.message || 'Failed to delete subscription plan');
+    }
+  };
+
+  const handleTogglePlanStatus = async (plan) => {
+    const newStatus = plan.Status === 'Active' ? 'Inactive' : 'Active';
+    try {
+      setError('');
+      await adminAPI.updateSubscriptionPlan(plan.PlanID, { status: newStatus });
+      setSuccess(`Plan ${newStatus === 'Active' ? 'enabled' : 'set inactive'}. Existing organization subscriptions are unaffected.`);
+      await loadPlans();
+    } catch (err) {
+      console.error('Failed to update plan status:', err);
+      setError(err.message || 'Failed to update plan status');
     }
   };
 
@@ -270,6 +283,7 @@ const SubscriptionPlans = () => {
           onShowCreateModal={() => setShowCreateModal(true)}
           onEditPlan={setEditingPlan}
           onDeletePlan={setDeletingPlan}
+          onToggleStatus={handleTogglePlanStatus}
         />
       )}
 
@@ -319,9 +333,19 @@ const PlanModal = ({ plan, onClose, onSave }) => {
     price: plan?.Price || '',
     durationMonths: plan?.DurationMonths || 1,
     features: plan?.Features || {},
+    audience: plan?.Audience || 'Organization',
   });
   const [featureKey, setFeatureKey] = useState('');
   const [featureValue, setFeatureValue] = useState('');
+
+  const computeTotalPrice = () => {
+    const basePrice = parseFloat(formData.price) || 0;
+    const extras = Object.values(formData.features || {}).reduce((sum, value) => {
+      const n = parseFloat(value);
+      return Number.isNaN(n) ? sum : sum + n;
+    }, 0);
+    return basePrice + extras;
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -337,11 +361,18 @@ const PlanModal = ({ plan, onClose, onSave }) => {
       alert('Duration must be at least 1 month');
       return;
     }
+    if (!['Organization', 'Student', 'Both'].includes(formData.audience)) {
+      alert("Audience must be 'Organization', 'Student', or 'Both'");
+      return;
+    }
+    const totalPrice = computeTotalPrice();
+
     onSave({
       planName: formData.planName.trim(),
-      price: parseFloat(formData.price),
+      price: totalPrice,
       durationMonths: parseInt(formData.durationMonths),
       features: formData.features,
+      audience: formData.audience,
     });
   };
 
@@ -385,6 +416,20 @@ const PlanModal = ({ plan, onClose, onSave }) => {
               required
             />
           </div>
+          <div className="form-group">
+            <label>Audience *</label>
+            <select
+              value={formData.audience}
+              onChange={(e) => setFormData({ ...formData, audience: e.target.value })}
+            >
+              <option value="Organization">Organization (Org Admins only)</option>
+              <option value="Student">Student (Individual students only)</option>
+              <option value="Both">Both (visible in org and student flows)</option>
+            </select>
+            <p className="field-help">
+              Controls where this plan is available: organization subscription flow, individual student flow, or both.
+            </p>
+          </div>
           <div className="form-row">
             <div className="form-group">
               <label>Price *</label>
@@ -407,6 +452,12 @@ const PlanModal = ({ plan, onClose, onSave }) => {
                 onChange={(e) => setFormData({ ...formData, durationMonths: e.target.value })}
                 required
               />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Total Price (Base + Numeric Features)</label>
+            <div className="total-price-display">
+              ${computeTotalPrice().toFixed(2)}
             </div>
           </div>
           <div className="form-group">
@@ -1073,7 +1124,7 @@ const LinkedExamCard = ({ link, onUpdate, onUnlink }) => {
 };
 
 // Manage View Component
-const ManageView = ({ plans, planExamCounts, onShowCreateModal, onEditPlan, onDeletePlan }) => {
+const ManageView = ({ plans, planExamCounts, onShowCreateModal, onEditPlan, onDeletePlan, onToggleStatus }) => {
   return (
     <div className="plans-grid">
       {plans.length === 0 ? (
@@ -1088,17 +1139,37 @@ const ManageView = ({ plans, planExamCounts, onShowCreateModal, onEditPlan, onDe
         </div>
       ) : (
         plans.map((plan) => (
-          <div key={plan.PlanID} className="plan-card">
+          <div key={plan.PlanID} className={`plan-card ${plan.Status === 'Inactive' ? 'plan-card-disabled' : ''}`}>
             <div className="plan-card-header">
               <div className="plan-title-section">
                 <div className="plan-title-row">
                   <h3>{plan.PlanName}</h3>
+                  <span className={`plan-status-badge plan-status-${(plan.Status || 'Active').toLowerCase()}`}>
+                    {plan.Status === 'Inactive' ? 'Inactive' : 'Active'}
+                  </span>
                   {planExamCounts[plan.PlanID] !== undefined && (
                     <span className="exam-count-badge">
                       <Link2 size={14} />
                       {planExamCounts[plan.PlanID]} {planExamCounts[plan.PlanID] === 1 ? 'exam' : 'exams'}
                     </span>
                   )}
+                </div>
+                <div className="plan-audience-row">
+                  <span
+                    className={`plan-audience-badge ${
+                      plan.Audience === 'Student'
+                        ? 'plan-audience-student'
+                        : plan.Audience === 'Both'
+                        ? 'plan-audience-both'
+                        : 'plan-audience-org'
+                    }`}
+                  >
+                    {plan.Audience === 'Student'
+                      ? 'For Individual Students'
+                      : plan.Audience === 'Both'
+                      ? 'For Orgs & Students'
+                      : 'For Organizations'}
+                  </span>
                 </div>
                 <div className="plan-meta">
                   <span className="plan-price">
@@ -1112,6 +1183,18 @@ const ManageView = ({ plans, planExamCounts, onShowCreateModal, onEditPlan, onDe
                 </div>
               </div>
               <div className="plan-actions">
+                <button
+                  className="btn-icon"
+                  onClick={() => onToggleStatus(plan)}
+                  title={plan.Status === 'Inactive' ? 'Set Active (show to orgs for new subscriptions)' : 'Set Inactive (hide from new subscriptions; existing subs unaffected)'}
+                  aria-label={plan.Status === 'Inactive' ? 'Set plan Active' : 'Set plan Inactive'}
+                >
+                  {plan.Status === 'Inactive' ? (
+                    <ToggleLeft size={18} className="plan-toggle enable" />
+                  ) : (
+                    <ToggleRight size={18} className="plan-toggle disable" />
+                  )}
+                </button>
                 <button
                   className="btn-icon"
                   onClick={() => onEditPlan(plan)}
@@ -1234,6 +1317,8 @@ const OverviewView = ({ plans, planDetails, filters, onFiltersChange, onManagePl
               <thead>
                 <tr>
                   <th>Plan Name</th>
+                  <th>Status</th>
+                  <th>Audience</th>
                   <th>Price</th>
                   <th>Duration</th>
                   <th>Linked Exams</th>
@@ -1246,10 +1331,25 @@ const OverviewView = ({ plans, planDetails, filters, onFiltersChange, onManagePl
                 {plans.map((plan) => {
                   const detail = planDetails[plan.PlanID];
                   const exams = detail?.exams || [];
+                  const planStatus = plan.Status || 'Active';
                   return (
-                    <tr key={plan.PlanID}>
+                    <tr key={plan.PlanID} className={planStatus === 'Inactive' ? 'row-disabled' : ''}>
                       <td>
                         <strong>{plan.PlanName}</strong>
+                      </td>
+                      <td>
+                        <span className={`plan-status-badge plan-status-${planStatus.toLowerCase()}`}>
+                          {planStatus === 'Inactive' ? 'Inactive' : 'Active'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="plan-audience-label">
+                          {plan.Audience === 'Student'
+                            ? 'Students'
+                            : plan.Audience === 'Both'
+                            ? 'Orgs & Students'
+                            : 'Organizations'}
+                        </span>
                       </td>
                       <td>
                         <span className="plan-price-cell">

@@ -368,6 +368,46 @@
   line-height: 1.5;
 }
 
+.chapters-section {
+  margin-top: 16px;
+}
+
+.chapters-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.chapter-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.chapter-item form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.empty-chapters {
+  padding: 10px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.topic-chapter {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: normal;
+}
+
 .topics-section {
   margin-top: 16px;
 }

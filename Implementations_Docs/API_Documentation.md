@@ -1266,6 +1266,92 @@ Delete a topic (SuperAdmin only).
 
 ---
 
+## Subscription Plans (SuperAdmin)
+
+Base path: `/api/admin`
+
+### GET /api/admin/subscription-plans
+List all subscription plans (SuperAdmin only). Returns both Active and Inactive plans.
+
+**Authentication:** Required (SuperAdmin)
+
+**Response (200):**
+```json
+{
+  "plans": [
+    {
+      "PlanID": "uuid",
+      "PlanName": "Basic",
+      "Price": 99.00,
+      "DurationMonths": 12,
+      "Features": {},
+      "Status": "Active"
+    }
+  ]
+}
+```
+`Status` is either `"Active"` or `"Inactive"`. Inactive plans are hidden from organization subscription selection; existing organization subscriptions are unaffected.
+
+---
+
+### GET /api/admin/subscription-plans/:planId
+Get a single subscription plan with linked exams (SuperAdmin only).
+
+**Authentication:** Required (SuperAdmin)
+
+**Response (200):** `{ "plan": { ... }, "exams": [ ... ] }`
+
+---
+
+### POST /api/admin/subscription-plans
+Create a subscription plan (SuperAdmin only). New plans are created with `Status: "Active"`.
+
+**Authentication:** Required (SuperAdmin)
+
+**Request Body:**
+```json
+{
+  "planName": "Basic",
+  "price": 99.00,
+  "durationMonths": 12,
+  "features": {}
+}
+```
+
+**Response (201):** `{ "message": "...", "plan": { ... } }`
+
+---
+
+### PUT /api/admin/subscription-plans/:planId
+Update a subscription plan (SuperAdmin only). Include only fields to update (e.g. `status` to enable/disable).
+
+**Authentication:** Required (SuperAdmin)
+
+**Request Body (all optional):**
+```json
+{
+  "planName": "Basic Plus",
+  "price": 129.00,
+  "durationMonths": 12,
+  "features": {},
+  "status": "Active"
+}
+```
+`status`: `"Active"` or `"Inactive"`. Setting a plan to Inactive hides it from new org subscriptions; existing org subscriptions are unaffected.
+
+**Response (200):** `{ "message": "...", "plan": { ... } }`
+
+---
+
+### DELETE /api/admin/subscription-plans/:planId
+Delete a subscription plan (SuperAdmin only). Fails if the plan has any active subscriptions.
+
+**Authentication:** Required (SuperAdmin)
+
+**Response (200):** `{ "message": "Subscription plan deleted successfully" }`
+
+---
+
 ## Error Responses
 
 All endpoints may return the following error responses:

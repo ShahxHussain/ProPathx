@@ -56,8 +56,10 @@ GeneratedAt)
 
 ## 🟩 2️⃣ Subscription & Usage Management
 
-- **SubscriptionPlans →** (PlanID [PK], PlanName, Price, DurationMonths, Features [JSON])
-    — defines available plans (e.g., Basic, Institutional, Enterprise)
+- **SubscriptionPlans →** (PlanID [PK], PlanName, Price, DurationMonths, Features [JSON], Status status_subscriptionplans_enum, Audience TEXT CHECK(Audience IN ('Organization','Student','Both')) DEFAULT 'Organization')
+    — defines available plans (e.g., Basic, Institutional, Enterprise).  
+    Status: `Active` = available for new subscriptions; `Inactive` = hidden from selection (existing subscriptions unaffected).  
+    Audience: `Organization` = only org admins can see/use this plan; `Student` = only individual students can see/use this plan; `Both` = usable in both flows.
 - **SubscriptionPlanExams** ( PlanID FK → SubscriptionPlans.PlanID, ExamID FK →
     Exams.ExamID, IsMandatory BOOLEAN DEFAULT FALSE, MaxStudents INT NULL,
     MaxTests INT NULL, MaxQuestionsPerTest INT NULL, MaxTestsPerDay INT NULL,
@@ -73,22 +75,52 @@ GeneratedAt)
     DEFAULT 0, LastResetAt TIMESTAMP NULL, UpdatedAt, UNIQUE (SubscriptionID,
     ExamID, MonthKey) )
 
+- **SystemSettings →** (Key [PK], Value JSONB, UpdatedAt, UpdatedBy [FK→Users.UserID])
+    — central key/value store for global platform settings such as maintenance mode, AI configuration, default limits, etc.
+
+- **Announcements →** (AnnouncementID [PK], Title, Message, Link, TargetRoles [TEXT[]], StartsAt,
+    EndsAt, IsActive BOOLEAN, CreatedAt, CreatedBy [FK→Users.UserID])
+    — stores global announcement banners that can be targeted by roles and time windows.
+
 ## 🟨 3️⃣ Exam & Content Management
 
 - **Exams →** (ExamID [PK], ExamName, CreatedBy , CreatedAt, Description, Syllabus,
     CreatedAt) — defines major exam categories like MDCAT, ECAT, IELTS, etc.
 - **Subjects →** (SubjectID [PK], ExamID [FK→Exams.ExamID], SubjectName, Description,
     CreatedBy , CreatedAt,) — defines subjects under each exam.
-- **Topics →** (TopicID [PK], SubjectID [FK→Subjects.SubjectID], TopicName, Description,
-    CreatedBy , CreatedAt,) — defines detailed topics within subjects for better question
-    categorization.
+- **Chapters →** (ChapterID [PK], SubjectID [FK→Subjects.SubjectID], **ChapterNumber INT NULL**,
+    **ChapterName TEXT NULL**, CreatedBy [FK→Users.UserID, Nullable], CreatedByOrgUserID [FK→OrgUsers.OrgUserID, Nullable],
+    CreatedAt) — optional grouping under a subject; **one chapter can have many topics**. Both
+    ChapterNumber and ChapterName are optional. Created by either a platform user (CreatedBy) or
+    an organization user (CreatedByOrgUserID); the other is null.
+- **Topics →** (TopicID [PK], SubjectID [FK→Subjects.SubjectID], **ChapterID [FK→Chapters.ChapterID, Nullable]**,
+    TopicName, Description, CreatedBy, CreatedAt) — detailed topics within a subject; optionally
+    linked to a chapter via ChapterID. Leave ChapterID NULL when a topic is not under a chapter.
+
+**Question → Topic → Chapter chain (and where we “see” that a topic is under a chapter)**  
+- Every MCQ/Question is linked to a **Topic** via `Questions.TopicID`. The **only** place we know “ye topic is chapter ka hai” is **Topics.ChapterID**: if it is set, that topic belongs to that chapter.  
+- So the chain is: **Question → Topic (TopicID) → Chapter (Topics.ChapterID)**. No direct link from Question to Chapter; chapter is always derived via Topic.  
+- **Where to use / show this:**
+  - **APIs** that return questions (list/detail): join `Questions → Topics → Chapters` and include in response e.g. `topic: { topicId, topicName, chapterId?, chapterNumber?, chapterName? }` so UI and analytics always have chapter when available.
+  - **Question bank / test composition UI**: when showing a question or filtering by topic, also show or filter by chapter (topic’s chapter).
+  - **Attempts / results / analytics**: when analysing performance, group or filter by **Topic** and/or **Chapter** using this same join.
+
+**Adaptive learning (future)**  
+- The same hierarchy (**Exam → Subject → Chapter? → Topic → Question**) will drive adaptive learning modules.  
+- We can target practice/remediation at three levels (or combine them):
+  - **Chapter only** — e.g. “weak in Chapter 2”: use `Topics.ChapterID = <id>` (all topics under that chapter).
+  - **Topic only** — e.g. “weak in this topic”: use `Questions.TopicID = <id>`.
+  - **Both (chapter + topic)** — e.g. “within Chapter 2, focus on topic X”: use `Topics.ChapterID = <id> AND Questions.TopicID = <id>`.  
+- So: **sirf chapter**, **sirf topic**, ya **dono** — sab isi chain (Question → Topic → Chapter) se derive ho sakta hai; koi extra table nahi chahiye.
+
 - **Tests** ( TestID [PK], SubscriptionID [FK→Subscriptions.SubscriptionID], ExamID
     [FK→Exams.ExamID], CreatedBy, OrgID [FK→Organizations.OrgID, Nullable],
     TestName, TestType ENUM('Practice','Mock','Final'), DurationMinutes, TotalQuestions,
     TotalMarks, TestDate, StartTime, EndTime, CreatedAt, Status ENUM('Active','Inactive') )
 - **Questions →** (QuestionID [PK], TopicID [FK→Topics.TopicID], QuestionText,
     DifficultyLevel ENUM('Easy','Medium','Hard'), Explanation, QuestionType ENUM('Single
-    Correct','Multiple Correct'), CreatedBy [FK→Users.UserID], OrgID [FK, Nubble],
+    Correct','Multiple Correct'), CreatedBy [FK→Users.UserID], OrgID [FK, Nullable],
+    CreatedByOrgUserID [FK→OrgUsers.OrgUserID, Nullable],
 
 
 ```
@@ -110,7 +142,7 @@ generated questions are modified.
 MDCAT2025).
 ```
 ```
-3.CreatedBy, UpdatedBy, VerifiedBy reference Users.UserID.
+3.CreatedBy, UpdatedBy, VerifiedBy reference Users.UserID. CreatedByOrgUserID references OrgUsers.OrgUserID when the question was created by an organization Subject Expert (org-level); CreatedBy is then null for org questions.
 ```
 - **Options →** (OptionID [PK], QuestionID [FK→Questions.QuestionID], OptionNumber, OptionText,
     IsCorrect) — stores multiple-choice options for each question. OptionID is the primary key (UUID).
@@ -276,7 +308,7 @@ traceability.
 - 🔹 Manage system-level users (Users table: Admins, AI bots, Subject Experts,
     Reviewers).
 - 🔹 Approve, Reject, update, and delete Organizations.
-- 🔹 Define and manage SubscriptionPlans (pricing, duration, features).
+- 🔹 Define and manage SubscriptionPlans (pricing, duration, features); set plan Status to Active/Inactive (status_subscriptionplans_enum; inactive plans hidden from new subscriptions; existing org subscriptions unaffected).
 - 🔹 Oversee all Subscriptions, Payments, and UsageCounters.
 - 🔹 Manage Exam, Subjects, and Topics hierarchy globally.
 - 🔹 Monitor all system actions via Logs and Notifications.

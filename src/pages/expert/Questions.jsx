@@ -16,8 +16,11 @@ import {
   Plus,
   X,
   CheckCircle2,
+  Code,
 } from 'lucide-react';
 import { questionAPI } from '../../services/api';
+import LaTeXEditor from '../../components/LaTeXEditor';
+import LaTeXRenderer from '../../components/LaTeXRenderer';
 import './Questions.css';
 
 const Questions = () => {
@@ -234,7 +237,9 @@ const Questions = () => {
                 <div className="question-header">
                   <div className="question-info">
                     <div className="question-main">
-                      <h3 className="question-text">{question.QuestionText}</h3>
+                      <h3 className="question-text">
+                        <LaTeXRenderer text={question.QuestionText} />
+                      </h3>
                       <div className="question-meta">
                         <span className="question-context">
                           {question.ExamName} → {question.SubjectName} → {question.TopicName}
@@ -307,7 +312,9 @@ const Questions = () => {
                     {question.Explanation && (
                       <div className="detail-section">
                         <strong>Explanation:</strong>
-                        <p>{question.Explanation}</p>
+                        <div className="explanation-display">
+                          <LaTeXRenderer text={question.Explanation} />
+                        </div>
                       </div>
                     )}
                     <div className="detail-section">
@@ -391,7 +398,9 @@ const ViewQuestionModal = ({ question, onClose }) => {
           <div className="view-question">
             <div className="view-section">
               <label>Question</label>
-              <p>{question.QuestionText}</p>
+              <div className="question-text-display">
+                <LaTeXRenderer text={question.QuestionText} />
+              </div>
             </div>
             <div className="view-section">
               <label>Context</label>
@@ -408,7 +417,9 @@ const ViewQuestionModal = ({ question, onClose }) => {
                     className={`option-view ${option.IsCorrect ? 'correct' : ''}`}
                   >
                     <span className="option-number">{index + 1}.</span>
-                    <span className="option-text">{option.OptionText}</span>
+                    <span className="option-text">
+                      <LaTeXRenderer text={option.OptionText} />
+                    </span>
                     {option.IsCorrect && (
                       <span className="correct-indicator">
                         <CheckCircle size={16} />
@@ -422,7 +433,9 @@ const ViewQuestionModal = ({ question, onClose }) => {
             {question.Explanation && (
               <div className="view-section">
                 <label>Explanation</label>
-                <p>{question.Explanation}</p>
+                <div className="explanation-display">
+                  <LaTeXRenderer text={question.Explanation} />
+                </div>
               </div>
             )}
             <div className="view-section">
@@ -476,6 +489,15 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
+  const [latexEnabled, setLatexEnabled] = useState(() => {
+    // Load LaTeX preference from localStorage, default to false
+    try {
+      const saved = localStorage.getItem('latexEditorEnabled');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     loadExamsList();
@@ -522,6 +544,11 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
     } finally {
       setLoadingExams(false);
     }
+  };
+
+  const handleToggleLaTeX = (enabled) => {
+    setLatexEnabled(enabled);
+    localStorage.setItem('latexEditorEnabled', enabled.toString());
   };
 
   const handleChange = (field, value) => {
@@ -719,11 +746,18 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
                   className={validationErrors.topicId ? 'error' : ''}
                 >
                   <option value="">Select a topic</option>
-                  {selectedSubjectData?.topics?.map((topic) => (
-                    <option key={topic.TopicID} value={topic.TopicID}>
-                      {topic.TopicName}
-                    </option>
-                  ))}
+                  {selectedSubjectData?.topics?.map((topic) => {
+                    const ch = topic.Chapters;
+                    const chapter = ch && (Array.isArray(ch) ? ch[0] : ch);
+                    const chapterLabel = chapter
+                      ? [chapter.ChapterNumber != null ? `Ch. ${chapter.ChapterNumber}` : '', chapter.ChapterName].filter(Boolean).join(': ') || ''
+                      : '';
+                    return (
+                      <option key={topic.TopicID} value={topic.TopicID}>
+                        {topic.TopicName}{chapterLabel ? ` (${chapterLabel})` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
                 {validationErrors.topicId && (
                   <span className="field-error">{validationErrors.topicId}</span>
@@ -733,19 +767,30 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
 
             <div className="form-section">
               <h3>Question Details</h3>
-              <label>
-                <span>Question Text *</span>
-                <textarea
+              
+              {latexEnabled && (
+                <div className="latex-global-help">
+                  <Code size={14} />
+                  <span>Press <kbd>Ctrl+M</kbd> (or <kbd>Cmd+M</kbd> on Mac) to open Math menu</span>
+                </div>
+              )}
+              
+              <div>
+                <LaTeXEditor
                   value={formData.questionText}
-                  onChange={(e) => handleChange('questionText', e.target.value)}
+                  onChange={(value) => handleChange('questionText', value)}
+                  placeholder={latexEnabled ? "Enter your question here... Use the Math button to insert mathematical expressions" : "Enter your question here..."}
+                  label="Question Text *"
                   rows={4}
-                  required
+                  showPreview={latexEnabled}
+                  enableLaTeX={latexEnabled}
+                  onToggleLaTeX={handleToggleLaTeX}
                   className={validationErrors.questionText ? 'error' : ''}
                 />
                 {validationErrors.questionText && (
                   <span className="field-error">{validationErrors.questionText}</span>
                 )}
-              </label>
+              </div>
               <div className="form-row">
                 <label>
                   <span>Difficulty Level *</span>
@@ -781,14 +826,17 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
                   </select>
                 </label>
               </div>
-              <label>
-                <span>Explanation (Optional)</span>
-                <textarea
+              <div>
+                <LaTeXEditor
                   value={formData.explanation}
-                  onChange={(e) => handleChange('explanation', e.target.value)}
+                  onChange={(value) => handleChange('explanation', value)}
+                  placeholder={latexEnabled ? "Explain why the correct answer(s) is/are correct... Use the Math button to insert mathematical expressions" : "Explain why the correct answer(s) is/are correct..."}
+                  label="Explanation (Optional)"
                   rows={3}
+                  showPreview={latexEnabled}
+                  enableLaTeX={latexEnabled}
                 />
-              </label>
+              </div>
             </div>
 
             <div className="form-section">
@@ -833,13 +881,18 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
                           className="option-checkbox"
                           disabled={!isValid}
                         />
-                        <input
-                          type="text"
-                          value={option.text}
-                          onChange={(e) => handleOptionChange(index, 'text', e.target.value)}
-                          placeholder={`Option ${index + 1}`}
-                          className="option-input"
-                        />
+                        <div style={{ flex: 1, minWidth: 0, width: '100%' }}>
+                          <LaTeXEditor
+                            value={option.text}
+                            onChange={(value) => handleOptionChange(index, 'text', value)}
+                            placeholder={latexEnabled ? `Option ${index + 1} - Use Math button for expressions` : `Option ${index + 1}`}
+                            label=""
+                            rows={2}
+                            showPreview={latexEnabled}
+                            enableLaTeX={latexEnabled}
+                            className="option-latex-editor"
+                          />
+                        </div>
                         {formData.options.length > 2 && (
                           <button
                             type="button"

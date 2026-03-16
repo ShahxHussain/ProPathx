@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { FileText, Plus, Search, Calendar, Clock, BookOpen, X, CheckCircle, AlertCircle, UserPlus, UsersRound, ArrowLeft, List } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { FileText, Plus, Search, Calendar, Clock, BookOpen, X, CheckCircle, AlertCircle, UserPlus, UsersRound, ArrowLeft, List, BookOpenCheck } from 'lucide-react';
 import { testAPI, orgDashboard, studentAPI, groupAPI } from '../../services/api';
 import './Tests.css';
 
@@ -1311,6 +1312,7 @@ const Tests = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [assigningTest, setAssigningTest] = useState(null);
   const [page, setPage] = useState(1);
+  const navigate = useNavigate();
   const [pagination, setPagination] = useState(null);
 
   useEffect(() => {
@@ -1451,6 +1453,14 @@ const Tests = () => {
                           {test.Status === 'Active' ? 'Disable' : 'Enable'}
                         </button>
                         <button
+                          className="btn-secondary btn-sm btn-compact"
+                          onClick={() => navigate(`/org/tests/${test.TestID}/questions`)}
+                          title="View questions in this test and export as PDF"
+                        >
+                          <BookOpenCheck size={16} />
+                          <span>Questions</span>
+                        </button>
+                        <button
                           className="btn-primary btn-sm btn-compact"
                           onClick={() => setAssigningTest(test)}
                           title="Assign test"
@@ -1510,6 +1520,7 @@ const Tests = () => {
           }}
         />
       )}
+
     </div>
   );
 };
