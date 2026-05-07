@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2,
@@ -8,23 +8,24 @@ import {
   AlertTriangle,
   Users,
   FileText,
-  Clock,
-  CheckCircle,
-  XCircle,
+  GraduationCap,
   BarChart3,
-  PieChart,
   ArrowUp,
   ArrowDown,
   ArrowRight,
-  GraduationCap,
   Package,
   Shield,
   Zap,
   PlusCircle,
   UserPlus,
   ScrollText,
+  RefreshCw,
+  LayoutDashboard,
+  HeartPulse,
   Settings,
-  Eye,
+  History,
+  CheckCircle2,
+  Info,
 } from 'lucide-react';
 import {
   LineChart,
@@ -39,12 +40,13 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
   AreaChart,
   Area,
 } from 'recharts';
 import { adminAPI } from '../../services/api';
 import './Dashboard.css';
+
+const REVENUE_LABELS = { 7: 'Last 7 days', 30: 'Last 30 days', 90: 'Last 90 days' };
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -77,27 +79,14 @@ const Dashboard = () => {
   const [error, setError] = useState('');
   const [showAllAlerts, setShowAllAlerts] = useState(false);
   const [revenueTimeRange, setRevenueTimeRange] = useState('7');
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
-
-  // Auto-dismiss error messages after 5 seconds
-  useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => {
-        setError('');
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
 
-      const response = await adminAPI.getDashboardStats();
+      const response = await adminAPI.getDashboardStats(revenueTimeRange);
 
       setStats({
         activeOrgs: response.stats?.activeOrgs || 0,
@@ -125,102 +114,136 @@ const Dashboard = () => {
       setQuestionsStatusData(response.questionsStatusData || []);
       setTopOrganizations(response.topOrganizations || []);
       setRecentAlerts(response.alerts || []);
+      setLastUpdated(new Date());
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
       setError(err.message || 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
+  }, [revenueTimeRange]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  useEffect(() => {
+    if (!error) return undefined;
+    const timer = setTimeout(() => setError(''), 5000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
+  const primaryKpis = useMemo(
+    () => [
+      {
+        icon: Building2,
+        label: 'Active organizations',
+        value: stats.activeOrgs,
+        hint: `${stats.totalOrgs || 0} total tenants`,
+        trend: 'up',
+        variant: 'navy',
+        action: () => navigate('/admin/organizations'),
+      },
+      {
+        icon: DollarSign,
+        label: 'Revenue (all time)',
+        value: `$${Number(stats.totalRevenue || 0).toLocaleString()}`,
+        hint: 'Completed payments',
+        trend: 'up',
+        variant: 'crimson',
+        action: () => navigate('/admin/subscriptions'),
+      },
+      {
+        icon: Users,
+        label: 'Platform users',
+        value: stats.totalUsers,
+        hint: 'Active platform & org accounts',
+        trend: 'up',
+        variant: 'teal',
+        action: () => navigate('/admin/users'),
+      },
+      {
+        icon: HeartPulse,
+        label: 'System health',
+        value: stats.systemHealth.status === 'healthy' ? 'Healthy' : 'Check',
+        hint: `CPU ${stats.systemHealth.cpu}%`,
+        trend: stats.systemHealth.cpu > 80 ? 'down' : 'up',
+        variant: stats.systemHealth.cpu > 80 ? 'warn' : 'ok',
+        action: () => navigate('/admin/health'),
+      },
+    ],
+    [navigate, stats]
+  );
+
+  const secondaryKpis = useMemo(
+    () => [
+      {
+        icon: GraduationCap,
+        label: 'Students',
+        value: stats.totalStudents,
+        hint: 'Active learners',
+        trend: 'up',
+        action: () => navigate('/admin/organizations'),
+      },
+      {
+        icon: FileText,
+        label: 'Questions',
+        value: stats.totalQuestions || 0,
+        hint: `${stats.approvedQuestions || 0} approved`,
+        trend: 'up',
+        action: () => navigate('/admin/questions'),
+      },
+      {
+        icon: BarChart3,
+        label: 'Tests',
+        value: stats.totalTests || 0,
+        hint: 'Active tests',
+        trend: 'up',
+        action: () => navigate('/admin/organizations'),
+      },
+      {
+        icon: Shield,
+        label: 'Pending reviews',
+        value: stats.pendingQuestions || 0,
+        hint: `${stats.rejectedQuestions || 0} rejected`,
+        trend: stats.pendingQuestions > 0 ? 'down' : 'up',
+        action: () => navigate('/admin/questions'),
+      },
+    ],
+    [navigate, stats]
+  );
+
+  const chartStroke = {
+    revenue: '#dc2626',
+    users: '#6366f1',
+    questions: '#ea580c',
   };
 
-  const statCards = [
-    {
-      icon: Building2,
-      label: 'Active Organizations',
-      value: stats.activeOrgs,
-      change: `${stats.totalOrgs || 0} Total`,
-      trend: 'up',
-      color: 'blue',
-      action: () => navigate('/admin/organizations'),
-    },
-    {
-      icon: DollarSign,
-      label: 'Total Revenue',
-      value: `$${stats.totalRevenue.toLocaleString()}`,
-      change: 'All Time',
-      trend: 'up',
-      color: 'green',
-      action: () => navigate('/admin/revenue'),
-    },
-    {
-      icon: Users,
-      label: 'Total Users',
-      value: stats.totalUsers,
-      change: 'Platform & Org Users',
-      trend: 'up',
-      color: 'purple',
-      action: () => navigate('/admin/users'),
-    },
-    {
-      icon: GraduationCap,
-      label: 'Total Students',
-      value: stats.totalStudents,
-      change: 'Active Students',
-      trend: 'up',
-      color: 'teal',
-      action: () => navigate('/admin/organizations'),
-    },
-    {
-      icon: FileText,
-      label: 'Total Questions',
-      value: stats.totalQuestions || 0,
-      change: `${stats.approvedQuestions || 0} Approved`,
-      trend: 'up',
-      color: 'orange',
-      action: () => navigate('/admin/exams'),
-    },
-    {
-      icon: BarChart3,
-      label: 'Total Tests',
-      value: stats.totalTests || 0,
-      change: `${stats.totalStudents || 0} Students`,
-      trend: 'up',
-      color: 'indigo',
-      action: () => navigate('/admin/organizations'),
-    },
-    {
-      icon: Activity,
-      label: 'System Health',
-      value: stats.systemHealth.status === 'healthy' ? 'Healthy' : 'Warning',
-      change: `CPU: ${stats.systemHealth.cpu}%`,
-      trend: stats.systemHealth.cpu > 80 ? 'down' : 'up',
-      color: stats.systemHealth.cpu > 80 ? 'red' : 'green',
-      action: () => navigate('/admin/health'),
-    },
-    {
-      icon: Shield,
-      label: 'Pending Reviews',
-      value: stats.pendingQuestions || 0,
-      change: `${stats.rejectedQuestions || 0} Rejected`,
-      trend: stats.pendingQuestions > 0 ? 'down' : 'up',
-      color: stats.pendingQuestions > 0 ? 'yellow' : 'green',
-      action: () => navigate('/admin/exams'),
-    },
-  ];
-
-  const COLORS = ['#1e3a8a', '#14b8a6', '#8b5cf6', '#f97316', '#ef4444', '#22c55e'];
-  const PIE_COLORS = ['#1e3a8a', '#14b8a6', '#f97316', '#ef4444', '#8b5cf6', '#10b981'];
+  const PIE_COLORS = ['#1e3a8a', '#14b8a6', '#f97316', '#ef4444', '#8b5cf6', '#22c55e'];
 
   const getAlertIcon = (type) => {
     switch (type) {
       case 'error':
-        return <AlertTriangle className="alert-icon error" />;
+        return <AlertTriangle className="sa-alert-icon sa-alert-icon--error" strokeWidth={1.75} />;
       case 'warning':
-        return <AlertTriangle className="alert-icon warning" />;
+        return <AlertTriangle className="sa-alert-icon sa-alert-icon--warn" strokeWidth={1.75} />;
       case 'success':
-        return <Activity className="alert-icon success" />;
+        return <CheckCircle2 className="sa-alert-icon sa-alert-icon--ok" strokeWidth={1.75} />;
       default:
-        return <Clock className="alert-icon info" />;
+        return <Info className="sa-alert-icon sa-alert-icon--info" strokeWidth={1.75} />;
+    }
+  };
+
+  const formatActivityTimestamp = (iso) => {
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return { date: '', time: '' };
+      return {
+        date: d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+        time: d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+      };
+    } catch {
+      return { date: '', time: '' };
     }
   };
 
@@ -237,184 +260,243 @@ const Dashboard = () => {
     }
   };
 
+  const revenueChartTitle = REVENUE_LABELS[revenueTimeRange] || 'Revenue';
+
   return (
-    <div className="admin-dashboard">
-      <div className="page-header">
-        <div>
-          <h1>Super Admin Dashboard</h1>
-          <p className="page-subtitle">Complete system overview and monitoring</p>
+    <div className="admin-dashboard sa-dash">
+      <header className="sa-hero">
+        <div className="sa-hero__main">
+          <p className="sa-hero__eyebrow">
+            <LayoutDashboard size={14} aria-hidden />
+            SuperAdmin
+          </p>
+          <h1 className="sa-hero__title">Platform overview</h1>
+          <p className="sa-hero__lede">
+            Tenants, revenue, content pipeline, and signals in one place. Data refreshes when you change the
+            revenue window or use refresh.
+          </p>
+          {lastUpdated && (
+            <p className="sa-hero__meta">
+              Updated {lastUpdated.toLocaleString()}
+            </p>
+          )}
         </div>
-      </div>
+        <div className="sa-hero__actions">
+          <button
+            type="button"
+            className="sa-btn sa-btn--ghost"
+            onClick={() => loadDashboardData()}
+            disabled={loading}
+            aria-busy={loading}
+          >
+            <RefreshCw size={16} className={loading ? 'sa-spin' : ''} />
+            Refresh
+          </button>
+        </div>
+      </header>
 
       {error && (
-        <div className="notice error" style={{ marginBottom: '24px' }}>
+        <div className="sa-banner sa-banner--error" role="alert">
           {error}
         </div>
       )}
 
       {loading ? (
-        <div className="loading-state">Loading dashboard data...</div>
+        <div className="sa-skeleton-wrap" aria-busy="true" aria-label="Loading dashboard">
+          <div className="sa-skeleton sa-skeleton--hero" />
+          <div className="sa-skeleton-grid">
+            {[1, 2, 3, 4].map((k) => (
+              <div key={k} className="sa-skeleton sa-skeleton--card" />
+            ))}
+          </div>
+          <div className="sa-skeleton-grid sa-skeleton-grid--wide">
+            <div className="sa-skeleton sa-skeleton--chart" />
+            <div className="sa-skeleton sa-skeleton--chart" />
+          </div>
+        </div>
       ) : (
         <>
-          {/* Stats Cards */}
-          <div className="stats-grid">
-            {statCards.map((card, index) => {
+          <section className="sa-kpi-row" aria-label="Primary metrics">
+            {primaryKpis.map((card) => {
               const Icon = card.icon;
               return (
-                <div
-                  key={index}
-                  className="stat-card"
+                <button
+                  key={card.label}
+                  type="button"
+                  className={`sa-kpi sa-kpi--${card.variant}`}
                   onClick={card.action}
-                  style={{ cursor: 'pointer' }}
                 >
-                  <div className={`stat-icon stat-icon-${card.color}`}>
-                    <Icon size={24} />
-                  </div>
-                  <div className="stat-content">
-                    <div className="stat-value">{card.value}</div>
-                    <div className="stat-label">{card.label}</div>
-                    <div className={`stat-change stat-change-${card.trend}`}>
-                      {card.trend === 'up' ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
-                      <span>{card.change}</span>
-                    </div>
-                  </div>
-                </div>
+                  <span className={`sa-kpi__icon sa-kpi__icon--${card.variant}`}>
+                    <Icon size={22} strokeWidth={1.75} />
+                  </span>
+                  <span className="sa-kpi__body">
+                    <span className="sa-kpi__label">{card.label}</span>
+                    <span className="sa-kpi__value">{card.value}</span>
+                    <span className={`sa-kpi__hint sa-kpi__hint--${card.trend}`}>
+                      {card.trend === 'up' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+                      {card.hint}
+                    </span>
+                  </span>
+                </button>
               );
             })}
-          </div>
+          </section>
 
-          {/* Charts Row 1: Revenue & User Growth */}
-          <div className="dashboard-grid">
-            <div className="dashboard-section chart-section">
-              <div className="section-header">
-                <h2>
-                  <DollarSign size={20} />
-                  Revenue Trend (Last 7 Days)
+          <section className="sa-kpi-row sa-kpi-row--dense" aria-label="Secondary metrics">
+            {secondaryKpis.map((card) => {
+              const Icon = card.icon;
+              return (
+                <button key={card.label} type="button" className="sa-kpi sa-kpi--compact" onClick={card.action}>
+                  <span className="sa-kpi__icon sa-kpi__icon--muted">
+                    <Icon size={18} strokeWidth={1.75} />
+                  </span>
+                  <span className="sa-kpi__body">
+                    <span className="sa-kpi__label">{card.label}</span>
+                    <span className="sa-kpi__value sa-kpi__value--sm">{card.value}</span>
+                    <span className={`sa-kpi__hint sa-kpi__hint--${card.trend}`}>
+                      {card.trend === 'up' ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
+                      {card.hint}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </section>
+
+          <div className="sa-panels">
+            <section className="sa-panel sa-panel--chart">
+              <div className="sa-panel__head">
+                <h2 className="sa-panel__title">
+                  <DollarSign size={18} />
+                  Revenue — {revenueChartTitle}
                 </h2>
                 <select
-                  className="time-filter"
+                  className="sa-select"
                   value={revenueTimeRange}
                   onChange={(e) => setRevenueTimeRange(e.target.value)}
+                  aria-label="Revenue chart time range"
                 >
-                  <option value="7">Last 7 Days</option>
-                  <option value="30">Last 30 Days</option>
-                  <option value="90">Last 90 Days</option>
+                  <option value="7">7 days</option>
+                  <option value="30">30 days</option>
+                  <option value="90">90 days</option>
                 </select>
               </div>
-              <div className="chart-container">
+              <div className="sa-chart">
                 {revenueData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={280}>
                     <AreaChart data={revenueData}>
                       <defs>
-                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
+                        <linearGradient id="saColorRevenue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={chartStroke.revenue} stopOpacity={0.25} />
+                          <stop offset="95%" stopColor={chartStroke.revenue} stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="date" stroke="#475569" />
-                      <YAxis stroke="#475569" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                       <Tooltip
                         contentStyle={{
                           backgroundColor: '#fff',
                           border: '1px solid #e2e8f0',
-                          borderRadius: '8px',
+                          borderRadius: '10px',
+                          boxShadow: '0 10px 30px rgba(15,23,42,0.08)',
                         }}
                       />
                       <Area
                         type="monotone"
                         dataKey="revenue"
-                        stroke="#14b8a6"
-                        strokeWidth={3}
+                        stroke={chartStroke.revenue}
+                        strokeWidth={2}
                         fillOpacity={1}
-                        fill="url(#colorRevenue)"
+                        fill="url(#saColorRevenue)"
                       />
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="chart-empty">No revenue data available</div>
+                  <div className="sa-chart-empty">No revenue in this window</div>
                 )}
               </div>
-            </div>
+            </section>
 
-            <div className="dashboard-section chart-section">
-              <div className="section-header">
-                <h2>
-                  <TrendingUp size={20} />
-                  User Growth (Last 30 Days)
+            <section className="sa-panel sa-panel--chart">
+              <div className="sa-panel__head">
+                <h2 className="sa-panel__title">
+                  <TrendingUp size={18} />
+                  User sign-ups (30 days)
                 </h2>
               </div>
-              <div className="chart-container">
+              <div className="sa-chart">
                 {userGrowthData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={userGrowthData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="date" stroke="#475569" />
-                      <YAxis stroke="#475569" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                       <Tooltip
                         contentStyle={{
                           backgroundColor: '#fff',
                           border: '1px solid #e2e8f0',
-                          borderRadius: '8px',
+                          borderRadius: '10px',
+                          boxShadow: '0 10px 30px rgba(15,23,42,0.08)',
                         }}
                       />
-                      <Bar dataKey="users" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                      <Bar dataKey="users" fill={chartStroke.users} radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="chart-empty">No user growth data available</div>
+                  <div className="sa-chart-empty">No user growth data for this period</div>
                 )}
               </div>
-            </div>
+            </section>
           </div>
 
-          {/* Charts Row 2: Questions Trend & Organization Status */}
-          <div className="dashboard-grid">
-            <div className="dashboard-section chart-section">
-              <div className="section-header">
-                <h2>
-                  <FileText size={20} />
-                  Questions Created Trend (Last 30 Days)
+          <div className="sa-panels">
+            <section className="sa-panel sa-panel--chart">
+              <div className="sa-panel__head">
+                <h2 className="sa-panel__title">
+                  <FileText size={18} />
+                  Questions created (30 days)
                 </h2>
               </div>
-              <div className="chart-container">
+              <div className="sa-chart">
                 {questionsTrendData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={280}>
                     <LineChart data={questionsTrendData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="date" stroke="#475569" />
-                      <YAxis stroke="#475569" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                       <Tooltip
                         contentStyle={{
                           backgroundColor: '#fff',
                           border: '1px solid #e2e8f0',
-                          borderRadius: '8px',
+                          borderRadius: '10px',
+                          boxShadow: '0 10px 30px rgba(15,23,42,0.08)',
                         }}
                       />
                       <Line
                         type="monotone"
                         dataKey="questions"
-                        stroke="#f97316"
-                        strokeWidth={3}
-                        dot={{ fill: '#f97316', r: 4 }}
-                        activeDot={{ r: 6 }}
+                        stroke={chartStroke.questions}
+                        strokeWidth={2.5}
+                        dot={{ fill: chartStroke.questions, r: 3 }}
+                        activeDot={{ r: 5 }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="chart-empty">No question creation data available</div>
+                  <div className="sa-chart-empty">No question creation data</div>
                 )}
               </div>
-            </div>
+            </section>
 
-            <div className="dashboard-section chart-section">
-              <div className="section-header">
-                <h2>
-                  <Building2 size={20} />
-                  Organization Status Distribution
+            <section className="sa-panel sa-panel--chart">
+              <div className="sa-panel__head">
+                <h2 className="sa-panel__title">
+                  <Building2 size={18} />
+                  Organizations by status
                 </h2>
               </div>
-              <div className="chart-container">
+              <div className="sa-chart">
                 {orgStatusData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={280}>
                     <RechartsPieChart>
@@ -423,269 +505,276 @@ const Dashboard = () => {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                         outerRadius={100}
-                        fill="#8884d8"
                         dataKey="value"
                       >
                         {orgStatusData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                          <Cell key={`cell-${entry.name}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                         ))}
                       </Pie>
                       <Tooltip />
                     </RechartsPieChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="chart-empty">No organization data available</div>
+                  <div className="sa-chart-empty">No organization data</div>
                 )}
               </div>
-            </div>
+            </section>
           </div>
 
-          {/* Charts Row 3: Questions Status & User Roles */}
-          <div className="dashboard-grid">
-            <div className="dashboard-section chart-section">
-              <div className="section-header">
-                <h2>
-                  <CheckCircle size={20} />
-                  Questions Status Distribution
+          <div className="sa-panels">
+            <section className="sa-panel sa-panel--chart">
+              <div className="sa-panel__head">
+                <h2 className="sa-panel__title">
+                  <Activity size={18} />
+                  Question review pipeline
                 </h2>
               </div>
-              <div className="chart-container">
+              <div className="sa-chart">
                 {questionsStatusData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={questionsStatusData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis type="number" stroke="#475569" />
-                      <YAxis dataKey="name" type="category" stroke="#475569" width={80} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
+                      <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis
+                        dataKey="name"
+                        type="category"
+                        width={88}
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
                       <Tooltip
                         contentStyle={{
                           backgroundColor: '#fff',
                           border: '1px solid #e2e8f0',
-                          borderRadius: '8px',
+                          borderRadius: '10px',
+                          boxShadow: '0 10px 30px rgba(15,23,42,0.08)',
                         }}
                       />
-                      <Bar dataKey="value" fill="#1e3a8a" radius={[0, 8, 8, 0]} />
+                      <Bar dataKey="value" fill="#1e3a8a" radius={[0, 6, 6, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="chart-empty">No question status data available</div>
+                  <div className="sa-chart-empty">No question status data</div>
                 )}
               </div>
-            </div>
+            </section>
 
-            <div className="dashboard-section chart-section">
-              <div className="section-header">
-                <h2>
-                  <Users size={20} />
-                  User Role Distribution
+            <section className="sa-panel sa-panel--chart">
+              <div className="sa-panel__head">
+                <h2 className="sa-panel__title">
+                  <Users size={18} />
+                  Roles (active)
                 </h2>
               </div>
-              <div className="role-chart-wrapper">
-                <div className="chart-container role-chart">
+              <div className="sa-role-split">
+                <div className="sa-chart sa-chart--pie">
                   {roleDistribution.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <RechartsPieChart>
-                      <Pie
-                        data={roleDistribution.filter((entry) => entry.value > 0)}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {roleDistribution
-                          .filter((entry) => entry.value > 0)
-                          .map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                          ))}
-                      </Pie>
-                      <Tooltip />
-                    </RechartsPieChart>
-                  </ResponsiveContainer>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <RechartsPieChart>
+                        <Pie
+                          data={roleDistribution.filter((entry) => entry.value > 0)}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          outerRadius={78}
+                          dataKey="value"
+                        >
+                          {roleDistribution
+                            .filter((entry) => entry.value > 0)
+                            .map((entry, index) => (
+                              <Cell key={`cell-${entry.name}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                            ))}
+                        </Pie>
+                        <Tooltip />
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
                   ) : (
-                    <div className="chart-empty">No role distribution data available</div>
+                    <div className="sa-chart-empty">No role data</div>
                   )}
                 </div>
-                <div className="role-distribution-list">
+                <ul className="sa-role-legend">
                   {roleDistribution.map((role, index) => (
-                    <div key={index} className="role-item">
-                      <div className="role-color" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
-                      <span className="role-name">{role.name}</span>
-                      <span className="role-value">{role.value}</span>
-                    </div>
+                    <li key={role.name} className="sa-role-legend__row">
+                      <span
+                        className="sa-role-legend__swatch"
+                        style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
+                      />
+                      <span className="sa-role-legend__name">{role.name}</span>
+                      <span className="sa-role-legend__val">{role.value}</span>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
-            </div>
+            </section>
           </div>
 
-          {/* Top Organizations & System Health */}
-          <div className="dashboard-grid">
-            <div className="dashboard-section">
-              <div className="section-header">
-                <h2>
-                  <Building2 size={20} />
-                  Top Organizations by Users
+          <div className="sa-panels">
+            <section className="sa-panel">
+              <div className="sa-panel__head">
+                <h2 className="sa-panel__title">
+                  <Building2 size={18} />
+                  Top organizations by users
                 </h2>
-                <button
-                  className="btn-view-all"
-                  onClick={() => navigate('/admin/organizations')}
-                >
-                  View All
-                  <ArrowRight size={14} style={{ marginLeft: '4px' }} />
+                <button type="button" className="sa-btn sa-btn--outline" onClick={() => navigate('/admin/organizations')}>
+                  View all
+                  <ArrowRight size={14} />
                 </button>
               </div>
-              <div className="top-orgs-list">
+              <ul className="sa-org-list">
                 {topOrganizations.length === 0 ? (
-                  <div className="empty-state">No organization data available</div>
+                  <li className="sa-empty">No organization data</li>
                 ) : (
                   topOrganizations.map((org, index) => (
-                    <div key={index} className="top-org-item">
-                      <div className="org-rank">#{index + 1}</div>
-                      <div className="org-info">
-                        <div className="org-name">{org.name}</div>
-                        <div className="org-users">{org.users} active users</div>
+                    <li key={org.name} className="sa-org-row">
+                      <span className="sa-org-rank">{index + 1}</span>
+                      <div className="sa-org-copy">
+                        <span className="sa-org-name">{org.name}</span>
+                        <span className="sa-org-meta">{org.users} active users</span>
                       </div>
-                      <div className="org-bar">
+                      <div className="sa-org-bar" aria-hidden>
                         <div
-                          className="org-bar-fill"
+                          className="sa-org-bar__fill"
                           style={{
                             width: `${(org.users / (topOrganizations[0]?.users || 1)) * 100}%`,
                           }}
                         />
                       </div>
-                    </div>
+                    </li>
                   ))
                 )}
-              </div>
-            </div>
+              </ul>
+            </section>
 
-            <div className="dashboard-section">
-              <div className="section-header">
-                <h2>
-                  <Activity size={20} />
-                  System Health
+            <section className="sa-panel">
+              <div className="sa-panel__head">
+                <h2 className="sa-panel__title">
+                  <Activity size={18} />
+                  Capacity snapshot
                 </h2>
+                <button type="button" className="sa-btn sa-btn--outline" onClick={() => navigate('/admin/health')}>
+                  Open health
+                  <ArrowRight size={14} />
+                </button>
               </div>
-              <div className="health-metrics">
-                <div className="health-metric">
-                  <div className="metric-header">
-                    <span>CPU Usage</span>
-                    <span className={`metric-value ${stats.systemHealth.cpu > 80 ? 'warning' : ''}`}>
-                      {stats.systemHealth.cpu}%
-                    </span>
-                  </div>
-                  <div className="progress-bar">
-                    <div
-                      className={`progress-fill ${stats.systemHealth.cpu > 80 ? 'warning' : ''}`}
-                      style={{ width: `${stats.systemHealth.cpu}%` }}
-                    />
-                  </div>
+              <div className="sa-health">
+                <div className="sa-health__row">
+                  <span className="sa-health__label">CPU usage</span>
+                  <span className={`sa-health__num ${stats.systemHealth.cpu > 80 ? 'sa-health__num--warn' : ''}`}>
+                    {stats.systemHealth.cpu}%
+                  </span>
                 </div>
-
-                <div className="health-metric">
-                  <div className="metric-header">
-                    <span>Average Latency</span>
-                    <span className="metric-value">{stats.systemHealth.latency}ms</span>
-                  </div>
-                  <div className="progress-bar">
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${Math.min((stats.systemHealth.latency / 500) * 100, 100)}%` }}
-                    />
-                  </div>
+                <div className="sa-health__track">
+                  <div
+                    className={`sa-health__fill ${stats.systemHealth.cpu > 80 ? 'sa-health__fill--warn' : ''}`}
+                    style={{ width: `${Math.min(stats.systemHealth.cpu, 100)}%` }}
+                  />
                 </div>
-
-                <div className="health-status">
-                  <div className={`status-badge status-${stats.systemHealth.status}`}>
-                    <Activity size={16} />
-                    <span>System {stats.systemHealth.status}</span>
-                  </div>
+                <div className="sa-health__row">
+                  <span className="sa-health__label">Avg. latency</span>
+                  <span className="sa-health__num">{stats.systemHealth.latency} ms</span>
+                </div>
+                <div className="sa-health__track">
+                  <div
+                    className="sa-health__fill"
+                    style={{ width: `${Math.min((stats.systemHealth.latency / 500) * 100, 100)}%` }}
+                  />
+                </div>
+                <div className={`sa-status-pill sa-status-pill--${stats.systemHealth.status}`}>
+                  <Activity size={14} />
+                  System {stats.systemHealth.status}
                 </div>
               </div>
-            </div>
+            </section>
           </div>
 
-          {/* Recent Alerts */}
-          <div className="dashboard-section">
-            <div className="section-header">
-              <h2>
-                <AlertTriangle size={20} />
-                Recent System Activity
-              </h2>
+          <section className="sa-panel sa-panel--activity">
+            <div className="sa-panel__head sa-panel__head--activity">
+              <div className="sa-panel__head-text">
+                <h2 className="sa-panel__title sa-panel__title--activity">
+                  <span className="sa-panel__title-icon" aria-hidden>
+                    <History size={18} />
+                  </span>
+                  Recent platform activity
+                </h2>
+                <p className="sa-panel__subtitle">Latest audit trail from your platform log</p>
+              </div>
               {recentAlerts.length > 5 && (
-                <button
-                  className="btn-view-all"
-                  onClick={() => {
-                    setShowAllAlerts(!showAllAlerts);
-                  }}
-                >
-                  {showAllAlerts ? 'Show Less' : 'View All'}
+                <button type="button" className="sa-btn sa-btn--outline sa-btn--compact" onClick={() => setShowAllAlerts(!showAllAlerts)}>
+                  {showAllAlerts ? 'Show less' : 'View all'}
                 </button>
               )}
             </div>
-            <div className={`alerts-list ${showAllAlerts ? 'show-all' : ''}`}>
-              {recentAlerts.length === 0 ? (
-                <div className="empty-state">No recent activity</div>
-              ) : (
-                (showAllAlerts ? recentAlerts : recentAlerts.slice(0, 5)).map((alert) => (
-                  <div key={alert.id} className={`alert-item alert-${getAlertColor(alert.type)}`}>
-                    <div className="alert-icon-wrapper">
-                      {getAlertIcon(alert.type)}
-                    </div>
-                    <div className="alert-content">
-                      <div className="alert-message">{alert.message}</div>
-                      <div className="alert-time">
-                        {new Date(alert.timestamp).toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
+            <div className="sa-activity-well">
+              <ul className={`sa-alerts ${showAllAlerts ? 'sa-alerts--expanded' : ''}`}>
+                {recentAlerts.length === 0 ? (
+                  <li className="sa-empty sa-empty--activity">No recent log entries</li>
+                ) : (
+                  (showAllAlerts ? recentAlerts : recentAlerts.slice(0, 5)).map((alert) => {
+                    const ts = formatActivityTimestamp(alert.timestamp);
+                    return (
+                      <li key={alert.id} className={`sa-alert sa-alert--${getAlertColor(alert.type)}`}>
+                        <span className="sa-alert__icon" aria-hidden>
+                          {getAlertIcon(alert.type)}
+                        </span>
+                        <div className="sa-alert__body">
+                          <p className="sa-alert__msg">{alert.message}</p>
+                          <time className="sa-alert__time" dateTime={alert.timestamp}>
+                            {ts.date && (
+                              <>
+                                <span className="sa-alert__date">{ts.date}</span>
+                                {ts.time ? (
+                                  <>
+                                    <span className="sa-alert__time-dot" aria-hidden>
+                                      ·
+                                    </span>
+                                    <span className="sa-alert__clock">{ts.time}</span>
+                                  </>
+                                ) : null}
+                              </>
+                            )}
+                          </time>
+                        </div>
+                      </li>
+                    );
+                  })
+                )}
+              </ul>
             </div>
-          </div>
+          </section>
 
-          {/* Quick Actions */}
-          <div className="dashboard-section">
-            <div className="section-header">
-              <h2>
-                <Zap size={20} />
-                Quick Actions
+          <section className="sa-panel sa-panel--actions">
+            <div className="sa-panel__head">
+              <h2 className="sa-panel__title">
+                <Zap size={18} />
+                Quick actions
               </h2>
             </div>
-            <div className="quick-actions">
-              <button
-                className="action-btn primary"
-                onClick={() => navigate('/admin/create-organization')}
-              >
+            <div className="sa-actions">
+              <button type="button" className="sa-action sa-action--primary" onClick={() => navigate('/admin/create-organization')}>
                 <PlusCircle size={18} />
-                <span>Create Organization</span>
+                Create organization
               </button>
-              <button
-                className="action-btn"
-                onClick={() => navigate('/admin/create-platform-user')}
-              >
+              <button type="button" className="sa-action" onClick={() => navigate('/admin/create-platform-user')}>
                 <UserPlus size={18} />
-                <span>Create Platform User</span>
+                Platform user
               </button>
-              <button
-                className="action-btn"
-                onClick={() => navigate('/admin/subscription-plans')}
-              >
+              <button type="button" className="sa-action" onClick={() => navigate('/admin/subscription-plans')}>
                 <Package size={18} />
-                <span>Manage Subscription Plans</span>
+                Subscription plans
               </button>
-              <button
-                className="action-btn"
-                onClick={() => navigate('/admin/logs')}
-              >
+              <button type="button" className="sa-action" onClick={() => navigate('/admin/logs')}>
                 <ScrollText size={18} />
-                <span>View System Logs</span>
+                System logs
+              </button>
+              <button type="button" className="sa-action" onClick={() => navigate('/admin/settings')}>
+                <Settings size={18} />
+                Settings
               </button>
             </div>
-          </div>
+          </section>
         </>
       )}
     </div>

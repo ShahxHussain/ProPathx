@@ -1,0 +1,48 @@
+/**
+ * Shared student portal tokens (matches student Dashboard).
+ * Scoped to .student-layout so org/admin layouts are unaffected.
+ */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700&display=swap');
+
+.student-layout {
+  --stu-bg: #f4f1ec;
+  --stu-surface: #ffffff;
+  --stu-surface-2: #faf8f5;
+  --stu-ink: #1c1917;
+  --stu-muted: #78716c;
+  --stu-border: #e7e5e4;
+  --stu-grid: #e7e5e4;
+  --stu-teal: #0d9488;
+  --stu-teal-dark: #115e59;
+  --stu-teal-soft: #ccfbf1;
+  --stu-ember: #ea580c;
+  --stu-ember-soft: #ffedd5;
+  --stu-hero-wash: linear-gradient(135deg, #ccfbf1 0%, #fef3c7 42%, #fed7aa 100%);
+  --stu-success: #166534;
+  --stu-success-soft: #f0fdf4;
+  --stu-danger: #991b1b;
+  --stu-danger-soft: #fef2f2;
+  --stu-warn: #9a3412;
+  --stu-warn-soft: #fff7ed;
+  --stu-info: #1e40af;
+  --stu-info-soft: #eff6ff;
+
+  /* Align layout sidebar/header with portal */
+  --primary: #115e59;
+  --primary-hover: #0f766e;
+  --text: #1c1917;
+  --text-muted: #78716c;
+  --border: #e7e5e4;
+  --background: #f4f1ec;
+  --surface: #ffffff;
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+.student-layout .dashboard-content {
+  background: var(--stu-bg);
+}
+
+.student-layout .dashboard-header {
+  background: var(--stu-surface);
+  border-bottom-color: var(--stu-border);
+}

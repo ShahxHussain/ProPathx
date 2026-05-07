@@ -1,0 +1,285 @@
+/* Uses --stu-* from student-theme.css */
+
+.student-reports-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 0 2.5rem;
+}
+
+.student-reports-header {
+  margin-bottom: 1.75rem;
+}
+
+.student-reports-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+.student-reports-header h1 {
+  margin: 0 0 0.5rem;
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: clamp(1.75rem, 3vw, 2.1rem);
+  font-weight: 700;
+  color: var(--stu-ink);
+  letter-spacing: -0.02em;
+}
+
+.student-reports-subtitle {
+  margin: 0;
+  max-width: 56ch;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--stu-muted);
+}
+
+.student-reports-header-icon {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #f0fdfa, var(--stu-teal-soft));
+  color: var(--stu-teal-dark);
+  border: 1px solid #99f6e4;
+}
+
+.student-reports-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3rem 1.25rem;
+  color: var(--stu-muted);
+}
+
+.student-reports-loading-icon {
+  animation: student-reports-spin 0.85s linear infinite;
+  margin-bottom: 0.75rem;
+  color: var(--stu-teal);
+}
+
+@keyframes student-reports-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.student-reports-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.student-reports-notice--error {
+  background: var(--stu-danger-soft);
+  color: var(--stu-danger);
+  border: 1px solid #fecaca;
+}
+
+.student-reports-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.student-reports-stat {
+  padding: 1rem 1.25rem;
+  border-radius: 16px;
+  background: var(--stu-surface);
+  border: 1px solid var(--stu-border);
+  min-width: 140px;
+  box-shadow: 0 8px 28px rgba(28, 25, 23, 0.05);
+}
+
+.student-reports-stat-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--stu-muted);
+  margin-bottom: 0.25rem;
+}
+
+.student-reports-stat-value {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--stu-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.student-reports-section {
+  background: var(--stu-surface);
+  border: 1px solid var(--stu-border);
+  border-radius: 20px;
+  padding: 1.35rem 1.35rem 1.5rem;
+  box-shadow: 0 10px 40px rgba(28, 25, 23, 0.05);
+}
+
+.student-reports-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1.1rem;
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--stu-ink);
+}
+
+.student-reports-empty {
+  text-align: center;
+  padding: 2.25rem 1.25rem 1.75rem;
+  color: var(--stu-muted);
+}
+
+.student-reports-empty h3 {
+  margin: 1rem 0 0.5rem;
+  font-family: 'Fraunces', Georgia, serif;
+  color: var(--stu-ink);
+  font-size: 1.1rem;
+}
+
+.student-reports-empty .muted {
+  margin: 0 auto 1.25rem;
+  max-width: 42ch;
+  line-height: 1.55;
+  font-size: 0.9rem;
+}
+
+.student-reports-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--stu-teal-dark);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(17, 94, 89, 0.28);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.student-reports-btn-primary:hover {
+  background: #0f766e;
+  transform: translateY(-1px);
+}
+
+.student-reports-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.student-reports-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--stu-border);
+  border-radius: 16px;
+  background: var(--stu-surface-2);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.student-reports-card:hover {
+  border-color: #99f6e4;
+  box-shadow: 0 8px 24px rgba(17, 94, 89, 0.08);
+}
+
+.student-reports-card-main {
+  flex: 1;
+  min-width: 200px;
+}
+
+.student-reports-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.student-reports-card-title h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--stu-ink);
+}
+
+.student-reports-card-icon {
+  color: var(--stu-teal-dark);
+  flex-shrink: 0;
+}
+
+.student-reports-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  font-size: 0.82rem;
+  color: var(--stu-muted);
+}
+
+.student-reports-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.student-reports-pct {
+  font-weight: 700;
+  color: var(--stu-teal-dark);
+}
+
+.student-reports-card-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, var(--stu-teal), var(--stu-teal-dark));
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(17, 94, 89, 0.25);
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.student-reports-card-action:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .student-reports-header-row {
+    flex-direction: column;
+  }
+
+  .student-reports-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .student-reports-card-action {
+    justify-content: center;
+  }
+}

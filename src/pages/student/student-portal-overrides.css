@@ -1,0 +1,239 @@
+/**
+ * Student-only visual overrides (notifications page & bell, subscription reuse).
+ * Loaded from StudentLayout — keep selectors scoped under .student-layout.
+ */
+
+/* —— Notifications page —— */
+.student-layout .notifications-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 0 2rem;
+}
+
+.student-layout .notifications-header h1 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: clamp(1.75rem, 3vw, 2.1rem);
+  font-weight: 700;
+  color: var(--stu-ink);
+  letter-spacing: -0.02em;
+}
+
+.student-layout .notifications-header .subtitle {
+  color: var(--stu-muted);
+  font-size: 0.95rem;
+}
+
+.student-layout .btn-mark-all-read {
+  background: var(--stu-teal-dark);
+  border-radius: 999px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(17, 94, 89, 0.3);
+}
+
+.student-layout .btn-mark-all-read:hover {
+  background: #0f766e;
+}
+
+.student-layout .notifications-filters {
+  background: var(--stu-surface);
+  border: 1px solid var(--stu-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(28, 25, 23, 0.06);
+}
+
+.student-layout .filter-btn {
+  background: var(--stu-surface-2);
+  border-color: var(--stu-border);
+  color: var(--stu-muted);
+  border-radius: 999px;
+}
+
+.student-layout .filter-btn:hover {
+  background: #f5f5f4;
+  color: var(--stu-ink);
+}
+
+.student-layout .filter-btn.active {
+  background: var(--stu-teal-dark);
+  color: #fff;
+  border-color: var(--stu-teal-dark);
+}
+
+.student-layout .type-filter-select {
+  border-color: var(--stu-border);
+  border-radius: 12px;
+  background: var(--stu-surface-2);
+  color: var(--stu-ink);
+}
+
+.student-layout .notification-card {
+  background: var(--stu-surface);
+  border: 1px solid var(--stu-border);
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(28, 25, 23, 0.05);
+}
+
+.student-layout .notification-card.unread {
+  background: var(--stu-teal-soft);
+  border-left-color: var(--stu-teal-dark);
+}
+
+.student-layout .notification-header-card h3 {
+  color: var(--stu-ink);
+}
+
+.student-layout .empty-state h2 {
+  font-family: 'Fraunces', Georgia, serif;
+  color: var(--stu-ink);
+}
+
+.student-layout .empty-state p {
+  color: var(--stu-muted);
+}
+
+/* —— Notification bell dropdown —— */
+.student-layout .notification-bell:hover {
+  background-color: rgba(17, 94, 89, 0.08);
+  color: var(--stu-teal-dark);
+}
+
+.student-layout .notification-dropdown {
+  border-color: var(--stu-border);
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(28, 25, 23, 0.12);
+}
+
+.student-layout .notification-header {
+  background: var(--stu-surface-2);
+  border-bottom-color: var(--stu-border);
+}
+
+.student-layout .notification-header h3 {
+  color: var(--stu-ink);
+}
+
+.student-layout .mark-all-read-btn {
+  background: var(--stu-teal-dark);
+  border-radius: 999px;
+}
+
+.student-layout .mark-all-read-btn:hover {
+  background: #0f766e;
+}
+
+.student-layout .notification-item.unread {
+  background-color: var(--stu-teal-soft);
+  border-left-color: var(--stu-teal-dark);
+}
+
+.student-layout .notification-item.unread:hover {
+  background-color: #99f6e4;
+}
+
+.student-layout .view-all-link {
+  color: var(--stu-teal-dark);
+}
+
+.student-layout .view-all-link:hover {
+  color: #0f766e;
+}
+
+.student-layout .mark-read-btn:hover {
+  color: var(--stu-teal-dark);
+}
+
+.student-layout .notification-footer {
+  background: var(--stu-surface-2);
+  border-top-color: var(--stu-border);
+}
+
+/* —— Student subscription (reuses org plan classes) —— */
+.student-layout .org-subscription-plans-container {
+  padding: 0 0 2rem;
+}
+
+.student-layout .plans-header h1 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 700;
+  color: var(--stu-ink);
+}
+
+.student-layout .plans-header p {
+  color: var(--stu-muted);
+}
+
+.student-layout .plan-card-org {
+  background: var(--stu-surface);
+  border-color: var(--stu-border);
+  border-radius: 20px;
+  border-width: 1px;
+  box-shadow: 0 8px 28px rgba(28, 25, 23, 0.06);
+}
+
+.student-layout .plan-card-org:hover:not(.plan-unavailable) {
+  border-color: #5eead4;
+  box-shadow: 0 12px 36px rgba(17, 94, 89, 0.12);
+}
+
+.student-layout .plan-price-main {
+  color: var(--stu-teal-dark);
+}
+
+.student-layout .btn-view-details:hover {
+  border-color: var(--stu-teal);
+  color: var(--stu-teal-dark);
+}
+
+.student-layout .feature-badge {
+  background: var(--stu-teal-soft);
+  color: var(--stu-teal-dark);
+  border: 1px solid #99f6e4;
+}
+
+.student-layout .btn-subscribe:not(:disabled) {
+  background: var(--stu-teal-dark);
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.student-layout .btn-subscribe:not(:disabled):hover {
+  background: #0f766e;
+}
+
+.student-layout .subscribed-badge {
+  background: var(--stu-teal-soft);
+  color: var(--stu-teal-dark);
+}
+
+.student-layout .modal-content {
+  border-radius: 20px;
+  border: 1px solid var(--stu-border);
+  box-shadow: 0 24px 64px rgba(28, 25, 23, 0.15);
+}
+
+.student-layout .modal-header {
+  border-bottom-color: var(--stu-border);
+}
+
+.student-layout .btn-secondary {
+  border-color: var(--stu-border);
+  color: var(--stu-ink);
+  background: var(--stu-surface-2);
+}
+
+.student-layout .btn-secondary:hover:not(:disabled) {
+  background: var(--stu-teal-soft);
+  border-color: #99f6e4;
+  color: var(--stu-teal-dark);
+}
+
+.student-layout .alert.alert-error {
+  background: var(--stu-danger-soft);
+  border-color: #fecaca;
+  color: var(--stu-danger);
+  border-radius: 12px;
+}
+
+.student-layout .org-subscription-plans-container .loading {
+  color: var(--stu-muted);
+}

@@ -87,6 +87,128 @@
   margin: 0;
 }
 
+/* Setup flow (Tests → Questions → Activate → Assign) */
+.tq-flow-strip {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.tq-flow-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #64748b);
+  margin: 0 0 12px 0;
+}
+
+.tq-flow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tq-flow-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-muted, #64748b);
+}
+
+.tq-flow-step.tq-flow-done {
+  color: var(--text, #1e293b);
+  font-weight: 500;
+}
+
+.tq-flow-step.tq-flow-done .tq-flow-num {
+  background: #16a34a;
+  color: #fff;
+}
+
+.tq-flow-step.tq-flow-todo .tq-flow-num {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.tq-flow-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tq-flow-hint {
+  margin: 12px 0 0 0;
+  font-size: 14px;
+  color: var(--text-muted, #64748b);
+}
+
+.tq-inline-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary, #2563eb);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.tq-auto-checklist {
+  list-style: none;
+  margin: 20px 0;
+  padding: 0;
+  text-align: left;
+  max-width: 520px;
+}
+
+.tq-auto-checklist li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.tq-auto-check-ok {
+  color: #16a34a;
+  flex-shrink: 0;
+}
+
+.tq-auto-check-warn {
+  color: #d97706;
+  flex-shrink: 0;
+}
+
+.tq-auto-actions {
+  margin-top: 16px;
+}
+
+.tq-hybrid-save-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.tq-hybrid-saved-hint {
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+}
+
 .tq-card {
   background: #fff;
   border: 1px solid var(--border, #e2e8f0);

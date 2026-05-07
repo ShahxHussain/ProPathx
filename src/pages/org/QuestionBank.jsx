@@ -299,7 +299,7 @@ const QuestionBank = () => {
                 <tr>
                   <th>Question</th>
                   <th>Created by</th>
-                  <th>Exam / Subject / Topic</th>
+                  <th>Exam / Subject / Chapter / Topic</th>
                   <th>Difficulty</th>
                   <th>Type</th>
                   <th>Status</th>
@@ -327,6 +327,7 @@ const QuestionBank = () => {
                         <td className="cell-context">
                           <span className="context-exam">{q.examName}</span>
                           <span className="context-subject">{q.subjectName}</span>
+                          <span className="context-chapter">{q.chapterName || '—'}</span>
                           <span className="context-topic">{q.topicName}</span>
                         </td>
                         <td><span className="difficulty-badge">{q.difficultyLevel || '—'}</span></td>

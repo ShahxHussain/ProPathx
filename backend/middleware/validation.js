@@ -38,6 +38,19 @@ export const validateLogin = [
 ];
 
 /**
+ * Student self-signup (public): individual / platform-level account (no organization)
+ */
+export const validateStudentSignup = [
+  body('fullName').trim().notEmpty().withMessage('Full name is required'),
+  body('email').trim().isEmail().withMessage('Valid email is required'),
+  body('password')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters'),
+  body('phone').optional().trim(),
+  handleValidationErrors,
+];
+
+/**
  * Create user validation rules (for OrgUsers)
  */
 export const validateCreateUser = [

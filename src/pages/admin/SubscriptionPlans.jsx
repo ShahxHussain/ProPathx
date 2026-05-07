@@ -328,12 +328,21 @@ const SubscriptionPlans = () => {
 
 // Plan Create/Edit Modal
 const PlanModal = ({ plan, onClose, onSave }) => {
+  const fallbackAudience = plan?.Audience || 'Organization';
+  const fallbackModes = {
+    isScheduledEnabled:
+      plan?.testModes?.isScheduledEnabled ?? ['Organization', 'Both'].includes(fallbackAudience),
+    isAdaptiveEnabled: plan?.testModes?.isAdaptiveEnabled ?? false,
+    isSelfTestBuilderEnabled:
+      plan?.testModes?.isSelfTestBuilderEnabled ?? ['Student', 'Both'].includes(fallbackAudience),
+  };
   const [formData, setFormData] = useState({
     planName: plan?.PlanName || '',
     price: plan?.Price || '',
     durationMonths: plan?.DurationMonths || 1,
     features: plan?.Features || {},
     audience: plan?.Audience || 'Organization',
+    testModes: fallbackModes,
   });
   const [featureKey, setFeatureKey] = useState('');
   const [featureValue, setFeatureValue] = useState('');
@@ -373,6 +382,7 @@ const PlanModal = ({ plan, onClose, onSave }) => {
       durationMonths: parseInt(formData.durationMonths),
       features: formData.features,
       audience: formData.audience,
+      testModes: formData.testModes,
     });
   };
 
@@ -429,6 +439,51 @@ const PlanModal = ({ plan, onClose, onSave }) => {
             <p className="field-help">
               Controls where this plan is available: organization subscription flow, individual student flow, or both.
             </p>
+          </div>
+          <div className="form-group">
+            <label>Enabled Test Modes</label>
+            <div className="mode-toggle-grid">
+              <label className="mode-toggle-item">
+                <input
+                  type="checkbox"
+                  checked={!!formData.testModes?.isScheduledEnabled}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      testModes: { ...formData.testModes, isScheduledEnabled: e.target.checked },
+                    })
+                  }
+                />
+                <span>Scheduled (Organization)</span>
+              </label>
+              <label className="mode-toggle-item">
+                <input
+                  type="checkbox"
+                  checked={!!formData.testModes?.isAdaptiveEnabled}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      testModes: { ...formData.testModes, isAdaptiveEnabled: e.target.checked },
+                    })
+                  }
+                />
+                <span>Adaptive (Future)</span>
+              </label>
+              <label className="mode-toggle-item">
+                <input
+                  type="checkbox"
+                  checked={!!formData.testModes?.isSelfTestBuilderEnabled}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      testModes: { ...formData.testModes, isSelfTestBuilderEnabled: e.target.checked },
+                    })
+                  }
+                />
+                <span>Self-Test Builder (Student)</span>
+              </label>
+            </div>
+            <p className="field-help">Choose which test nature(s) this subscription plan includes.</p>
           </div>
           <div className="form-row">
             <div className="form-group">
@@ -668,6 +723,9 @@ const LinkExamsModal = ({ plan, onClose, onSuccess }) => {
   const linkedExamIds = new Set(linkedExams.map((e) => e.ExamID));
   const availableExams = exams.filter((e) => !linkedExamIds.has(e.ExamID));
 
+  /** Individual student plans: org-style "max students per exam" does not apply */
+  const isStudentOnlyPlan = (plan?.Audience ?? 'Organization') === 'Student';
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content modal-extra-large" onClick={(e) => e.stopPropagation()}>
@@ -736,10 +794,21 @@ const LinkExamsModal = ({ plan, onClose, onSuccess }) => {
                   <input
                     type="number"
                     min="0"
-                    value={linkData.maxStudents}
+                    value={isStudentOnlyPlan ? '' : linkData.maxStudents}
                     onChange={(e) => setLinkData({ ...linkData, maxStudents: e.target.value })}
-                    placeholder="Unlimited if empty"
+                    placeholder={isStudentOnlyPlan ? 'N/A — individual plan' : 'Unlimited if empty'}
+                    disabled={isStudentOnlyPlan}
+                    title={
+                      isStudentOnlyPlan
+                        ? 'Not used for individual (Student) subscription plans'
+                        : undefined
+                    }
                   />
+                  {isStudentOnlyPlan && (
+                    <small className="text-muted" style={{ display: 'block', marginTop: 4 }}>
+                      Individual plans use one account per subscriber; this limit is disabled.
+                    </small>
+                  )}
                 </div>
                 <div className="form-group">
                   <label>Max Tests</label>
@@ -806,7 +875,7 @@ const LinkExamsModal = ({ plan, onClose, onSuccess }) => {
                         <th>Organization</th>
                         <th>Mandatory</th>
                         <th>AI Support</th>
-                        <th>Max Students</th>
+                        {!isStudentOnlyPlan && <th>Max Students</th>}
                         <th>Max Tests</th>
                         <th>Max Q/Test</th>
                         <th>Max Tests/Day</th>
@@ -834,7 +903,7 @@ const LinkExamsModal = ({ plan, onClose, onSuccess }) => {
                               <span className="text-muted">No</span>
                             )}
                           </td>
-                          <td>{link.MaxStudents || '∞'}</td>
+                          {!isStudentOnlyPlan && <td>{link.MaxStudents ?? '∞'}</td>}
                           <td>{link.MaxTests || '∞'}</td>
                           <td>{link.MaxQuestionsPerTest || '∞'}</td>
                           <td>{link.MaxTestsPerDay || '∞'}</td>
@@ -875,6 +944,7 @@ const LinkExamsModal = ({ plan, onClose, onSuccess }) => {
       {/* Edit Exam Link Modal */}
       {editingExamLink && (
         <EditExamLinkModal
+          plan={plan}
           link={editingExamLink}
           onClose={() => setEditingExamLink(null)}
           onSave={(updateData) => {
@@ -888,10 +958,12 @@ const LinkExamsModal = ({ plan, onClose, onSuccess }) => {
 };
 
 // Edit Exam Link Modal Component
-const EditExamLinkModal = ({ link, onClose, onSave }) => {
+const EditExamLinkModal = ({ plan, link, onClose, onSave }) => {
+  const isStudentOnlyPlan = (plan?.Audience ?? 'Organization') === 'Student';
+
   const [updateData, setUpdateData] = useState({
     isMandatory: link.IsMandatory || false,
-    maxStudents: link.MaxStudents || '',
+    maxStudents: isStudentOnlyPlan ? '' : link.MaxStudents || '',
     maxTests: link.MaxTests || '',
     maxQuestionsPerTest: link.MaxQuestionsPerTest || '',
     maxTestsPerDay: link.MaxTestsPerDay || '',
@@ -900,7 +972,8 @@ const EditExamLinkModal = ({ link, onClose, onSave }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(updateData);
+    const payload = isStudentOnlyPlan ? { ...updateData, maxStudents: '' } : updateData;
+    onSave(payload);
   };
 
   return (
@@ -940,10 +1013,21 @@ const EditExamLinkModal = ({ link, onClose, onSave }) => {
                 <input
                   type="number"
                   min="0"
-                  value={updateData.maxStudents}
+                  value={isStudentOnlyPlan ? '' : updateData.maxStudents}
                   onChange={(e) => setUpdateData({ ...updateData, maxStudents: e.target.value })}
-                  placeholder="Unlimited if empty"
+                  placeholder={isStudentOnlyPlan ? 'N/A — individual plan' : 'Unlimited if empty'}
+                  disabled={isStudentOnlyPlan}
+                  title={
+                    isStudentOnlyPlan
+                      ? 'Not used for individual (Student) subscription plans'
+                      : undefined
+                  }
                 />
+                {isStudentOnlyPlan && (
+                  <small className="text-muted" style={{ display: 'block', marginTop: 4 }}>
+                    Not applicable for Student audience plans.
+                  </small>
+                )}
               </div>
               <div className="form-group">
                 <label>Max Tests</label>
@@ -1181,6 +1265,16 @@ const ManageView = ({ plans, planExamCounts, onShowCreateModal, onEditPlan, onDe
                     {plan.DurationMonths} {plan.DurationMonths === 1 ? 'month' : 'months'}
                   </span>
                 </div>
+                <div className="plan-mode-row">
+                  {plan?.testModes?.isScheduledEnabled && <span className="mode-chip on">Scheduled</span>}
+                  {plan?.testModes?.isAdaptiveEnabled && <span className="mode-chip on">Adaptive</span>}
+                  {plan?.testModes?.isSelfTestBuilderEnabled && <span className="mode-chip on">Self-Test</span>}
+                  {!plan?.testModes?.isScheduledEnabled &&
+                    !plan?.testModes?.isAdaptiveEnabled &&
+                    !plan?.testModes?.isSelfTestBuilderEnabled && (
+                      <span className="mode-chip off">No mode enabled</span>
+                    )}
+                </div>
               </div>
               <div className="plan-actions">
                 <button
@@ -1319,6 +1413,7 @@ const OverviewView = ({ plans, planDetails, filters, onFiltersChange, onManagePl
                   <th>Plan Name</th>
                   <th>Status</th>
                   <th>Audience</th>
+                  <th>Test Modes</th>
                   <th>Price</th>
                   <th>Duration</th>
                   <th>Linked Exams</th>
@@ -1350,6 +1445,13 @@ const OverviewView = ({ plans, planDetails, filters, onFiltersChange, onManagePl
                             ? 'Orgs & Students'
                             : 'Organizations'}
                         </span>
+                      </td>
+                      <td>
+                        <div className="mode-cell">
+                          <span className={`mode-chip ${plan?.testModes?.isScheduledEnabled ? 'on' : 'off'}`}>S</span>
+                          <span className={`mode-chip ${plan?.testModes?.isAdaptiveEnabled ? 'on' : 'off'}`}>A</span>
+                          <span className={`mode-chip ${plan?.testModes?.isSelfTestBuilderEnabled ? 'on' : 'off'}`}>ST</span>
+                        </div>
                       </td>
                       <td>
                         <span className="plan-price-cell">

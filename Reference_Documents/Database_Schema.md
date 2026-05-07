@@ -86,6 +86,7 @@ CREATE TABLE "OrgUsers" (
   "Status" status_orgusers_enum
 );
 
+-- OrgID: set when the organization registers the student (OrgAdmin). NULL = individual / self-registered platform student (same login endpoint).
 CREATE TABLE "Students" (
   "StudentID" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "OrgID" uuid REFERENCES "Organizations"("OrgID"),
@@ -280,7 +281,14 @@ CREATE TABLE "Tests" (
   "StartTime" timestamptz,
   "EndTime" timestamptz,
   "CreatedAt" timestamptz DEFAULT now(),
-  "Status" status_organizations_enum
+  "Status" status_organizations_enum,
+  -- Question sourcing + schedule: see Reference_Documents/schedule_or_opentiime_assigned.md and backend/scripts/add_tests_binding_schedule.sql
+  "QuestionBindingMode" text DEFAULT 'custom',
+  CONSTRAINT "Tests_QuestionBindingMode_check" CHECK ("QuestionBindingMode" IN ('custom','auto','hybrid')),
+  "HybridAutoPercent" numeric DEFAULT 0,
+  CONSTRAINT "Tests_HybridAutoPercent_check" CHECK ("HybridAutoPercent" >= 0 AND "HybridAutoPercent" <= 100),
+  "ScheduleMode" text DEFAULT 'open',
+  CONSTRAINT "Tests_ScheduleMode_check" CHECK ("ScheduleMode" IN ('open','scheduled'))
 );
 
 CREATE TABLE "Questions" (
@@ -325,13 +333,14 @@ ON "Questions"("OrgID");
 CREATE INDEX IF NOT EXISTS idx_questions_createdby_orguser
 ON "Questions"("CreatedByOrgUserID");
 
+-- Natural key (QuestionID, OptionNumber); OptionID uuid is the stable id for FKs (StudentAnswers, QuestionMedia).
 CREATE TABLE "Options" (
-  "OptionID" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  "QuestionID" uuid REFERENCES "Questions"("QuestionID") ON DELETE CASCADE,
-  "OptionNumber" int,
+  "QuestionID" uuid NOT NULL REFERENCES "Questions"("QuestionID") ON DELETE CASCADE,
+  "OptionNumber" int NOT NULL,
   "OptionText" text,
   "IsCorrect" boolean DEFAULT false,
-  CONSTRAINT uq_options_optionid UNIQUE ("OptionID")
+  "OptionID" uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+  PRIMARY KEY ("QuestionID", "OptionNumber")
 );
 
 CREATE TABLE "TestQuestions" (
@@ -402,13 +411,27 @@ ALTER TABLE "Certificates"
   ADD CONSTRAINT fk_cert_attempt
   FOREIGN KEY ("AttemptID") REFERENCES "StudentAttempts"("AttemptID");
 
+-- -----------------------------------------------------------------------------
+-- StudentAnswers: one persisted row per selected option for an attempt.
+-- -----------------------------------------------------------------------------
+-- OptionID: uuid FK -> Options."OptionID" (stable row id for that answer choice).
+--   Not the display slot (Options."OptionNumber"); client/API use the same uuid as
+--   QuestionMedia."OptionID" when pointing at an option.
+-- Primary key (AttemptID, QuestionID, OptionID): supports "Multiple Correct" by
+--   allowing several OptionID values for the same question in one attempt.
+-- IsCorrect: optional denormalized flag at insert time for reporting (nullable).
+-- Legacy: some databases stored integer OptionID (= OptionNumber). Migrate with:
+--   backend/scripts/migrate_studentanswers_optionid_to_uuid.sql
 CREATE TABLE "StudentAnswers" (
-  "AttemptID" uuid REFERENCES "StudentAttempts"("AttemptID") ON DELETE CASCADE,
-  "QuestionID" uuid REFERENCES "Questions"("QuestionID") ON DELETE CASCADE,
-  "OptionID" uuid REFERENCES "Options"("OptionID"), -- references Options.OptionID (nullable)
+  "AttemptID" uuid NOT NULL REFERENCES "StudentAttempts"("AttemptID") ON DELETE CASCADE,
+  "QuestionID" uuid NOT NULL REFERENCES "Questions"("QuestionID") ON DELETE CASCADE,
+  "OptionID" uuid NOT NULL REFERENCES "Options"("OptionID") ON DELETE RESTRICT,
   "IsCorrect" boolean,
   PRIMARY KEY ("AttemptID","QuestionID","OptionID")
 );
+
+CREATE INDEX IF NOT EXISTS idx_studentanswers_attemptid ON "StudentAnswers"("AttemptID");
+CREATE INDEX IF NOT EXISTS idx_studentanswers_questionid ON "StudentAnswers"("QuestionID");
 
 CREATE TABLE "ResultDetails" (
   "AttemptID" uuid REFERENCES "StudentAttempts"("AttemptID") ON DELETE CASCADE,
@@ -524,6 +547,21 @@ CREATE TABLE public."SubscriptionPlanExams" (
         ON DELETE CASCADE
 );
 
+-- Plan-level test mode entitlements (which test natures are included in a plan)
+CREATE TABLE IF NOT EXISTS public."SubscriptionPlanTestModes" (
+  "PlanID" uuid PRIMARY KEY,
+  "IsScheduledEnabled" boolean NOT NULL DEFAULT false,
+  "IsAdaptiveEnabled" boolean NOT NULL DEFAULT false,
+  "IsSelfTestBuilderEnabled" boolean NOT NULL DEFAULT false,
+  "CreatedAt" timestamptz NOT NULL DEFAULT now(),
+  "UpdatedAt" timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT "SubscriptionPlanTestModes_PlanID_fkey"
+    FOREIGN KEY ("PlanID")
+    REFERENCES public."SubscriptionPlans"("PlanID")
+    ON DELETE CASCADE
+);
+
 
 ALTER TABLE public."Subscriptions"
 ADD COLUMN IF NOT EXISTS "ActivatedAt" TIMESTAMP WITH TIME ZONE;
@@ -543,6 +581,31 @@ ADD CONSTRAINT "Tests_SubscriptionID_fkey"
 FOREIGN KEY ("SubscriptionID")
 REFERENCES public."Subscriptions"("SubscriptionID")
 ON DELETE RESTRICT;
+
+-- Binding + schedule (aligns with Reference_Documents/schedule_or_opentiime_assigned.md). Safe to re-run.
+ALTER TABLE public."Tests"
+  ADD COLUMN IF NOT EXISTS "QuestionBindingMode" text DEFAULT 'custom';
+ALTER TABLE public."Tests"
+  DROP CONSTRAINT IF EXISTS "Tests_QuestionBindingMode_check";
+ALTER TABLE public."Tests"
+  ADD CONSTRAINT "Tests_QuestionBindingMode_check"
+  CHECK ("QuestionBindingMode" IN ('custom','auto','hybrid'));
+
+ALTER TABLE public."Tests"
+  ADD COLUMN IF NOT EXISTS "HybridAutoPercent" numeric DEFAULT 0;
+ALTER TABLE public."Tests"
+  DROP CONSTRAINT IF EXISTS "Tests_HybridAutoPercent_check";
+ALTER TABLE public."Tests"
+  ADD CONSTRAINT "Tests_HybridAutoPercent_check"
+  CHECK ("HybridAutoPercent" >= 0 AND "HybridAutoPercent" <= 100);
+
+ALTER TABLE public."Tests"
+  ADD COLUMN IF NOT EXISTS "ScheduleMode" text DEFAULT 'open';
+ALTER TABLE public."Tests"
+  DROP CONSTRAINT IF EXISTS "Tests_ScheduleMode_check";
+ALTER TABLE public."Tests"
+  ADD CONSTRAINT "Tests_ScheduleMode_check"
+  CHECK ("ScheduleMode" IN ('open','scheduled'));
 
 ALTER TABLE public."UsageCounters"
 ADD COLUMN IF NOT EXISTS "ExamID" UUID;

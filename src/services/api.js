@@ -347,6 +347,18 @@ export const testAPI = {
   },
 
   /**
+   * Update test metadata (name, type, duration, totals, schedule, status).
+   * @param {string} testId
+   * @param {Object} payload - camelCase fields matching backend PUT body
+   */
+  updateTest: async (testId, payload) => {
+    return request(`/api/org/tests/${testId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
    * Get question binding config for a test (custom | auto | hybrid, autoPercent for hybrid)
    * @param {string} testId - Test ID
    * @returns {Promise<Object>} { bindingType, autoPercent }
@@ -356,7 +368,7 @@ export const testAPI = {
   },
 
   /**
-   * Set question binding config. No DB change; stored in server memory.
+   * Set question binding config (persisted on Tests.QuestionBindingMode / HybridAutoPercent).
    * @param {string} testId - Test ID
    * @param {Object} config - { bindingType: 'custom'|'auto'|'hybrid', autoPercent?: number }
    * @returns {Promise<Object>} { bindingType, autoPercent }
@@ -481,7 +493,7 @@ export const testAPI = {
    * Add questions to a test
    * @param {string} testId - Test ID
    * @param {string[]} questionIds - Array of question UUIDs
-   * @returns {Promise<Object>} { message, added, totalQuestions }
+   * @returns {Promise<Object>} { message, added, linkedQuestionCount } — Tests.TotalQuestions stays the configured paper size.
    */
   addQuestionsToTest: async (testId, questionIds) => {
     return request(`/api/org/tests/${testId}/questions`, {
@@ -494,7 +506,7 @@ export const testAPI = {
    * Remove a question from a test
    * @param {string} testId - Test ID
    * @param {string} questionId - Question ID
-   * @returns {Promise<Object>} { message, totalQuestions }
+   * @returns {Promise<Object>} { message, linkedQuestionCount? }
    */
   removeQuestionFromTest: async (testId, questionId) => {
     return request(`/api/org/tests/${testId}/questions/${questionId}`, {
@@ -506,7 +518,7 @@ export const testAPI = {
    * Bulk add N questions by topic/criteria
    * @param {string} testId - Test ID
    * @param {Object} params - topicId?, subjectId?, difficulty?, approvedOnly?, count
-   * @returns {Promise<Object>} { message, added, totalQuestions }
+   * @returns {Promise<Object>} { message, added, linkedQuestionCount }
    */
   bulkAddQuestions: async (testId, params) => {
     return request(`/api/org/tests/${testId}/questions/bulk`, {
@@ -520,7 +532,7 @@ export const testAPI = {
    * @param {string} testId - Target test ID
    * @param {string} sourceTestId - Source test ID
    * @param {string[]} [questionIds] - Optional subset; if omitted, copy all
-   * @returns {Promise<Object>} { message, added, totalQuestions }
+   * @returns {Promise<Object>} { message, added, linkedQuestionCount }
    */
   copyQuestionsFromTest: async (testId, sourceTestId, questionIds) => {
     return request(`/api/org/tests/${testId}/questions/copy-from`, {
@@ -726,8 +738,11 @@ export const adminAPI = {
    * Get dashboard statistics
    * @returns {Promise<Object>} Dashboard stats
    */
-  getDashboardStats: async () => {
-    return request('/api/admin/dashboard/stats', {
+  getDashboardStats: async (revenueDays = '7') => {
+    const q = new URLSearchParams();
+    if (revenueDays != null && revenueDays !== '') q.set('revenueDays', String(revenueDays));
+    const suffix = q.toString() ? `?${q.toString()}` : '';
+    return request(`/api/admin/dashboard/stats${suffix}`, {
       method: 'GET',
     });
   },
@@ -1730,6 +1745,17 @@ export const notificationAPI = {
  */
 export const studentAuth = {
   /**
+   * Student self-signup (public). Creates an individual (platform) student with no OrgID.
+   * @param {Object} data - { fullName, email, password, phone? }
+   */
+  signup: async (data) => {
+    return request('/api/student/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
    * Student login
    * @param {string} email - Student email
    * @param {string} password - Student password
@@ -1834,12 +1860,71 @@ export const studentDashboardAPI = {
    * Submit answers for an attempt
    * @param {string} testId
    * @param {string} attemptId
-   * @param {Array} answers - [{ questionId, selectedOptionIds: [] }]
+   * @param {Array} answers - [{ questionId, selectedOptionIds: [] }] — ids are Options.OptionID (uuid); legacy option numbers still accepted server-side.
    */
   submitAttempt: async (testId, attemptId, answers) => {
     return request(`/api/student/tests/${testId}/attempts/${attemptId}/submit`, {
       method: 'POST',
       body: JSON.stringify({ answers }),
+    });
+  },
+
+  /**
+   * Full result + analytics for latest completed attempt (StudentAttempts, StudentAnswers, …).
+   * @param {string} testId
+   */
+  getTestResultDetail: async (testId) => {
+    return request(`/api/student/tests/${testId}/result-detail`, { method: 'GET' });
+  },
+
+  /** Subscription plans visible to students (Audience Student or Both). Individual + org-enrolled students. */
+  getSubscriptionPlans: async () => {
+    return request('/api/student/subscription-plans', { method: 'GET' });
+  },
+
+  getSubscriptions: async () => {
+    return request('/api/student/subscriptions', { method: 'GET' });
+  },
+
+  createSubscription: async (subscriptionData) => {
+    return request('/api/student/subscriptions', {
+      method: 'POST',
+      body: JSON.stringify(subscriptionData),
+    });
+  },
+
+  cancelSubscription: async (subscriptionId) => {
+    return request(`/api/student/subscriptions/${subscriptionId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /**
+   * Individual-student self-test builder options (eligible exams + subject pools).
+   */
+  getIndividualSelfTestOptions: async () => {
+    return request('/api/student/individual/self-test/options', { method: 'GET' });
+  },
+
+  /**
+   * Preview subject-wise distribution for requested self-test.
+   * @param {{ examId: string, totalQuestions: number }} payload
+   */
+  previewIndividualSelfTest: async (payload) => {
+    return request('/api/student/individual/self-test/preview', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Create a personal self-test and assignment, ready to attempt.
+   * @param {{ examId: string, totalQuestions: number, durationMinutes?: number }} payload
+   */
+  createIndividualSelfTest: async (payload) => {
+    return request('/api/student/individual/self-test/create', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   },
 };

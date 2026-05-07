@@ -10,15 +10,22 @@ import {
   Shuffle,
   Layers,
   Info,
+  CheckCircle,
 } from 'lucide-react';
 import { testAPI, orgDashboard } from '../../services/api';
 import './TestQuestions.css';
 
-const TestQuestionsPage = () => {
+/** Embedded in test creation wizard — fixed test, no test picker or binding cards. */
+export function TestQuestionsEmbedded({ testId }) {
+  if (!testId) return null;
+  return <TestQuestionsPageInner embeddedTestId={testId} />;
+}
+
+function TestQuestionsPageInner({ embeddedTestId }) {
   const navigate = useNavigate();
   const { testId: urlTestId } = useParams();
   const [tests, setTests] = useState([]);
-  const [selectedTestId, setSelectedTestId] = useState(() => urlTestId || '');
+  const [selectedTestId, setSelectedTestId] = useState(() => embeddedTestId || urlTestId || '');
   const [testDetails, setTestDetails] = useState(null);
   const [available, setAvailable] = useState({
     questions: [],
@@ -50,9 +57,13 @@ const TestQuestionsPage = () => {
   useEffect(() => {
     testAPI.getTests({ page: 1, limit: 500 }).then((res) => {
       setTests(res.tests || []);
-      if (urlTestId && !selectedTestId) setSelectedTestId(urlTestId);
+      if (embeddedTestId) {
+        setSelectedTestId(embeddedTestId);
+      } else if (urlTestId) {
+        setSelectedTestId((prev) => prev || urlTestId);
+      }
     }).catch(() => setTests([])).finally(() => setLoadingTests(false));
-  }, [urlTestId]);
+  }, [urlTestId, embeddedTestId]);
 
   useEffect(() => {
     if (!selectedTestId) {
@@ -115,14 +126,20 @@ const TestQuestionsPage = () => {
     setSameExamTests(tests.filter((t) => t.ExamID === testDetails.ExamID && t.TestID !== selectedTestId));
   }, [selectedTestId, testDetails?.ExamID, tests]);
 
-  const refreshTestDetails = () => {
-    if (selectedTestId) {
-      testAPI.getTestDetails(selectedTestId).then((res) => setTestDetails(res.test)).catch(() => {});
-      loadAvailable();
+  const refreshTestDetails = async () => {
+    if (!selectedTestId) return;
+    try {
+      const res = await testAPI.getTestDetails(selectedTestId);
+      setTestDetails(res.test);
+    } catch {
+      /* keep prior details */
     }
+    await loadAvailable();
   };
 
   const currentQuestions = testDetails?.questions || [];
+  const linkedCount = currentQuestions.length;
+  const targetCount = testDetails?.TotalQuestions != null ? testDetails.TotalQuestions : linkedCount;
   const subjects = examStructure?.subjects || [];
   const topicsForSubject = bulkSubjectId
     ? subjects.flatMap((s) => (s.topics || []).map((t) => ({ ...t, SubjectID: s.SubjectID, SubjectName: s.SubjectName }))).filter((t) => t.SubjectID === bulkSubjectId)
@@ -153,7 +170,7 @@ const TestQuestionsPage = () => {
       });
       setBulkTopicId('');
       setBulkSubjectId('');
-      refreshTestDetails();
+      await refreshTestDetails();
       showSuccess(`${bulkCount} questions added to your test.`);
     } catch (err) {
       setError(err.message || 'Could not add questions. Try fewer or different filters.');
@@ -172,7 +189,7 @@ const TestQuestionsPage = () => {
     try {
       const res = await testAPI.copyQuestionsFromTest(selectedTestId, copySourceTestId);
       setCopySourceTestId('');
-      refreshTestDetails();
+      await refreshTestDetails();
       showSuccess(`${res.added || 0} questions copied into your test.`);
     } catch (err) {
       setError(err.message || 'Could not copy questions.');
@@ -186,7 +203,7 @@ const TestQuestionsPage = () => {
     setError('');
     try {
       await testAPI.reorderQuestions(selectedTestId, newOrderedIds);
-      refreshTestDetails();
+      await refreshTestDetails();
       showSuccess('Question order updated.');
     } catch (err) {
       setError(err.message || 'Could not update order.');
@@ -231,13 +248,15 @@ const TestQuestionsPage = () => {
   };
   const addSelected = async () => {
     if (selectedIds.size === 0) return;
+    const n = selectedIds.size;
+    const ids = [...selectedIds];
     setActionLoading(true);
     setError('');
     try {
-      await testAPI.addQuestionsToTest(selectedTestId, [...selectedIds]);
+      await testAPI.addQuestionsToTest(selectedTestId, ids);
       setSelectedIds(new Set());
-      refreshTestDetails();
-      showSuccess(`${selectedIds.size} question(s) added to your test.`);
+      await refreshTestDetails();
+      showSuccess(`${n} question(s) added to your test.`);
     } catch (err) {
       const msg = err.weightageExceeded
         ? err.message
@@ -272,7 +291,7 @@ const TestQuestionsPage = () => {
     setError('');
     try {
       await testAPI.removeQuestionFromTest(selectedTestId, questionId);
-      refreshTestDetails();
+      await refreshTestDetails();
       showSuccess('Question removed from test.');
     } catch (err) {
       setError(err.message || 'Could not remove question.');
@@ -290,37 +309,41 @@ const TestQuestionsPage = () => {
   }
 
   return (
-    <div className="test-questions-page">
-      <header className="tq-header">
-        <button type="button" className="tq-back" onClick={() => navigate('/org/tests')}>
-          <ArrowLeft size={18} />
-          Back to Tests
-        </button>
-        <h1 className="tq-title">Questions in your tests</h1>
-        <p className="tq-subtitle">Choose a test, then add, remove, or reorder questions. No popups—everything is on this page.</p>
-      </header>
+    <div className={`test-questions-page${embeddedTestId ? ' test-questions-page--embedded' : ''}`}>
+      {!embeddedTestId && (
+        <header className="tq-header">
+          <button type="button" className="tq-back" onClick={() => navigate('/org/tests')}>
+            <ArrowLeft size={18} />
+            Back to Tests
+          </button>
+          <h1 className="tq-title">Questions in your tests</h1>
+          <p className="tq-subtitle">Choose a test, then add, remove, or reorder questions. No popups—everything is on this page.</p>
+        </header>
+      )}
 
-      <section className="tq-card tq-select-test">
-        <h2 className="tq-card-title">1. Choose a test</h2>
-        <p className="tq-card-desc">Select the test you want to edit. You can change it anytime.</p>
-        <div className="tq-test-select-row">
-          <select
-            className="tq-select"
-            value={selectedTestId}
-            onChange={(e) => setSelectedTestId(e.target.value)}
-            aria-label="Select test"
-          >
-            <option value="">— Select a test —</option>
-            {tests.map((t) => (
-              <option key={t.TestID} value={t.TestID}>
-                {t.TestName} — {t.Exams?.ExamName || 'Exam'} ({t.TotalQuestions ?? 0} questions)
-              </option>
-            ))}
-          </select>
-        </div>
-      </section>
+      {!embeddedTestId && (
+        <section className="tq-card tq-select-test">
+          <h2 className="tq-card-title">1. Choose a test</h2>
+          <p className="tq-card-desc">Select the test you want to edit. You can change it anytime.</p>
+          <div className="tq-test-select-row">
+            <select
+              className="tq-select"
+              value={selectedTestId}
+              onChange={(e) => setSelectedTestId(e.target.value)}
+              aria-label="Select test"
+            >
+              <option value="">— Select a test —</option>
+              {tests.map((t) => (
+                <option key={t.TestID} value={t.TestID}>
+                  {t.TestName} — {t.Exams?.ExamName || 'Exam'} ({t.TotalQuestions ?? 0} questions)
+                </option>
+              ))}
+            </select>
+          </div>
+        </section>
+      )}
 
-      {!selectedTestId && (
+      {!selectedTestId && !embeddedTestId && (
         <div className="tq-placeholder">
           <FileText size={48} className="tq-placeholder-icon" />
           <p>Select a test above to add or manage its questions.</p>
@@ -339,9 +362,12 @@ const TestQuestionsPage = () => {
               <span className="tq-summary-name">{testDetails.TestName}</span>
               <span className="tq-summary-meta">{testDetails.Exams?.ExamName} · {testDetails.TestType}</span>
               <span className="tq-summary-count">
-                <strong>{currentQuestions.length}</strong> questions in test
+                <strong>{linkedCount}</strong> of <strong>{targetCount}</strong> questions linked
+                {linkedCount !== targetCount && (
+                  <span className="tq-summary-hint"> (target from test settings)</span>
+                )}
                 {available.maxQuestionsPerTest != null && (
-                  <> · up to <strong>{available.maxQuestionsPerTest}</strong> allowed</>
+                  <> · plan allows up to <strong>{available.maxQuestionsPerTest}</strong> per test</>
                 )}
               </span>
               <span className="tq-summary-binding">
@@ -350,6 +376,46 @@ const TestQuestionsPage = () => {
               {limitReached && <span className="tq-limit-badge">Limit reached</span>}
             </div>
           </section>
+
+          {!embeddedTestId && (
+            <section className="tq-flow-strip" aria-label="Recommended setup order">
+              <h3 className="tq-flow-title">Where you are in the flow</h3>
+              <ol className="tq-flow-steps">
+                <li className="tq-flow-step tq-flow-done">
+                  <span className="tq-flow-num">1</span>
+                  <span>Test created</span>
+                </li>
+                <li className={`tq-flow-step ${bindingType ? 'tq-flow-done' : 'tq-flow-todo'}`}>
+                  <span className="tq-flow-num">2</span>
+                  <span>Choose binding &amp; configure questions</span>
+                </li>
+                <li
+                  className={`tq-flow-step ${
+                    testDetails.Status === 'Active' ? 'tq-flow-done' : 'tq-flow-todo'
+                  }`}
+                >
+                  <span className="tq-flow-num">3</span>
+                  <span>Activate test on Tests list</span>
+                </li>
+                <li className="tq-flow-step tq-flow-todo">
+                  <span className="tq-flow-num">4</span>
+                  <span>Assign students</span>
+                </li>
+              </ol>
+              <p className="tq-flow-hint">
+                Next step:{' '}
+                {testDetails.Status !== 'Active' ? (
+                  <>
+                    enable the test under <button type="button" className="tq-inline-link" onClick={() => navigate('/org/tests')}>Tests</button> (after questions meet your rules).
+                  </>
+                ) : (
+                  <>
+                    open <button type="button" className="tq-inline-link" onClick={() => navigate('/org/tests')}>Tests</button> and use <strong>Assign</strong>.
+                  </>
+                )}
+              </p>
+            </section>
+          )}
 
           {error && (
             <div className="tq-notice tq-notice-error">
@@ -363,43 +429,45 @@ const TestQuestionsPage = () => {
             </div>
           )}
 
-          <section className="tq-card tq-binding-section">
-            <h2 className="tq-card-title">2. How questions are bound to this test</h2>
-            <p className="tq-card-desc">Choose one mode. Each has a different workflow below.</p>
-            <div className="tq-mode-cards">
-              <button
-                type="button"
-                className={`tq-mode-card tq-mode-custom ${bindingType === 'custom' ? 'tq-mode-selected' : ''}`}
-                onClick={() => saveBindingConfig('custom', 0)}
-                disabled={bindingSaving}
-              >
-                <span className="tq-mode-icon"><ListChecks size={28} /></span>
-                <span className="tq-mode-name">Custom</span>
-                <span className="tq-mode-desc">You pick every question from your bank. Full control: add, remove, reorder.</span>
-              </button>
-              <button
-                type="button"
-                className={`tq-mode-card tq-mode-auto ${bindingType === 'auto' ? 'tq-mode-selected' : ''}`}
-                onClick={() => saveBindingConfig('auto', 0)}
-                disabled={bindingSaving}
-              >
-                <span className="tq-mode-icon"><Shuffle size={28} /></span>
-                <span className="tq-mode-name">Auto</span>
-                <span className="tq-mode-desc">Random questions from the platform at attempt time. No question management here.</span>
-              </button>
-              <button
-                type="button"
-                className={`tq-mode-card tq-mode-hybrid ${bindingType === 'hybrid' ? 'tq-mode-selected' : ''}`}
-                onClick={() => saveBindingConfig('hybrid', autoPercent)}
-                disabled={bindingSaving}
-              >
-                <span className="tq-mode-icon"><Layers size={28} /></span>
-                <span className="tq-mode-name">Hybrid</span>
-                <span className="tq-mode-desc">Mix: part random (platform), part the questions you add. Set the split below.</span>
-              </button>
-            </div>
-            {bindingSaving && <p className="tq-loading-inline">Saving…</p>}
-          </section>
+          {!embeddedTestId && (
+            <section className="tq-card tq-binding-section">
+              <h2 className="tq-card-title">2. How questions are bound to this test</h2>
+              <p className="tq-card-desc">Choose one mode. Each has a different workflow below.</p>
+              <div className="tq-mode-cards">
+                <button
+                  type="button"
+                  className={`tq-mode-card tq-mode-custom ${bindingType === 'custom' ? 'tq-mode-selected' : ''}`}
+                  onClick={() => saveBindingConfig('custom', 0)}
+                  disabled={bindingSaving}
+                >
+                  <span className="tq-mode-icon"><ListChecks size={28} /></span>
+                  <span className="tq-mode-name">Custom</span>
+                  <span className="tq-mode-desc">You pick every question from your bank. Full control: add, remove, reorder.</span>
+                </button>
+                <button
+                  type="button"
+                  className={`tq-mode-card tq-mode-auto ${bindingType === 'auto' ? 'tq-mode-selected' : ''}`}
+                  onClick={() => saveBindingConfig('auto', 0)}
+                  disabled={bindingSaving}
+                >
+                  <span className="tq-mode-icon"><Shuffle size={28} /></span>
+                  <span className="tq-mode-name">Auto</span>
+                  <span className="tq-mode-desc">Random questions from the platform at attempt time. No question management here.</span>
+                </button>
+                <button
+                  type="button"
+                  className={`tq-mode-card tq-mode-hybrid ${bindingType === 'hybrid' ? 'tq-mode-selected' : ''}`}
+                  onClick={() => saveBindingConfig('hybrid', autoPercent)}
+                  disabled={bindingSaving}
+                >
+                  <span className="tq-mode-icon"><Layers size={28} /></span>
+                  <span className="tq-mode-name">Hybrid</span>
+                  <span className="tq-mode-desc">Mix: part random (platform), part the questions you add. Set the split below.</span>
+                </button>
+              </div>
+              {bindingSaving && <p className="tq-loading-inline">Saving…</p>}
+            </section>
+          )}
 
           {/* ─── Custom binding: full UI ─── */}
           {bindingType === 'custom' && (
@@ -616,16 +684,50 @@ const TestQuestionsPage = () => {
               <div className="tq-view-hero tq-hero-auto">
                 <Shuffle size={40} className="tq-hero-icon" />
                 <h3 className="tq-hero-title">Auto binding</h3>
-                <p className="tq-hero-desc">Questions are drawn <strong>randomly</strong> from platform MCQs for <strong>{testDetails?.Exams?.ExamName || 'this exam'}</strong> each time a student starts an attempt. No need to add or remove questions here.</p>
+                <p className="tq-hero-desc">
+                  Questions are drawn <strong>randomly</strong> from platform MCQs for{' '}
+                  <strong>{testDetails?.Exams?.ExamName || 'this exam'}</strong> when a student starts an attempt. Nothing to add on this page—set the paper size and status on the Tests list.
+                </p>
                 <div className="tq-auto-stats">
                   <div className="tq-auto-stat">
                     <span className="tq-auto-stat-value">{testDetails?.TotalQuestions ?? 0}</span>
                     <span className="tq-auto-stat-label">Questions per attempt</span>
                   </div>
                 </div>
+                <ul className="tq-auto-checklist">
+                  <li>
+                    {(testDetails?.TotalQuestions ?? 0) >= 1 ? (
+                      <CheckCircle className="tq-auto-check tq-auto-check-ok" size={22} aria-hidden />
+                    ) : (
+                      <AlertCircle className="tq-auto-check tq-auto-check-warn" size={22} aria-hidden />
+                    )}
+                    <span>
+                      <strong>Total questions</strong> is set to at least 1 (edit on Tests — create flow or future edit).
+                    </span>
+                  </li>
+                  <li>
+                    {testDetails?.Status === 'Active' ? (
+                      <CheckCircle className="tq-auto-check tq-auto-check-ok" size={22} aria-hidden />
+                    ) : (
+                      <AlertCircle className="tq-auto-check tq-auto-check-warn" size={22} aria-hidden />
+                    )}
+                    <span>
+                      Test is <strong>Active</strong> (toggle on the Tests page).
+                    </span>
+                  </li>
+                </ul>
+                <div className="tq-auto-actions">
+                  {!embeddedTestId && (
+                    <button type="button" className="tq-btn tq-btn-primary" onClick={() => navigate('/org/tests')}>
+                      Open Tests — edit totals &amp; status
+                    </button>
+                  )}
+                </div>
                 <div className="tq-auto-tip">
                   <Info size={20} />
-                  <p>Set <em>Total questions</em> when creating or editing this test so students get the right number each time.</p>
+                  <p>
+                    You can assign students once totals and activation pass the checks in the Assign dialog. Delivery of random questions at runtime is enforced server-side for auto mode.
+                  </p>
                 </div>
               </div>
             </div>
@@ -650,14 +752,25 @@ const TestQuestionsPage = () => {
                     max={100}
                     value={autoPercent}
                     onChange={(e) => setAutoPercent(Number(e.target.value))}
-                    onMouseUp={() => saveBindingConfig('hybrid', autoPercent)}
-                    onTouchEnd={() => saveBindingConfig('hybrid', autoPercent)}
                     className="tq-hybrid-slider"
                     disabled={bindingSaving}
                   />
                   <span className="tq-hybrid-percent-value">{autoPercent}%</span>
                 </div>
-                <p className="tq-hybrid-split-hint">Custom (your questions) = <strong>{100 - autoPercent}%</strong>. Add them below.</p>
+                <p className="tq-hybrid-split-hint">
+                  Custom (your questions) ≈ <strong>{100 - autoPercent}%</strong> of the attempt. Add them below. 100% auto behaves like full auto (no custom rows required).
+                </p>
+                <div className="tq-hybrid-save-row">
+                  <button
+                    type="button"
+                    className="tq-btn tq-btn-primary"
+                    disabled={bindingSaving}
+                    onClick={() => saveBindingConfig('hybrid', autoPercent)}
+                  >
+                    {bindingSaving ? 'Saving…' : 'Save split'}
+                  </button>
+                  {!bindingSaving && <span className="tq-hybrid-saved-hint">Click after adjusting the slider.</span>}
+                </div>
               </div>
               <div className="tq-two-panels">
             <section className="tq-panel tq-panel-in-test">
@@ -806,4 +919,6 @@ const TestQuestionsPage = () => {
   );
 };
 
-export default TestQuestionsPage;
+export default function TestQuestionsPage() {
+  return <TestQuestionsPageInner />;
+}

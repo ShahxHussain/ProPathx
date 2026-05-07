@@ -3,9 +3,13 @@ import { supabase } from '../config/database.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
 import { generateToken } from '../utils/jwt.js';
 import { createLog, getClientIP, getUserAgent } from '../utils/logger.js';
-import { validateOrgSignup, validateLogin } from '../middleware/validation.js';
+import { validateOrgSignup, validateLogin, validateStudentSignup } from '../middleware/validation.js';
 import { authenticate, requireRole, verifyActiveStatus } from '../middleware/auth.js';
 import { validateSubscriptionForQuestionCreation } from '../utils/subscription.js';
+import {
+  filterPlansForOrganizationAudience,
+  enrichPlansWithExams,
+} from '../utils/subscriptionPlanCatalog.js';
 
 const router = express.Router();
 
@@ -157,10 +161,19 @@ router.get('/announcements/active', async (req, res) => {
 });
 
 /**
- * POST /api/org/auth/signup
- * Organization self-signup
+ * POST /api/org/auth/signup — Organization self-signup
+ * POST /api/student/auth/signup — Student self-signup (second handler via next('route'))
  */
-router.post('/signup', validateOrgSignup, async (req, res) => {
+router.post(
+  '/signup',
+  (req, res, next) => {
+    if (req.baseUrl && req.baseUrl.includes('/student/auth')) {
+      return next('route');
+    }
+    next();
+  },
+  validateOrgSignup,
+  async (req, res) => {
   const { orgName, orgEmail, password, phone, address } = req.body;
   const ipAddress = getClientIP(req);
   const userAgent = getUserAgent(req);
@@ -260,6 +273,103 @@ router.post('/signup', validateOrgSignup, async (req, res) => {
     });
   } catch (error) {
     console.error('Signup error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+  }
+);
+
+/**
+ * POST /api/student/auth/signup
+ * Individual student self-signup: platform-level account (OrgID null).
+ * Organization-linked students are created by OrgAdmin via POST /api/org/students (OrgID set).
+ */
+router.post('/signup', validateStudentSignup, async (req, res) => {
+  if (!(req.baseUrl && req.baseUrl.includes('/student/auth'))) {
+    return res.status(404).json({ error: 'Route not found' });
+  }
+
+  const { fullName, email, password, phone } = req.body;
+  const ipAddress = getClientIP(req);
+  const userAgent = getUserAgent(req);
+
+  try {
+    const emailNorm = String(email).trim().toLowerCase();
+
+    const { data: existingStudent } = await supabase
+      .from('Students')
+      .select('StudentID')
+      .ilike('Email', emailNorm)
+      .maybeSingle();
+
+    if (existingStudent) {
+      return res.status(409).json({ error: 'This email is already registered as a student' });
+    }
+
+    const { data: existingOrgUser } = await supabase
+      .from('OrgUsers')
+      .select('OrgUserID')
+      .eq('Email', emailNorm)
+      .maybeSingle();
+
+    if (existingOrgUser) {
+      return res.status(409).json({ error: 'This email is already in use for an organization account' });
+    }
+
+    const { data: existingPlatformUser } = await supabase
+      .from('Users')
+      .select('UserID')
+      .eq('Email', emailNorm)
+      .maybeSingle();
+
+    if (existingPlatformUser) {
+      return res.status(409).json({ error: 'This email is already in use for a platform account' });
+    }
+
+    const passwordHash = await hashPassword(String(password).trim());
+
+    const { data: newStudent, error: insertError } = await supabase
+      .from('Students')
+      .insert({
+        OrgID: null,
+        FullName: fullName.trim(),
+        Email: emailNorm,
+        PasswordHash: passwordHash,
+        Phone: phone?.trim() || null,
+        Status: 'Active',
+      })
+      .select('StudentID, FullName, Email, OrgID')
+      .single();
+
+    if (insertError) {
+      console.error('Student self-signup insert error:', insertError);
+      return res.status(500).json({ error: 'Failed to create student account', details: insertError.message });
+    }
+
+    await createLog({
+      actorType: 'Student',
+      actorID: newStudent.StudentID,
+      actionType: 'Signup',
+      entityType: 'Student',
+      entityID: newStudent.StudentID,
+      description: `Individual student ${fullName.trim()} self-registered (platform)`,
+      ipAddress,
+      userAgent,
+      newData: { email: emailNorm, enrollmentType: 'Individual' },
+    });
+
+    res.status(201).json({
+      message: 'Account created successfully. You can sign in now.',
+      student: {
+        studentId: newStudent.StudentID,
+        fullName: newStudent.FullName,
+        email: newStudent.Email,
+        orgId: null,
+        orgName: null,
+        enrollmentType: 'Individual',
+      },
+    });
+  } catch (error) {
+    console.error('Student signup error:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
@@ -883,6 +993,8 @@ router.get('/questions', authenticate, requireRole(['OrgAdmin']), verifyActiveSt
         Topics(
           TopicID,
           TopicName,
+          ChapterID,
+          Chapters(ChapterID, ChapterNumber, ChapterName),
           SubjectID,
           Subjects(
             SubjectID,
@@ -961,6 +1073,7 @@ router.get('/questions', authenticate, requireRole(['OrgAdmin']), verifyActiveSt
 
     const enriched = list.map((q) => {
       const topic = q.Topics;
+      const chapter = topic?.Chapters && Array.isArray(topic.Chapters) ? topic.Chapters[0] : topic?.Chapters;
       const subject = topic?.Subjects;
       const exam = subject?.Exams;
       const qCreatedByOrgUserID = getQ(q, 'CreatedByOrgUserID');
@@ -988,6 +1101,7 @@ router.get('/questions', authenticate, requireRole(['OrgAdmin']), verifyActiveSt
         source: q.Source,
         examName: exam?.ExamName || '—',
         subjectName: subject?.SubjectName || '—',
+        chapterName: chapter?.ChapterName || (chapter?.ChapterNumber ? `Chapter ${chapter.ChapterNumber}` : '—'),
         topicName: topic?.TopicName || '—',
         createdByOrgUserName,
         createdByOrgUserEmail,
@@ -1222,7 +1336,7 @@ router.get('/logs', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus,
  */
 router.get('/subscription-plans', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
   try {
-    // Get only Active subscription plans (disabled plans are hidden from org selection; existing subscriptions are unaffected)
+    // Active plans only; Audience: Organization or Both (not Student-only)
     const { data: plans, error: plansError } = await supabase
       .from('SubscriptionPlans')
       .select('*')
@@ -1234,66 +1348,11 @@ router.get('/subscription-plans', authenticate, requireRole(['OrgAdmin']), verif
       return res.status(500).json({ error: 'Failed to fetch subscription plans', details: plansError.message });
     }
 
-    if (!plans || plans.length === 0) {
-      return res.json({ plans: [] });
-    }
+    const filtered = filterPlansForOrganizationAudience(plans || []);
+    const plansWithExams = await enrichPlansWithExams(supabase, filtered);
+    const visible = (plansWithExams || []).filter((p) => p?.testModes?.isScheduledEnabled === true);
 
-    // For each plan, get linked exams with details
-    const plansWithExams = await Promise.all(
-      plans.map(async (plan) => {
-        // Get linked exams for this plan
-        const { data: planExams, error: planExamsError } = await supabase
-          .from('SubscriptionPlanExams')
-          .select('*')
-          .eq('PlanID', plan.PlanID);
-
-        if (planExamsError) {
-          console.error(`Error fetching exams for plan ${plan.PlanID}:`, planExamsError);
-          return { ...plan, exams: [] };
-        }
-
-        if (!planExams || planExams.length === 0) {
-          return { ...plan, exams: [] };
-        }
-
-        // Get exam details
-        const examIds = planExams.map((pe) => pe.ExamID).filter(Boolean);
-        const { data: exams, error: examsError } = await supabase
-          .from('Exams')
-          .select('ExamID, ExamName, Description')
-          .in('ExamID', examIds);
-
-        if (examsError) {
-          console.error(`Error fetching exam details for plan ${plan.PlanID}:`, examsError);
-          return { ...plan, exams: [] };
-        }
-
-        const examMap = new Map((exams || []).map((e) => [e.ExamID, e]));
-
-        // Combine plan exam data with exam details
-        const examsWithDetails = planExams.map((pe) => {
-          const exam = examMap.get(pe.ExamID);
-          return {
-            ExamID: pe.ExamID,
-            ExamName: exam?.ExamName || 'Unknown Exam',
-            ExamDescription: exam?.Description || null,
-            IsMandatory: pe.IsMandatory || false,
-            MaxStudents: pe.MaxStudents,
-            MaxTests: pe.MaxTests,
-            MaxQuestionsPerTest: pe.MaxQuestionsPerTest,
-            MaxTestsPerDay: pe.MaxTestsPerDay,
-            AISupport: pe.AISupport || false,
-          };
-        });
-
-        return {
-          ...plan,
-          exams: examsWithDetails,
-        };
-      })
-    );
-
-    res.json({ plans: plansWithExams || [] });
+    res.json({ plans: visible });
   } catch (error) {
     console.error('Get subscription plans error:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
@@ -1328,6 +1387,16 @@ router.post('/subscriptions', authenticate, requireRole(['OrgAdmin']), verifyAct
     }
     if (plan.Status === 'Inactive') {
       return res.status(400).json({ error: 'This subscription plan is not available for new subscriptions' });
+    }
+
+    const planAudience = plan.Audience ?? 'Organization';
+    if (planAudience === 'Student') {
+      return res.status(400).json({
+        error: 'This plan is for individual students only. It cannot be purchased by an organization.',
+      });
+    }
+    if (planAudience !== 'Organization' && planAudience !== 'Both') {
+      return res.status(400).json({ error: 'This plan is not available for organizations' });
     }
 
     // Check if organization already has an active subscription
@@ -1688,24 +1757,23 @@ router.post('/login', validateLogin, async (req, res, next) => {
       return res.status(403).json({ error: `Account is ${student.Status?.toLowerCase() || 'inactive'}` });
     }
 
-    // Verify student belongs to an organization
-    if (!student.OrgID) {
-      return res.status(403).json({ error: 'Student is not associated with an organization' });
-    }
+    let organization = null;
+    const enrollmentType = student.OrgID ? 'Organization' : 'Individual';
 
-    // Fetch organization to verify it's active
-    const { data: organization, error: orgError } = await supabase
-      .from('Organizations')
-      .select('OrgID, OrgName, Status')
-      .eq('OrgID', student.OrgID)
-      .single();
+    if (student.OrgID) {
+      const { data: orgRow, error: orgError } = await supabase
+        .from('Organizations')
+        .select('OrgID, OrgName, Status')
+        .eq('OrgID', student.OrgID)
+        .single();
 
-    if (orgError || !organization) {
-      return res.status(404).json({ error: 'Organization not found' });
-    }
-
-    if (organization.Status !== 'Active') {
-      return res.status(403).json({ error: 'Organization is inactive' });
+      if (orgError || !orgRow) {
+        return res.status(404).json({ error: 'Organization not found' });
+      }
+      if (orgRow.Status !== 'Active') {
+        return res.status(403).json({ error: 'Organization is inactive' });
+      }
+      organization = orgRow;
     }
 
     // Update LastLogin
@@ -1714,12 +1782,13 @@ router.post('/login', validateLogin, async (req, res, next) => {
       .update({ LastLogin: new Date().toISOString() })
       .eq('StudentID', student.StudentID);
 
-    // Generate JWT token
+    // Generate JWT token (orgId omitted/null for individual students)
     const token = generateToken({
       actorType: 'Student',
       studentId: student.StudentID,
-      orgId: student.OrgID,
+      ...(student.OrgID ? { orgId: student.OrgID } : {}),
       role: 'Student',
+      enrollmentType,
     });
 
     // Create login log
@@ -1729,7 +1798,7 @@ router.post('/login', validateLogin, async (req, res, next) => {
       actionType: 'Login',
       entityType: 'Student',
       entityID: student.StudentID,
-      description: `Student ${student.FullName} logged in`,
+      description: `Student ${student.FullName} logged in (${enrollmentType})`,
       ipAddress,
       userAgent,
     });
@@ -1742,9 +1811,10 @@ router.post('/login', validateLogin, async (req, res, next) => {
         fullName: student.FullName,
         email: student.Email,
         role: 'Student',
-        orgId: student.OrgID,
-        orgName: organization.OrgName,
+        orgId: student.OrgID || null,
+        orgName: organization?.OrgName || null,
         userType: 'Student',
+        enrollmentType,
       },
     });
   } catch (error) {
@@ -1754,10 +1824,10 @@ router.post('/login', validateLogin, async (req, res, next) => {
 });
 
 /**
- * GET /api/student/auth/me
- * Get current student info
+ * GET /api/student/auth/me (and /student/me alias)
+ * Current student: organization-linked or individual (OrgID null)
  */
-router.get('/student/me', authenticate, async (req, res) => {
+async function getStudentAuthMe(req, res) {
   try {
     const { studentId } = req.user;
 
@@ -1782,8 +1852,7 @@ router.get('/student/me', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Student not found' });
     }
 
-    // Remove sensitive data
-    const { PasswordHash, ...studentData } = student;
+    const enrollmentType = student.OrgID ? 'Organization' : 'Individual';
 
     res.json({
       user: {
@@ -1791,16 +1860,20 @@ router.get('/student/me', authenticate, async (req, res) => {
         fullName: student.FullName,
         email: student.Email,
         role: 'Student',
-        orgId: student.OrgID,
+        orgId: student.OrgID || null,
         orgName: student.Organizations?.[0]?.OrgName || null,
         userType: 'Student',
+        enrollmentType,
       },
     });
   } catch (error) {
     console.error('Get student info error:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
-});
+}
+
+router.get('/me', authenticate, getStudentAuthMe);
+router.get('/student/me', authenticate, getStudentAuthMe);
 
 export default router;
 

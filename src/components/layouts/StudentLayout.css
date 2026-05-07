@@ -1,57 +1,60 @@
 /* Import base dashboard layout styles */
 @import './DashboardLayout.css';
 
-.student-layout {
-  --primary: #1e40af;
-  --primary-hover: #1e3a8a;
+/* Sidebar: warm paper + teal accents (matches student dashboard) */
+.student-layout .sidebar {
+  background: var(--stu-surface-2, #faf8f5);
+  border-right: 1px solid var(--stu-border, #e7e5e4);
 }
 
-/* Use the same classic sidebar style as OrgAdmin */
-.student-layout .sidebar {
-  background: #ffffff;
-  border-right: 1px solid #e5e7eb;
+.student-layout .sidebar-header {
+  border-bottom-color: var(--stu-border, #e7e5e4);
 }
 
 .student-layout .nav-item.active {
-  background: linear-gradient(135deg, #1e40af, #1e3a8a);
+  background: linear-gradient(135deg, var(--stu-teal-dark, #115e59), #0f766e);
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.2);
+  box-shadow: 0 4px 14px rgba(17, 94, 89, 0.25);
 }
 
 .student-layout .nav-item:hover {
-  background: #f9fafb;
-  color: #1e40af;
+  background: var(--stu-teal-soft, #ccfbf1);
+  color: var(--stu-teal-dark, #115e59);
 }
 
 .student-layout .logo {
-  color: #1e40af;
+  color: var(--stu-teal-dark, #115e59);
 }
 
 .student-layout .org-info {
-  color: #1f2937;
-  border-bottom: 1px solid #e5e7eb;
+  color: var(--stu-ink, #1c1917);
+  border-bottom-color: var(--stu-border, #e7e5e4);
 }
 
 .student-layout .org-name {
-  color: #1f2937;
+  color: var(--stu-ink, #1c1917);
   font-weight: 600;
 }
 
 .student-layout .org-email {
-  color: #6b7280;
+  color: var(--stu-muted, #78716c);
 }
 
 .student-layout .user-role {
-  color: #9ca3af;
+  color: var(--stu-muted, #78716c);
   font-size: 0.75rem;
   margin-top: 4px;
 }
 
 .student-layout .sidebar-toggle {
-  color: #6b7280;
+  color: var(--stu-muted, #78716c);
 }
 
 .student-layout .sidebar-toggle:hover {
-  background: #f9fafb;
-  color: #1f2937;
+  background: var(--stu-teal-soft, #ccfbf1);
+  color: var(--stu-teal-dark, #115e59);
+}
+
+.student-layout .sidebar-footer {
+  border-top-color: var(--stu-border, #e7e5e4);
 }

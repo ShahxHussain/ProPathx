@@ -7,6 +7,7 @@ import { createLog, getClientIP, getUserAgent } from '../utils/logger.js';
 import { recordHealthSample, getRequestSeries, getHealthSeries } from '../utils/metricsStore.js';
 import { validateLogin, validateCreatePlatformUser, validateUpdatePlatformUser, validateUpdateOrganization, validateCreateOrganization } from '../middleware/validation.js';
 import { authenticate, requireSuperAdmin } from '../middleware/auth.js';
+import { getPlanTestModesMap, normalizePlanTestModes } from '../utils/subscriptionPlanCatalog.js';
 
 const router = express.Router();
 
@@ -178,48 +179,40 @@ router.get('/dashboard/stats', authenticate, requireSuperAdmin, async (req, res)
       .select('*', { count: 'exact', head: true })
       .eq('Status', 'Active');
 
-    // Get revenue data for last 7 days
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    // Revenue trend: window from query (7 | 30 | 90 days), continuous series for charts
+    const rawRevDays = parseInt(String(req.query.revenueDays ?? '7'), 10);
+    const revenueWindowDays = [7, 30, 90].includes(rawRevDays) ? rawRevDays : 7;
+
+    const revenueStart = new Date();
+    revenueStart.setDate(revenueStart.getDate() - revenueWindowDays);
 
     const { data: recentPayments } = await supabase
       .from('Payments')
       .select('Amount, PaymentDate, PaymentStatus')
       .eq('PaymentStatus', 'Completed')
-      .gte('PaymentDate', sevenDaysAgo.toISOString())
+      .gte('PaymentDate', revenueStart.toISOString())
       .order('PaymentDate', { ascending: true });
 
-    const revenueByDate = {};
+    const revenueByDateKey = {};
     recentPayments?.forEach((payment) => {
       const paymentDate = payment.PaymentDate || payment.paymentDate;
       const amount = payment.Amount || payment.amount || 0;
-
-      if (paymentDate) {
-        const date = new Date(paymentDate).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-        });
-        if (!revenueByDate[date]) {
-          revenueByDate[date] = 0;
-        }
-        revenueByDate[date] += parseFloat(amount);
-      }
+      if (!paymentDate) return;
+      const dateKey = new Date(paymentDate).toISOString().split('T')[0];
+      if (!revenueByDateKey[dateKey]) revenueByDateKey[dateKey] = 0;
+      revenueByDateKey[dateKey] += parseFloat(amount);
     });
 
-    const revenueData = Object.entries(revenueByDate).map(([date, revenue]) => ({
-      date,
-      revenue: Math.round(revenue),
-    }));
-
-    if (revenueData.length === 0) {
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        revenueData.push({
-          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          revenue: 0,
-        });
-      }
+    const revenueData = [];
+    for (let i = revenueWindowDays - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateKey = d.toISOString().split('T')[0];
+      const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      revenueData.push({
+        date: dateLabel,
+        revenue: Math.round(revenueByDateKey[dateKey] || 0),
+      });
     }
 
     // Get recent alerts from Logs table
@@ -2240,7 +2233,17 @@ router.get('/subscription-plans', authenticate, requireSuperAdmin, async (req, r
       });
     }
 
-    res.json({ plans: plans || [] });
+    const planIds = (plans || []).map((p) => p.PlanID).filter(Boolean);
+    const modeMap = await getPlanTestModesMap(supabase, planIds);
+    const plansWithModes = (plans || []).map((p) => ({
+      ...p,
+      testModes: modeMap.get(p.PlanID) || {
+        isScheduledEnabled: false,
+        isAdaptiveEnabled: false,
+        isSelfTestBuilderEnabled: false,
+      },
+    }));
+    res.json({ plans: plansWithModes });
   } catch (error) {
     console.error('Get subscription plans error:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
@@ -2303,9 +2306,16 @@ router.get('/subscription-plans/:planId', authenticate, requireSuperAdmin, async
       };
     });
 
+    const { data: modeRow } = await supabase
+      .from('SubscriptionPlanTestModes')
+      .select('IsScheduledEnabled, IsAdaptiveEnabled, IsSelfTestBuilderEnabled')
+      .eq('PlanID', planId)
+      .single();
+
     res.json({
       plan,
       exams: examsWithDetails,
+      testModes: normalizePlanTestModes(modeRow),
     });
   } catch (error) {
     console.error('Get subscription plan error:', error);
@@ -2321,7 +2331,7 @@ router.get('/subscription-plans/:planId', authenticate, requireSuperAdmin, async
  * explicitly define whether a plan is for Organizations, Students, or Both.
  */
 router.post('/subscription-plans', authenticate, requireSuperAdmin, async (req, res) => {
-  const { planName, price, durationMonths, features, audience } = req.body;
+  const { planName, price, durationMonths, features, audience, testModes } = req.body;
   const { userId } = req.user;
   const ipAddress = getClientIP(req);
   const userAgent = getUserAgent(req);
@@ -2368,6 +2378,29 @@ router.post('/subscription-plans', authenticate, requireSuperAdmin, async (req, 
       return res.status(500).json({ error: 'Failed to create subscription plan', details: planError.message });
     }
 
+    const requestedModes = {
+      isScheduledEnabled:
+        testModes?.isScheduledEnabled ??
+        ['Organization', 'Both'].includes(planAudience),
+      isAdaptiveEnabled: testModes?.isAdaptiveEnabled ?? false,
+      isSelfTestBuilderEnabled:
+        testModes?.isSelfTestBuilderEnabled ??
+        ['Student', 'Both'].includes(planAudience),
+    };
+
+    const { error: modeErr } = await supabase.from('SubscriptionPlanTestModes').upsert({
+      PlanID: newPlan.PlanID,
+      IsScheduledEnabled: !!requestedModes.isScheduledEnabled,
+      IsAdaptiveEnabled: !!requestedModes.isAdaptiveEnabled,
+      IsSelfTestBuilderEnabled: !!requestedModes.isSelfTestBuilderEnabled,
+    });
+    if (modeErr) {
+      return res.status(500).json({
+        error: 'Plan created but failed to save test mode controls',
+        details: modeErr.message,
+      });
+    }
+
     // Create log
     await createLog({
       actorType: 'User',
@@ -2378,12 +2411,19 @@ router.post('/subscription-plans', authenticate, requireSuperAdmin, async (req, 
       description: `Super Admin created subscription plan: ${planName} (Audience: ${planAudience})`,
       ipAddress,
       userAgent,
-      newData: { planName, price, durationMonths, features, audience: planAudience },
+      newData: {
+        planName,
+        price,
+        durationMonths,
+        features,
+        audience: planAudience,
+        testModes: requestedModes,
+      },
     });
 
     res.status(201).json({
       message: 'Subscription plan created successfully',
-      plan: newPlan,
+      plan: { ...newPlan, testModes: requestedModes },
     });
   } catch (error) {
     console.error('Create subscription plan error:', error);
@@ -2397,7 +2437,7 @@ router.post('/subscription-plans', authenticate, requireSuperAdmin, async (req, 
  */
 router.put('/subscription-plans/:planId', authenticate, requireSuperAdmin, async (req, res) => {
   const { planId } = req.params;
-  const { planName, price, durationMonths, features, status, audience } = req.body;
+  const { planName, price, durationMonths, features, status, audience, testModes } = req.body;
   const { userId } = req.user;
   const ipAddress = getClientIP(req);
   const userAgent = getUserAgent(req);
@@ -2447,6 +2487,27 @@ router.put('/subscription-plans/:planId', authenticate, requireSuperAdmin, async
       return res.status(500).json({ error: 'Failed to update subscription plan', details: updateError.message });
     }
 
+    let savedModes = null;
+    if (testModes !== undefined) {
+      savedModes = {
+        isScheduledEnabled: !!testModes?.isScheduledEnabled,
+        isAdaptiveEnabled: !!testModes?.isAdaptiveEnabled,
+        isSelfTestBuilderEnabled: !!testModes?.isSelfTestBuilderEnabled,
+      };
+      const { error: modeErr } = await supabase.from('SubscriptionPlanTestModes').upsert({
+        PlanID: planId,
+        IsScheduledEnabled: savedModes.isScheduledEnabled,
+        IsAdaptiveEnabled: savedModes.isAdaptiveEnabled,
+        IsSelfTestBuilderEnabled: savedModes.isSelfTestBuilderEnabled,
+      });
+      if (modeErr) {
+        return res.status(500).json({
+          error: 'Plan updated but failed to save test mode controls',
+          details: modeErr.message,
+        });
+      }
+    }
+
     // Create log
     await createLog({
       actorType: 'User',
@@ -2458,12 +2519,12 @@ router.put('/subscription-plans/:planId', authenticate, requireSuperAdmin, async
       ipAddress,
       userAgent,
       previousData: existingPlan,
-      newData: updateData,
+      newData: savedModes ? { ...updateData, testModes: savedModes } : updateData,
     });
 
     res.json({
       message: 'Subscription plan updated successfully',
-      plan: updatedPlan,
+      plan: savedModes ? { ...updatedPlan, testModes: savedModes } : updatedPlan,
     });
   } catch (error) {
     console.error('Update subscription plan error:', error);
@@ -2958,11 +3019,16 @@ router.post('/subscription-plans/:planId/exams', authenticate, requireSuperAdmin
       return res.status(400).json({ error: 'Exam ID is required' });
     }
 
-    // Verify plan exists
-    const { data: plan } = await supabase.from('SubscriptionPlans').select('PlanID').eq('PlanID', planId).single();
+    // Verify plan exists (Audience: Student = individual-only; MaxStudents not applicable)
+    const { data: plan } = await supabase
+      .from('SubscriptionPlans')
+      .select('PlanID, Audience')
+      .eq('PlanID', planId)
+      .single();
     if (!plan) {
       return res.status(404).json({ error: 'Subscription plan not found' });
     }
+    const planAudience = plan.Audience ?? 'Organization';
 
     // Verify exam exists
     const { data: exam } = await supabase.from('Exams').select('ExamID, ExamName').eq('ExamID', examId).single();
@@ -2982,6 +3048,9 @@ router.post('/subscription-plans/:planId/exams', authenticate, requireSuperAdmin
       return res.status(409).json({ error: 'Exam is already linked to this subscription plan' });
     }
 
+    const maxStudentsForInsert =
+      planAudience === 'Student' ? null : maxStudents ? parseInt(maxStudents, 10) : null;
+
     // Create link
     const { data: newLink, error: linkError } = await supabase
       .from('SubscriptionPlanExams')
@@ -2989,7 +3058,7 @@ router.post('/subscription-plans/:planId/exams', authenticate, requireSuperAdmin
         PlanID: planId,
         ExamID: examId,
         IsMandatory: isMandatory === true,
-        MaxStudents: maxStudents ? parseInt(maxStudents) : null,
+        MaxStudents: maxStudentsForInsert,
         MaxTests: maxTests ? parseInt(maxTests) : null,
         MaxQuestionsPerTest: maxQuestionsPerTest ? parseInt(maxQuestionsPerTest) : null,
         MaxTestsPerDay: maxTestsPerDay ? parseInt(maxTestsPerDay) : null,
@@ -3068,10 +3137,21 @@ router.put('/subscription-plans/:planId/exams/:examId', authenticate, requireSup
       return res.status(404).json({ error: 'Exam is not linked to this subscription plan' });
     }
 
+    const { data: planRow } = await supabase
+      .from('SubscriptionPlans')
+      .select('Audience')
+      .eq('PlanID', planId)
+      .single();
+    const planAudience = planRow?.Audience ?? 'Organization';
+
     // Build update object
     const updateData = {};
     if (isMandatory !== undefined) updateData.IsMandatory = isMandatory === true;
-    if (maxStudents !== undefined) updateData.MaxStudents = maxStudents ? parseInt(maxStudents) : null;
+    if (planAudience === 'Student') {
+      updateData.MaxStudents = null;
+    } else if (maxStudents !== undefined) {
+      updateData.MaxStudents = maxStudents ? parseInt(maxStudents, 10) : null;
+    }
     if (maxTests !== undefined) updateData.MaxTests = maxTests ? parseInt(maxTests) : null;
     if (maxQuestionsPerTest !== undefined)
       updateData.MaxQuestionsPerTest = maxQuestionsPerTest ? parseInt(maxQuestionsPerTest) : null;
@@ -3209,6 +3289,8 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
         Topics(
           TopicID,
           TopicName,
+          ChapterID,
+          Chapters(ChapterID, ChapterNumber, ChapterName),
           SubjectID,
           Subjects(
             SubjectID,
@@ -3292,6 +3374,7 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
 
     const enriched = list.map((q) => {
       const topic = q.Topics;
+      const chapter = topic?.Chapters && Array.isArray(topic.Chapters) ? topic.Chapters[0] : topic?.Chapters;
       const subject = topic?.Subjects;
       const exam = subject?.Exams;
       const qOrgId = getQ(q, 'OrgID');
@@ -3338,6 +3421,7 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
         source: q.Source,
         examName: exam?.ExamName || '—',
         subjectName: subject?.SubjectName || '—',
+        chapterName: chapter?.ChapterName || (chapter?.ChapterNumber ? `Chapter ${chapter.ChapterNumber}` : '—'),
         topicName: topic?.TopicName || '—',
         sourceType,
         createdByName,

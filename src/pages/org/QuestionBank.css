@@ -392,6 +392,7 @@
 
 .org-question-bank-page .context-exam,
 .org-question-bank-page .context-subject,
+.org-question-bank-page .context-chapter,
 .org-question-bank-page .context-topic {
   display: block;
   font-size: 12px;

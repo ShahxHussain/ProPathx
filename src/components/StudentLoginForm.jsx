@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { studentAuth } from '../services/api';
 
-const StudentLoginForm = ({ onSuccess }) => {
+const StudentLoginForm = ({ onSuccess, onSwitchToSignup }) => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -66,7 +66,16 @@ const StudentLoginForm = ({ onSuccess }) => {
       </button>
 
       <p className="muted small" style={{ textAlign: 'center', marginTop: '16px' }}>
-        Contact your organization admin if you need access
+        {onSwitchToSignup ? (
+          <>
+            New here?{' '}
+            <button type="button" className="link" onClick={onSwitchToSignup}>
+              Create an account
+            </button>
+          </>
+        ) : (
+          'Contact your organization admin if you need access'
+        )}
       </p>
     </form>
   );

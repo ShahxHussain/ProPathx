@@ -2,11 +2,172 @@ import express from 'express';
 import { supabase } from '../config/database.js';
 import { createLog, getClientIP, getUserAgent } from '../utils/logger.js';
 import { authenticate, requireRole, verifyActiveStatus } from '../middleware/auth.js';
+import { isPlanModeEnabled } from '../utils/subscriptionPlanCatalog.js';
 
 const router = express.Router();
 
-/** In-memory binding config per test (Custom / Auto / Hybrid). No DB change. Lost on server restart. */
-const testBindingConfig = new Map();
+/** Reads question binding + schedule mode from Tests row (PascalCase or camelCase from PostgREST). */
+function bindingFromTestRow(test) {
+  if (!test) {
+    return { bindingType: 'custom', autoPercent: 0, scheduleMode: 'open' };
+  }
+  const mode = test.QuestionBindingMode ?? test.questionBindingMode ?? 'custom';
+  const pct = test.HybridAutoPercent ?? test.hybridAutoPercent ?? 0;
+  const sched = test.ScheduleMode ?? test.scheduleMode ?? 'open';
+  return {
+    bindingType: ['custom', 'auto', 'hybrid'].includes(mode) ? mode : 'custom',
+    autoPercent: Math.max(0, Math.min(100, Number(pct) || 0)),
+    scheduleMode: sched === 'scheduled' ? 'scheduled' : 'open',
+  };
+}
+
+/** PostgREST: disambiguate Questions ↔ Options embed (see students.js same constant). */
+const PG_OPTIONS_BY_QUESTION_FK = 'Options!Options_QuestionID_fkey';
+
+async function ensureScheduledModeEnabledForTestSubscription(test) {
+  const subscriptionId = test?.SubscriptionID ?? test?.subscriptionId ?? null;
+  if (!subscriptionId) {
+    return { ok: false, error: 'This test is missing subscription linkage.' };
+  }
+  const { data: subscription, error: subErr } = await supabase
+    .from('Subscriptions')
+    .select('PlanID')
+    .eq('SubscriptionID', subscriptionId)
+    .single();
+  if (subErr || !subscription?.PlanID) {
+    return { ok: false, error: 'Failed to validate test subscription plan.' };
+  }
+  const allowed = await isPlanModeEnabled(supabase, subscription.PlanID, 'isScheduledEnabled');
+  if (!allowed) {
+    return {
+      ok: false,
+      error:
+        'Scheduled mode is disabled in the subscription plan linked to this test. Enable Scheduled mode to assign this test.',
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * TestQuestions + Questions for org test detail / wizard.
+ * If the PostgREST embed fails (schema/RLS/Options), fall back to flat queries so linked rows still appear.
+ */
+async function loadTestQuestionsWithQuestions(supabaseClient, testId) {
+  const embedSelect = `
+        *,
+        Questions (
+          QuestionID,
+          QuestionText,
+          DifficultyLevel,
+          QuestionType,
+          Explanation,
+          ${PG_OPTIONS_BY_QUESTION_FK} (
+            OptionID,
+            OptionNumber,
+            OptionText,
+            IsCorrect
+          )
+        )
+      `;
+  const { data: embedded, error: embedErr } = await supabaseClient
+    .from('TestQuestions')
+    .select(embedSelect)
+    .eq('TestID', testId)
+    .order('QuestionID', { ascending: true });
+
+  if (!embedErr && Array.isArray(embedded)) {
+    return { rows: embedded, usedFallback: false };
+  }
+
+  if (embedErr) {
+    console.error('TestQuestions embed select failed:', testId, embedErr.message);
+  }
+
+  const { data: tqRows, error: tqErr } = await supabaseClient
+    .from('TestQuestions')
+    .select('TestID, QuestionID, Marks, NegativeMarks, TimeLimit')
+    .eq('TestID', testId)
+    .order('QuestionID', { ascending: true });
+
+  if (tqErr || !tqRows?.length) {
+    return { rows: Array.isArray(embedded) ? embedded : [], usedFallback: !!embedErr };
+  }
+
+  const qIds = [...new Set(tqRows.map((r) => r.QuestionID).filter(Boolean))];
+  const { data: qRows, error: qErr } = await supabaseClient
+    .from('Questions')
+    .select('QuestionID, QuestionText, DifficultyLevel, QuestionType, Explanation')
+    .in('QuestionID', qIds);
+
+  if (qErr) {
+    console.error('Questions fallback fetch failed:', testId, qErr.message);
+    return {
+      rows: tqRows.map((tq) => ({ ...tq, Questions: { QuestionID: tq.QuestionID, QuestionText: '' } })),
+      usedFallback: true,
+    };
+  }
+
+  const qMap = new Map((qRows || []).map((q) => [q.QuestionID, q]));
+  const rows = tqRows.map((tq) => ({
+    ...tq,
+    Questions: qMap.get(tq.QuestionID) || { QuestionID: tq.QuestionID, QuestionText: '' },
+  }));
+  return { rows, usedFallback: true };
+}
+
+/**
+ * When an org replaces a student's assignment (delete + re-insert), old StudentAttempts
+ * must be removed or the student UI still shows "Completed" from the prior attempt.
+ * Clears Certificates rows tied to those attempts first (FK may otherwise block delete).
+ */
+async function deleteStudentAttemptsForTest(supabaseClient, testId, studentIds) {
+  const ids = [...new Set((studentIds || []).filter(Boolean))];
+  if (ids.length === 0) return { error: null };
+
+  const { data: attempts, error: fetchError } = await supabaseClient
+    .from('StudentAttempts')
+    .select('AttemptID')
+    .eq('TestID', testId)
+    .in('StudentID', ids);
+
+  if (fetchError) return { error: fetchError };
+
+  const attemptIds = (attempts || []).map((a) => a.AttemptID).filter(Boolean);
+  if (attemptIds.length > 0) {
+    const { error: certDelError } = await supabaseClient.from('Certificates').delete().in('AttemptID', attemptIds);
+    if (certDelError) {
+      const { error: certNullError } = await supabaseClient
+        .from('Certificates')
+        .update({ AttemptID: null })
+        .in('AttemptID', attemptIds);
+      if (certNullError) return { error: certNullError };
+    }
+  }
+
+  const { error } = await supabaseClient
+    .from('StudentAttempts')
+    .delete()
+    .eq('TestID', testId)
+    .in('StudentID', ids);
+  return { error };
+}
+
+/** At least one non-expired Active org subscription (see schedule_or_opentiime_assigned.md §2.1). */
+async function orgHasQualifyingSubscription(orgId) {
+  const { data: subs, error } = await supabase
+    .from('Subscriptions')
+    .select('SubscriptionID, Status, EndDate')
+    .eq('EntityType', 'Organization')
+    .eq('EntityID', orgId);
+  if (error || !subs?.length) return false;
+  const now = new Date();
+  return subs.some((s) => {
+    const st = String(s.Status || '').toLowerCase();
+    if (st !== 'active') return false;
+    if (!s.EndDate) return false;
+    return new Date(s.EndDate) >= now;
+  });
+}
 
 /** Minimum questions required before a test can be activated or assigned (can later come from SubscriptionPlanExams.MinQuestionsPerTest) */
 const MIN_QUESTIONS_PER_TEST = 1;
@@ -98,21 +259,96 @@ async function validateWeightageForAdd(testId, examId, totalQuestionsAfterAdd, q
 async function checkMinQuestionsForActivateOrAssign(testId, orgId) {
   const { data: test, error: testError } = await supabase
     .from('Tests')
-    .select('TestID, SubscriptionID, ExamID, TotalQuestions')
+    .select('TestID, SubscriptionID, ExamID, TotalQuestions, QuestionBindingMode, HybridAutoPercent')
     .eq('TestID', testId)
     .eq('OrgID', orgId)
     .single();
   if (testError || !test) return { ok: false, status: 404, body: { error: 'Test not found' } };
   const minRequired = getMinQuestionsForTest();
-  const count = test.TotalQuestions ?? 0;
-  if (count < minRequired) {
+  const mode = String(test.QuestionBindingMode ?? 'custom').toLowerCase();
+  const totalQ = test.TotalQuestions != null ? Number(test.TotalQuestions) : 0;
+  const hybridPct = Number(test.HybridAutoPercent ?? 0);
+
+  const { count: linkedCount, error: countError } = await supabase
+    .from('TestQuestions')
+    .select('*', { count: 'exact', head: true })
+    .eq('TestID', testId);
+  const linked = !countError && linkedCount != null ? linkedCount : 0;
+
+  // Auto: pool draw at attempt time — no TestQuestions rows required; TotalQuestions is the paper size.
+  if (mode === 'auto') {
+    if (totalQ < minRequired) {
+      return {
+        ok: false,
+        status: 400,
+        body: {
+          error: `Set at least ${minRequired} total question(s) on this test (auto mode). Open the test on the Tests list and edit totals.`,
+          minRequired,
+          bindingMode: 'auto',
+          totalQuestions: totalQ,
+          hint: 'Auto mode uses Total questions only; add questions in the bank is not required for assignment.',
+        },
+      };
+    }
+    return { ok: true };
+  }
+
+  // Hybrid: need both a configured attempt size and the custom-linked portion (see schedule_or_opentiime_assigned.md).
+  if (mode === 'hybrid') {
+    if (totalQ < minRequired) {
+      return {
+        ok: false,
+        status: 400,
+        body: {
+          error: `Set total questions to at least ${minRequired} (hybrid mode).`,
+          minRequired,
+          bindingMode: 'hybrid',
+          totalQuestions: totalQ,
+          linkedCount: linked,
+        },
+      };
+    }
+    if (hybridPct < 100 && linked < minRequired) {
+      return {
+        ok: false,
+        status: 400,
+        body: {
+          error: `Add at least ${minRequired} question(s) to this test for the custom portion (hybrid ${100 - hybridPct}% custom).`,
+          minRequired,
+          bindingMode: 'hybrid',
+          linkedCount: linked,
+          hybridAutoPercent: hybridPct,
+        },
+      };
+    }
+    if (hybridPct >= 100) {
+      if (totalQ < minRequired) {
+        return {
+          ok: false,
+          status: 400,
+          body: {
+            error: `Set at least ${minRequired} total question(s) (hybrid is 100% auto).`,
+            minRequired,
+            bindingMode: 'hybrid',
+            totalQuestions: totalQ,
+          },
+        };
+      }
+      return { ok: true };
+    }
+    return { ok: true };
+  }
+
+  // Custom (default): fixed paper from TestQuestions only.
+  if (linked < minRequired) {
     return {
       ok: false,
       status: 400,
       body: {
-        error: `Test must have at least ${minRequired} question(s) before it can be activated or assigned`,
+        error: `Add at least ${minRequired} question(s) to this test (custom mode) before activating or assigning.`,
         minRequired,
-        currentCount: count,
+        bindingMode: 'custom',
+        linkedCount: linked,
       },
     };
   }
@@ -325,6 +561,13 @@ router.post('/', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, as
       return res.status(400).json({ error: 'Missing required fields: testName, examId, subscriptionId, testType' });
     }
 
+    if (!(await orgHasQualifyingSubscription(orgId))) {
+      return res.status(403).json({
+        error: 'No active organization subscription. Subscribe or renew a plan to create tests.',
+        code: 'SUBSCRIPTION_REQUIRED',
+      });
+    }
+
     // Validate subscription belongs to organization and is active
     const { data: subscription, error: subError } = await supabase
       .from('Subscriptions')
@@ -337,6 +580,14 @@ router.post('/', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, as
 
     if (subError || !subscription) {
       return res.status(404).json({ error: 'Active subscription not found for this organization' });
+    }
+
+    const scheduledAllowed = await isPlanModeEnabled(supabase, subscription.PlanID, 'isScheduledEnabled');
+    if (!scheduledAllowed) {
+      return res.status(403).json({
+        error: 'Scheduled tests are disabled in the selected subscription plan.',
+        code: 'SCHEDULED_MODE_DISABLED',
+      });
     }
 
     // Check if subscription is still valid (not expired)
@@ -408,6 +659,19 @@ router.post('/', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, as
     // Create test
     // Note: Tests.CreatedBy references Users.UserID, but OrgUsers don't have corresponding UserIDs
     // We set it to null and track the creator in the audit logs instead
+    const testDateVal =
+      testDate && String(testDate).trim() !== '' ? testDate : null;
+    const startTimeVal =
+      startTime && String(startTime).trim() !== '' ? startTime : null;
+    const endTimeVal =
+      endTime && String(endTime).trim() !== '' ? endTime : null;
+
+    const questionBindingMode = ['custom', 'auto', 'hybrid'].includes(req.body.questionBindingMode)
+      ? req.body.questionBindingMode
+      : 'custom';
+    const hybridPctRaw = Math.max(0, Math.min(100, Number(req.body.hybridAutoPercent) || 0));
+    const scheduleModeVal = startTimeVal ? 'scheduled' : 'open';
+
     const { data: newTest, error: testError } = await supabase
       .from('Tests')
       .insert({
@@ -420,11 +684,14 @@ router.post('/', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, as
         DurationMinutes: durationMinutes,
         TotalQuestions: totalQuestions || questionIds.length,
         TotalMarks: totalMarks,
-        TestDate: testDate,
-        StartTime: startTime,
-        EndTime: endTime,
+        TestDate: testDateVal,
+        StartTime: startTimeVal,
+        EndTime: endTimeVal,
         Status: status,
         CreatedAt: new Date().toISOString(),
+        QuestionBindingMode: questionBindingMode,
+        HybridAutoPercent: questionBindingMode === 'hybrid' ? hybridPctRaw : 0,
+        ScheduleMode: scheduleModeVal,
       })
       .select()
       .single();
@@ -599,28 +866,9 @@ router.get('/:testId', authenticate, requireRole(['OrgAdmin']), verifyActiveStat
       return res.status(404).json({ error: 'Test not found' });
     }
 
-    // Get test questions with options (for view/export)
-    let tqQuery = supabase
-      .from('TestQuestions')
-      .select(`
-        *,
-        Questions (
-          QuestionID,
-          QuestionText,
-          DifficultyLevel,
-          QuestionType,
-          Explanation,
-          Options (
-            OptionNumber,
-            OptionText,
-            IsCorrect
-          )
-        )
-      `)
-      .eq('TestID', testId);
-    const { data: testQuestions, error: questionsError } = await tqQuery.order('QuestionID', { ascending: true });
+    const { rows: testQuestions } = await loadTestQuestionsWithQuestions(supabase, testId);
 
-    const bindingConfig = testBindingConfig.get(testId) || { bindingType: 'custom', autoPercent: 0 };
+    const bindingConfig = bindingFromTestRow(test);
 
     res.json({
       test: {
@@ -628,6 +876,7 @@ router.get('/:testId', authenticate, requireRole(['OrgAdmin']), verifyActiveStat
         questions: testQuestions || [],
         bindingType: bindingConfig.bindingType,
         autoPercent: bindingConfig.autoPercent,
+        scheduleMode: bindingConfig.scheduleMode,
       },
     });
   } catch (error) {
@@ -637,17 +886,114 @@ router.get('/:testId', authenticate, requireRole(['OrgAdmin']), verifyActiveStat
 });
 
 /**
+ * PUT /api/org/tests/:testId
+ * Update test metadata (name, type, duration, totals, schedule window, ScheduleMode, status).
+ */
+router.put('/:testId', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  const { testId } = req.params;
+  const { orgId, orgUserId } = req.user;
+  const b = req.body || {};
+  const ipAddress = getClientIP(req);
+  const userAgent = getUserAgent(req);
+
+  try {
+    const { data: existing, error: exErr } = await supabase
+      .from('Tests')
+      .select('TestID, TestName, OrgID')
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .single();
+
+    if (exErr || !existing) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    const updates = {};
+    if (b.testName != null && String(b.testName).trim()) updates.TestName = String(b.testName).trim();
+    if (b.testType != null && ['Practice', 'Mock', 'Final'].includes(b.testType)) updates.TestType = b.testType;
+    if (b.durationMinutes != null && !Number.isNaN(Number(b.durationMinutes))) {
+      updates.DurationMinutes = Number(b.durationMinutes);
+    }
+    if (b.totalQuestions != null && !Number.isNaN(Number(b.totalQuestions))) {
+      updates.TotalQuestions = Number(b.totalQuestions);
+    }
+    if (b.totalMarks != null && !Number.isNaN(Number(b.totalMarks))) {
+      updates.TotalMarks = Number(b.totalMarks);
+    }
+    if (b.testDate !== undefined) {
+      updates.TestDate = b.testDate && String(b.testDate).trim() ? String(b.testDate).split('T')[0] : null;
+    }
+    if (b.startTime !== undefined) {
+      updates.StartTime = b.startTime && String(b.startTime).trim() ? b.startTime : null;
+    }
+    if (b.endTime !== undefined) {
+      updates.EndTime = b.endTime && String(b.endTime).trim() ? b.endTime : null;
+    }
+    if (b.scheduleMode === 'open' || b.scheduleMode === 'scheduled') {
+      updates.ScheduleMode = b.scheduleMode;
+    }
+    if (b.status === 'Active' || b.status === 'Inactive') {
+      updates.Status = b.status;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    const { data: updated, error: upErr } = await supabase
+      .from('Tests')
+      .update(updates)
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .select(
+        `
+        *,
+        Exams ( ExamID, ExamName )
+      `
+      )
+      .single();
+
+    if (upErr) {
+      console.error('PUT /tests/:testId', upErr);
+      return res.status(500).json({ error: 'Failed to update test', details: upErr.message });
+    }
+
+    await createLog({
+      actorType: 'OrgUser',
+      actorID: orgUserId,
+      actionType: 'Update',
+      entityType: 'Test',
+      entityID: testId,
+      description: `Updated test: ${updated.TestName || testId}`,
+      ipAddress,
+      userAgent,
+      newData: updates,
+    });
+
+    res.json({ message: 'Test updated', test: updated });
+  } catch (error) {
+    console.error('PUT test error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
  * GET /api/org/tests/:testId/binding-config
- * Get question binding type for this test (Custom / Auto / Hybrid). Stored in memory only.
+ * Get question binding type for this test (Custom / Auto / Hybrid). Persisted on Tests.QuestionBindingMode / HybridAutoPercent.
  */
 router.get('/:testId/binding-config', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
   const { testId } = req.params;
   const { orgId } = req.user;
   try {
-    const { data: test, error } = await supabase.from('Tests').select('TestID').eq('TestID', testId).eq('OrgID', orgId).single();
+    const { data: test, error } = await supabase
+      .from('Tests')
+      .select('TestID, QuestionBindingMode, HybridAutoPercent, ScheduleMode')
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .single();
     if (error || !test) return res.status(404).json({ error: 'Test not found' });
-    const config = testBindingConfig.get(testId) || { bindingType: 'custom', autoPercent: 0 };
-    res.json(config);
+    const cfg = bindingFromTestRow(test);
+    res.json({ bindingType: cfg.bindingType, autoPercent: cfg.autoPercent, scheduleMode: cfg.scheduleMode });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error', details: err.message });
   }
@@ -655,20 +1001,43 @@ router.get('/:testId/binding-config', authenticate, requireRole(['OrgAdmin']), v
 
 /**
  * PUT /api/org/tests/:testId/binding-config
- * Set question binding type (custom | auto | hybrid) and optional autoPercent for hybrid. Stored in memory only.
+ * Set question binding type (custom | auto | hybrid) and optional autoPercent for hybrid. Persisted on Tests.
  */
 router.put('/:testId/binding-config', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
   const { testId } = req.params;
   const { orgId } = req.user;
   const { bindingType = 'custom', autoPercent = 0 } = req.body || {};
   try {
-    const { data: test, error } = await supabase.from('Tests').select('TestID').eq('TestID', testId).eq('OrgID', orgId).single();
-    if (error || !test) return res.status(404).json({ error: 'Test not found' });
+    const { data: existing, error } = await supabase
+      .from('Tests')
+      .select('TestID')
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .single();
+    if (error || !existing) return res.status(404).json({ error: 'Test not found' });
     const valid = ['custom', 'auto', 'hybrid'].includes(bindingType);
     if (!valid) return res.status(400).json({ error: 'bindingType must be custom, auto, or hybrid' });
     const percent = Math.max(0, Math.min(100, Number(autoPercent) || 0));
-    testBindingConfig.set(testId, { bindingType, autoPercent: bindingType === 'hybrid' ? percent : 0 });
-    res.json({ bindingType, autoPercent: bindingType === 'hybrid' ? percent : 0 });
+    const hybridPct = bindingType === 'hybrid' ? percent : 0;
+
+    const { data: updated, error: updErr } = await supabase
+      .from('Tests')
+      .update({
+        QuestionBindingMode: bindingType,
+        HybridAutoPercent: hybridPct,
+      })
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .select('QuestionBindingMode, HybridAutoPercent, ScheduleMode')
+      .single();
+
+    if (updErr) {
+      console.error('binding-config update:', updErr);
+      return res.status(500).json({ error: 'Failed to save binding config', details: updErr.message });
+    }
+
+    const cfg = bindingFromTestRow(updated);
+    res.json({ bindingType: cfg.bindingType, autoPercent: cfg.autoPercent, scheduleMode: cfg.scheduleMode });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error', details: err.message });
   }
@@ -954,11 +1323,9 @@ router.post('/:testId/questions', authenticate, requireRole(['OrgAdmin']), verif
       });
     }
 
-    const newTotal = currentCount + actuallyNew.length;
-    await supabase
-      .from('Tests')
-      .update({ TotalQuestions: newTotal })
-      .eq('TestID', testId);
+    const linkedAfterAdd = currentCount + actuallyNew.length;
+    // Do not overwrite Tests.TotalQuestions — it is the configured paper size from test settings;
+    // linked count is testDetails.questions.length from GET.
 
     await createLog({
       actorType: 'OrgUser',
@@ -975,7 +1342,7 @@ router.post('/:testId/questions', authenticate, requireRole(['OrgAdmin']), verif
     res.status(201).json({
       message: `${actuallyNew.length} question(s) added`,
       added: actuallyNew.length,
-      totalQuestions: newTotal,
+      linkedQuestionCount: linkedAfterAdd,
     });
   } catch (error) {
     console.error('Add questions to test error:', error);
@@ -1101,8 +1468,7 @@ router.post('/:testId/questions/bulk', authenticate, requireRole(['OrgAdmin']), 
       return res.status(500).json({ error: 'Failed to add questions', details: insertError.message });
     }
 
-    const newTotal = currentCount + toAdd.length;
-    await supabase.from('Tests').update({ TotalQuestions: newTotal }).eq('TestID', testId);
+    const linkedAfterAdd = currentCount + toAdd.length;
 
     await createLog({
       actorType: 'OrgUser',
@@ -1119,7 +1485,7 @@ router.post('/:testId/questions/bulk', authenticate, requireRole(['OrgAdmin']), 
     res.status(201).json({
       message: `${toAdd.length} question(s) added`,
       added: toAdd.length,
-      totalQuestions: newTotal,
+      linkedQuestionCount: linkedAfterAdd,
     });
   } catch (error) {
     console.error('Bulk add questions error:', error);
@@ -1233,8 +1599,6 @@ router.post('/:testId/questions/copy-from', authenticate, requireRole(['OrgAdmin
       return res.status(500).json({ error: 'Failed to copy questions', details: insertError.message });
     }
 
-    await supabase.from('Tests').update({ TotalQuestions: newTotal }).eq('TestID', testId);
-
     await createLog({
       actorType: 'OrgUser',
       actorID: orgUserId,
@@ -1250,7 +1614,7 @@ router.post('/:testId/questions/copy-from', authenticate, requireRole(['OrgAdmin
     res.status(201).json({
       message: `${actuallyNew.length} question(s) copied`,
       added: actuallyNew.length,
-      totalQuestions: newTotal,
+      linkedQuestionCount: newTotal,
     });
   } catch (error) {
     console.error('Copy questions from test error:', error);
@@ -1318,13 +1682,17 @@ router.delete('/:testId/questions/:questionId', authenticate, requireRole(['OrgA
   try {
     const { data: test, error: testError } = await supabase
       .from('Tests')
-      .select('TestID, TestName, OrgID, TotalQuestions')
+      .select('TestID, TestName, OrgID, SubscriptionID')
       .eq('TestID', testId)
       .eq('OrgID', orgId)
       .single();
 
     if (testError || !test) {
       return res.status(404).json({ error: 'Test not found' });
+    }
+    const modeGuard = await ensureScheduledModeEnabledForTestSubscription(test);
+    if (!modeGuard.ok) {
+      return res.status(403).json({ error: modeGuard.error, code: 'SCHEDULED_MODE_DISABLED' });
     }
 
     const { error: delError } = await supabase
@@ -1338,10 +1706,9 @@ router.delete('/:testId/questions/:questionId', authenticate, requireRole(['OrgA
       return res.status(500).json({ error: 'Failed to remove question', details: delError.message });
     }
 
-    const newTotal = Math.max(0, (test.TotalQuestions || 0) - 1);
-    await supabase
-      .from('Tests')
-      .update({ TotalQuestions: newTotal })
+    const { count: linkedCount, error: cntErr } = await supabase
+      .from('TestQuestions')
+      .select('*', { count: 'exact', head: true })
       .eq('TestID', testId);
 
     await createLog({
@@ -1353,12 +1720,12 @@ router.delete('/:testId/questions/:questionId', authenticate, requireRole(['OrgA
       description: `Removed question from test: ${test.TestName}`,
       ipAddress,
       userAgent,
-      newData: { questionId, totalQuestions: newTotal },
+      newData: { questionId, linkedQuestionCount: cntErr ? null : linkedCount },
     });
 
     res.json({
       message: 'Question removed from test',
-      totalQuestions: newTotal,
+      linkedQuestionCount: cntErr ? undefined : linkedCount ?? 0,
     });
   } catch (error) {
     console.error('Remove question from test error:', error);
@@ -1388,13 +1755,17 @@ router.post('/:testId/assign/single', authenticate, requireRole(['OrgAdmin']), v
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
       .from('Tests')
-      .select('TestID, TestName, OrgID')
+      .select('TestID, TestName, OrgID, SubscriptionID')
       .eq('TestID', testId)
       .eq('OrgID', orgId)
       .single();
 
     if (testError || !test) {
       return res.status(404).json({ error: 'Test not found' });
+    }
+    const modeGuard = await ensureScheduledModeEnabledForTestSubscription(test);
+    if (!modeGuard.ok) {
+      return res.status(403).json({ error: modeGuard.error, code: 'SCHEDULED_MODE_DISABLED' });
     }
 
     // Verify student belongs to organization
@@ -1422,42 +1793,61 @@ router.post('/:testId/assign/single', authenticate, requireRole(['OrgAdmin']), v
       return res.status(500).json({ error: 'Failed to check existing assignment', details: existingError.message });
     }
 
+    let assignment;
+    let assignError;
+
     if (existing) {
       if (!replaceExisting) {
         return res.status(409).json({ error: 'Test is already assigned to this student' });
       }
 
-      // Replace: delete existing assignment then insert new one (to update due date / reset status)
-      const { error: delError } = await supabase
-        .from('TestAssignments')
-        .delete()
-        .eq('TestID', testId)
-        .eq('StudentID', studentId);
-
-      if (delError) {
-        console.error('Error deleting existing assignment:', delError);
-        return res.status(500).json({ error: 'Failed to replace assignment', details: delError.message });
+      const { error: clearAttemptsError } = await deleteStudentAttemptsForTest(supabase, testId, [studentId]);
+      if (clearAttemptsError) {
+        console.error('Error clearing attempts for reassignment:', clearAttemptsError);
+        return res.status(500).json({
+          error: 'Failed to reset prior attempts for reassigned test',
+          details: clearAttemptsError.message,
+        });
       }
+
+      // Replace in place (avoids re-insert failures e.g. unknown columns; preserves CompletedCycleCount if present)
+      const upd = await supabase
+        .from('TestAssignments')
+        .update({
+          DueDate: dueDate ? new Date(dueDate).toISOString() : null,
+          Status: 'Pending',
+          AssignedAt: new Date().toISOString(),
+          AssignedBy: orgUserId,
+        })
+        .eq('AssignmentID', existing.AssignmentID)
+        .select()
+        .single();
+      assignment = upd.data;
+      assignError = upd.error;
+    } else {
+      const ins = await supabase
+        .from('TestAssignments')
+        .insert({
+          TestID: testId,
+          StudentID: studentId,
+          AssignmentType: 'Single',
+          AssignedBy: orgUserId,
+          Status: 'Pending',
+          AssignedAt: new Date().toISOString(),
+          DueDate: dueDate ? new Date(dueDate).toISOString() : null,
+        })
+        .select()
+        .single();
+      assignment = ins.data;
+      assignError = ins.error;
     }
 
-    // Create assignment
-    const { data: assignment, error: assignError } = await supabase
-      .from('TestAssignments')
-      .insert({
-        TestID: testId,
-        StudentID: studentId,
-        AssignmentType: 'Single',
-        AssignedBy: orgUserId,
-        Status: 'Pending',
-        AssignedAt: new Date().toISOString(),
-        DueDate: dueDate ? new Date(dueDate).toISOString() : null,
-      })
-      .select()
-      .single();
-
     if (assignError) {
-      console.error('Error creating assignment:', assignError);
-      return res.status(500).json({ error: 'Failed to assign test', details: assignError.message });
+      console.error('Error saving assignment:', assignError);
+      return res.status(500).json({
+        error: existing ? 'Failed to replace assignment' : 'Failed to assign test',
+        details: assignError.message,
+      });
     }
 
     // Create log
@@ -1474,7 +1864,7 @@ router.post('/:testId/assign/single', authenticate, requireRole(['OrgAdmin']), v
     });
 
     res.status(201).json({
-      message: 'Test assigned successfully',
+      message: existing ? 'Assignment replaced successfully' : 'Test assigned successfully',
       assignment: {
         assignmentId: assignment.AssignmentID,
         testId: assignment.TestID,
@@ -1510,13 +1900,17 @@ router.post('/:testId/assign/multiple', authenticate, requireRole(['OrgAdmin']),
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
       .from('Tests')
-      .select('TestID, TestName, OrgID')
+      .select('TestID, TestName, OrgID, SubscriptionID')
       .eq('TestID', testId)
       .eq('OrgID', orgId)
       .single();
 
     if (testError || !test) {
       return res.status(404).json({ error: 'Test not found' });
+    }
+    const modeGuard = await ensureScheduledModeEnabledForTestSubscription(test);
+    if (!modeGuard.ok) {
+      return res.status(403).json({ error: modeGuard.error, code: 'SCHEDULED_MODE_DISABLED' });
     }
 
     // Verify all students belong to organization
@@ -1562,6 +1956,15 @@ router.post('/:testId/assign/multiple', authenticate, requireRole(['OrgAdmin']),
         console.error('Error deleting existing assignments:', delError);
         return res.status(500).json({ error: 'Failed to replace assignments', details: delError.message });
       }
+
+      const { error: clearAttemptsError } = await deleteStudentAttemptsForTest(supabase, testId, studentIds);
+      if (clearAttemptsError) {
+        console.error('Error clearing attempts for reassignment:', clearAttemptsError);
+        return res.status(500).json({
+          error: 'Failed to reset prior attempts for reassigned test',
+          details: clearAttemptsError.message,
+        });
+      }
     }
 
     if (newStudentIds.length === 0 && !replaceExisting) {
@@ -1570,7 +1973,7 @@ router.post('/:testId/assign/multiple', authenticate, requireRole(['OrgAdmin']),
 
     // Create assignments (either new only, or full list if replacing)
     const insertStudentIds = replaceExisting ? studentIds : newStudentIds;
-    const assignmentsToInsert = insertStudentIds.map(studentId => ({
+    const assignmentsToInsert = insertStudentIds.map((studentId) => ({
       TestID: testId,
       StudentID: studentId,
       AssignmentType: 'Multiple',
@@ -1638,13 +2041,17 @@ router.post('/:testId/assign/group', authenticate, requireRole(['OrgAdmin']), ve
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
       .from('Tests')
-      .select('TestID, TestName, OrgID')
+      .select('TestID, TestName, OrgID, SubscriptionID')
       .eq('TestID', testId)
       .eq('OrgID', orgId)
       .single();
 
     if (testError || !test) {
       return res.status(404).json({ error: 'Test not found' });
+    }
+    const modeGuard = await ensureScheduledModeEnabledForTestSubscription(test);
+    if (!modeGuard.ok) {
+      return res.status(403).json({ error: modeGuard.error, code: 'SCHEDULED_MODE_DISABLED' });
     }
 
     // Verify group belongs to organization
@@ -1702,6 +2109,15 @@ router.post('/:testId/assign/group', authenticate, requireRole(['OrgAdmin']), ve
         console.error('Error deleting existing assignments:', delError);
         return res.status(500).json({ error: 'Failed to replace assignments', details: delError.message });
       }
+
+      const { error: clearAttemptsError } = await deleteStudentAttemptsForTest(supabase, testId, studentIds);
+      if (clearAttemptsError) {
+        console.error('Error clearing attempts for reassignment:', clearAttemptsError);
+        return res.status(500).json({
+          error: 'Failed to reset prior attempts for reassigned test',
+          details: clearAttemptsError.message,
+        });
+      }
     }
 
     if (newStudentIds.length === 0 && !replaceExisting) {
@@ -1738,7 +2154,7 @@ router.post('/:testId/assign/group', authenticate, requireRole(['OrgAdmin']), ve
 
     // Create assignments
     const insertStudentIds = replaceExisting ? studentIds : newStudentIds;
-    const assignmentsToInsert = insertStudentIds.map(studentId => ({
+    const assignmentsToInsert = insertStudentIds.map((studentId) => ({
       TestID: testId,
       StudentID: studentId,
       GroupID: groupId,
@@ -1807,13 +2223,17 @@ router.post('/:testId/assign/groups', authenticate, requireRole(['OrgAdmin']), v
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
       .from('Tests')
-      .select('TestID, TestName, OrgID')
+      .select('TestID, TestName, OrgID, SubscriptionID')
       .eq('TestID', testId)
       .eq('OrgID', orgId)
       .single();
 
     if (testError || !test) {
       return res.status(404).json({ error: 'Test not found' });
+    }
+    const modeGuard = await ensureScheduledModeEnabledForTestSubscription(test);
+    if (!modeGuard.ok) {
+      return res.status(403).json({ error: modeGuard.error, code: 'SCHEDULED_MODE_DISABLED' });
     }
 
     // Verify all groups belong to organization
@@ -1875,6 +2295,15 @@ router.post('/:testId/assign/groups', authenticate, requireRole(['OrgAdmin']), v
       if (delError) {
         console.error('Error deleting existing assignments:', delError);
         return res.status(500).json({ error: 'Failed to replace assignments', details: delError.message });
+      }
+
+      const { error: clearAttemptsError } = await deleteStudentAttemptsForTest(supabase, testId, studentIds);
+      if (clearAttemptsError) {
+        console.error('Error clearing attempts for reassignment:', clearAttemptsError);
+        return res.status(500).json({
+          error: 'Failed to reset prior attempts for reassigned test',
+          details: clearAttemptsError.message,
+        });
       }
     }
 
@@ -2035,6 +2464,15 @@ router.post('/:testId/assign/all', authenticate, requireRole(['OrgAdmin']), veri
         console.error('Error deleting existing assignments:', delError);
         return res.status(500).json({ error: 'Failed to replace assignments', details: delError.message });
       }
+
+      const { error: clearAttemptsError } = await deleteStudentAttemptsForTest(supabase, testId, studentIds);
+      if (clearAttemptsError) {
+        console.error('Error clearing attempts for reassignment:', clearAttemptsError);
+        return res.status(500).json({
+          error: 'Failed to reset prior attempts for reassigned test',
+          details: clearAttemptsError.message,
+        });
+      }
     }
 
     if (newStudentIds.length === 0 && !replaceExisting) {
@@ -2043,7 +2481,7 @@ router.post('/:testId/assign/all', authenticate, requireRole(['OrgAdmin']), veri
 
     // Create assignments
     const insertStudentIds = replaceExisting ? studentIds : newStudentIds;
-    const assignmentsToInsert = insertStudentIds.map(studentId => ({
+    const assignmentsToInsert = insertStudentIds.map((studentId) => ({
       TestID: testId,
       StudentID: studentId,
       AssignmentType: 'All',

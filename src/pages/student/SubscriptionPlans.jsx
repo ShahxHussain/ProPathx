@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { DollarSign, Calendar, Package, Check, X, Eye, BookOpen, Sparkles, AlertTriangle, XCircle } from 'lucide-react';
-import { orgDashboard } from '../../services/api';
-import './SubscriptionPlans.css';
+import { studentDashboardAPI } from '../../services/api';
+import '../org/SubscriptionPlans.css';
 
 const SubscriptionPlans = () => {
   const [plans, setPlans] = useState([]);
@@ -23,8 +23,8 @@ const SubscriptionPlans = () => {
       
       // Load plans and subscriptions in parallel
       const [plansResponse, subscriptionsResponse] = await Promise.all([
-        orgDashboard.getSubscriptionPlans(),
-        orgDashboard.getSubscriptions().catch(() => ({ subscriptions: [] })) // Don't fail if subscriptions fail
+        studentDashboardAPI.getSubscriptionPlans(),
+        studentDashboardAPI.getSubscriptions().catch(() => ({ subscriptions: [] })) // Don't fail if subscriptions fail
       ]);
       
       const plansList = plansResponse.plans || [];
@@ -82,7 +82,7 @@ const SubscriptionPlans = () => {
       <div className="plans-header">
         <div>
           <h1>Available Subscription Plans</h1>
-          <p>Choose a subscription plan that best fits your organization's needs</p>
+          <p>Plans for individual learners (Student) or both students and organizations (Both). Subscribe with your student account.</p>
         </div>
       </div>
 
@@ -255,7 +255,7 @@ const UnsubscribeConfirmationModal = ({ subscription, plan, onClose, onSuccess }
     setLoading(true);
 
     try {
-      await orgDashboard.cancelSubscription(subscription.SubscriptionID);
+      await studentDashboardAPI.cancelSubscription(subscription.SubscriptionID);
       
       if (onSuccess) {
         onSuccess();
@@ -314,11 +314,11 @@ const UnsubscribeConfirmationModal = ({ subscription, plan, onClose, onSuccess }
                   )}
                   <li>
                     <XCircle size={16} />
-                    <span>You will <strong>not be able to create new tests</strong> using exams from this plan</span>
+                    <span>You may <strong>lose access</strong> to features and exams tied to this plan</span>
                   </li>
                   <li>
                     <XCircle size={16} />
-                    <span>Existing tests and student assignments will <strong>remain active</strong>, but you won't be able to create new ones</span>
+                    <span>Assignments from your school (if any) are <strong>unchanged</strong></span>
                   </li>
                   {subscription.AutoRenew && (
                     <li>
@@ -328,7 +328,7 @@ const UnsubscribeConfirmationModal = ({ subscription, plan, onClose, onSuccess }
                   )}
                   <li>
                     <XCircle size={16} />
-                    <span>You can <strong>resubscribe</strong> at any time, but you'll need to set up your tests again</span>
+                    <span>You can <strong>resubscribe</strong> to a plan later from this page</span>
                   </li>
                 </ul>
               </div>
@@ -514,7 +514,7 @@ const SubscribeModal = ({ plan, onClose, onSuccess }) => {
     setLoading(true);
 
     try {
-      await orgDashboard.createSubscription({
+      await studentDashboardAPI.createSubscription({
         planId: plan.PlanID,
         autoRenew,
       });

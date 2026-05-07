@@ -64,6 +64,15 @@ GeneratedAt)
     Exams.ExamID, IsMandatory BOOLEAN DEFAULT FALSE, MaxStudents INT NULL,
     MaxTests INT NULL, MaxQuestionsPerTest INT NULL, MaxTestsPerDay INT NULL,
     AISupport BOOLEAN NULL, ExtraConfig JSON NULL, PK (PlanID, ExamID) )
+- **SubscriptionPlanTestModes** ( PlanID PK/FK → SubscriptionPlans.PlanID,
+    IsScheduledEnabled BOOLEAN DEFAULT FALSE,
+    IsAdaptiveEnabled BOOLEAN DEFAULT FALSE,
+    IsSelfTestBuilderEnabled BOOLEAN DEFAULT FALSE,
+    CreatedAt, UpdatedAt )
+    — plan-level dynamic control for test nature availability:
+    - Scheduled (organization flow)
+    - Adaptive (future module)
+    - Self-Test Builder (individual student flow)
 - **Subscriptions** ( SubscriptionID [PK], EntityType ENUM('Student','Organization'), EntityID
     [UUID], PlanID [FK→SubscriptionPlans.PlanID], StartDate, EndDate, ActivatedAt
     TIMESTAMP NULL, AutoRenew BOOLEAN DEFAULT FALSE, Status
