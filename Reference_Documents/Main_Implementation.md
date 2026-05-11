@@ -77,6 +77,21 @@ GeneratedAt)
     [UUID], PlanID [FK→SubscriptionPlans.PlanID], StartDate, EndDate, ActivatedAt
     TIMESTAMP NULL, AutoRenew BOOLEAN DEFAULT FALSE, Status
     ENUM('Active','Expired','Cancelled') )
+- **StudentExamEnrollments** — canonical **exam participation** for **organization-enrolled students only**
+    in the **current phase** (`OrgID` **required** → one row per **OrgID + StudentID + ExamID**).
+    **Individual learners** (`Students.OrgID` NULL) **do not** use this table yet: eligibility stays **student subscription + plan exams** only (no per-exam enrollment UI/API for them until explicitly extended).
+    - **Status** (enum): `Pending` → awaiting decision; `Approved` → may consume entitled exams/tests;
+      `Rejected` → denied but row kept for audit; `Withdrawn` → student/org ended participation without deleting history;
+      `Suspended` → temporary pause (same retention principle).
+    - **Source** (enum): `DirectAssign` (org/admin-led placement) vs `StudentRequest` (learner asked for this exam track).
+    - **RequestedByType** (`Student` \| `OrgAdmin` \| `System`), **RequestedAt** — who initiated the row and when.
+    - **ReviewedBy** [FK→OrgUsers.OrgUserID, nullable], **ReviewedAt**, **ReviewNote** — org-side reviewer for Pending/Rejected/Approved paths (individual flows may leave review columns NULL when auto-approved).
+    - **ApprovedAt** — when access became effective (replaces the older “ActivatedAt / implicit Active-only” notion for clarity).
+    - **SubscriptionID** [FK→Subscriptions, nullable] — retained for **entitlement traceability** (which subscription backed this enrollment row).
+    - **Withdrawal audit** (retained from the earlier lean table): **WithdrawnAt**, **WithdrawalInitiatedBy**, **WithdrawalActorUserID**, **WithdrawalReason** — scalable reporting on who ended participation after approval.
+    - **CreatedAt**, **UpdatedAt** — standard lifecycle timestamps.
+    - **Indexing:** `(OrgID, Status)`, pending queue `(OrgID, RequestedAt) WHERE Status = Pending`, plus Student/Exam lookups — supports large orgs without scanning whole tables.
+    - **Implicit enroll (org students, product rule):** if **no row** exists for `(OrgID, StudentID, ExamID)` while the org subscription still lists the exam, the backend may treat access as **allowed** until explicit enrollment rows gate access — converge with **Approved** / **Pending** semantics per release (see `Database_Schema.md` migration notes if upgrading from legacy text statuses).
 - **UsageCounters** ( UsageID [PK], SubscriptionID [FK→Subscriptions.SubscriptionID],
     ExamID [FK→Exams.ExamID], MonthKey CHAR(7), StudentsEnrolled INT DEFAULT 0,
     TestsCreated INT DEFAULT 0, TestsCreatedToday INT DEFAULT 0, QuestionsCreated

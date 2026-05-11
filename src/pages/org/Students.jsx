@@ -1,5 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, UserPlus, Upload, Download, X, CheckCircle, AlertCircle, FileText, Edit, Trash2 } from 'lucide-react';
+import {
+  Plus,
+  Search,
+  UserPlus,
+  Upload,
+  Download,
+  X,
+  CheckCircle,
+  AlertCircle,
+  FileText,
+  Edit,
+  Trash2,
+  Loader2,
+} from 'lucide-react';
 import { studentAPI } from '../../services/api';
 import './Students.css';
 
@@ -561,7 +574,10 @@ const Students = () => {
       <div className="page-header">
         <div>
           <h1>Students</h1>
-          <p className="page-subtitle">Manage and register students for your organization</p>
+          <p className="page-subtitle">
+            Manage and register students for your organization. Exam access is configured under <strong>Exam enrollments</strong> in the
+            sidebar.
+          </p>
         </div>
         <div className="header-actions">
           <button className="btn-secondary" onClick={() => setShowBulkModal(true)}>
@@ -721,6 +737,7 @@ const Students = () => {
           }}
         />
       )}
+
     </div>
   );
 };

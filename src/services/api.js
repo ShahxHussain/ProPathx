@@ -37,6 +37,7 @@ const request = async (endpoint, options = {}) => {
       const error = new Error(data.error || `HTTP error! status: ${response.status}`);
       error.status = response.status;
       error.details = data.details || data;
+      if (data.code) error.code = data.code;
       // Include all error properties for detailed error display
       if (data.errorCode) error.errorCode = data.errorCode;
       if (data.hint) error.hint = data.hint;
@@ -632,6 +633,69 @@ export const studentAPI = {
   deleteStudent: async (studentId) => {
     return request(`/api/org/students/${studentId}`, {
       method: 'DELETE',
+    });
+  },
+
+  getStudentExamEnrollments: async (studentId) => {
+    return request(`/api/org/students/${studentId}/exam-enrollments`, { method: 'GET' });
+  },
+
+  withdrawStudentExamEnrollment: async (studentId, examId, payload = {}) => {
+    return request(`/api/org/students/${studentId}/exam-enrollments/${examId}/withdraw`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  },
+
+  activateStudentExamEnrollment: async (studentId, examId) => {
+    return request(`/api/org/students/${studentId}/exam-enrollments/${examId}/activate`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  rejectStudentExamEnrollment: async (studentId, examId, payload = {}) => {
+    return request(`/api/org/students/${studentId}/exam-enrollments/${examId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  },
+
+  bulkAssignExamEnrollments: async (payload) => {
+    return request('/api/org/students/exam-enrollments/bulk-assign', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getPendingExamEnrollmentRequests: async () => {
+    return request('/api/org/students/exam-enrollments/pending-requests', { method: 'GET' });
+  },
+
+  getBulkCandidateStudentsForEnrollments: async (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.page) params.append('page', String(filters.page));
+    if (filters.limit) params.append('limit', String(filters.limit));
+    if (filters.search) params.append('search', filters.search);
+    if (Array.isArray(filters.examIds) && filters.examIds.length > 0) {
+      params.append('examIds', filters.examIds.join(','));
+    }
+    const qs = params.toString();
+    return request(`/api/org/students/exam-enrollments/bulk-students${qs ? `?${qs}` : ''}`, {
+      method: 'GET',
+    });
+  },
+
+  getExamEnrollmentDirectory: async (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.page) params.append('page', String(filters.page));
+    if (filters.limit) params.append('limit', String(filters.limit));
+    if (filters.search) params.append('search', filters.search);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.examId) params.append('examId', filters.examId);
+    const qs = params.toString();
+    return request(`/api/org/students/exam-enrollments/directory${qs ? `?${qs}` : ''}`, {
+      method: 'GET',
     });
   },
 };
@@ -1925,6 +1989,31 @@ export const studentDashboardAPI = {
     return request('/api/student/individual/self-test/create', {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  },
+
+  getExamEnrollments: async () => {
+    return request('/api/student/exam-enrollments', { method: 'GET' });
+  },
+
+  withdrawExamEnrollment: async (examId, payload = {}) => {
+    return request(`/api/student/exam-enrollments/${examId}/withdraw`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  },
+
+  activateExamEnrollment: async (examId) => {
+    return request(`/api/student/exam-enrollments/${examId}/activate`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  requestExamEnrollmentReview: async (examId) => {
+    return request(`/api/student/exam-enrollments/${examId}/request`, {
+      method: 'POST',
+      body: JSON.stringify({}),
     });
   },
 };

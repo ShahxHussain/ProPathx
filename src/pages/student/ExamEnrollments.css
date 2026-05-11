@@ -1,0 +1,182 @@
+.exam-enroll-page {
+  display: grid;
+  gap: 20px;
+  max-width: 960px;
+}
+
+.exam-enroll-head h1 {
+  margin: 0 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 24px;
+  color: var(--text, #0f172a);
+}
+
+.exam-enroll-head p {
+  margin: 0;
+  color: var(--text-muted, #64748b);
+  line-height: 1.55;
+  font-size: 14px;
+}
+
+.exam-enroll-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted, #64748b);
+}
+
+.exam-enroll-loading .spin {
+  animation: exam-enroll-spin 0.85s linear infinite;
+}
+
+@keyframes exam-enroll-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.exam-enroll-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.exam-enroll-empty {
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px dashed var(--border, #e2e8f0);
+  color: var(--text-muted, #64748b);
+  font-size: 14px;
+}
+
+.exam-enroll-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.exam-enroll-card {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.exam-enroll-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.exam-enroll-card-top h2 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--text, #0f172a);
+}
+
+.exam-enroll-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.exam-enroll-badge--implicit,
+.exam-enroll-badge--approved,
+.exam-enroll-badge--active {
+  background: rgba(13, 148, 136, 0.12);
+  color: var(--stu-teal-dark, #0f766e);
+}
+
+.exam-enroll-badge--pending {
+  background: rgba(251, 191, 36, 0.22);
+  color: #b45309;
+}
+
+.exam-enroll-badge--rejected {
+  background: rgba(248, 113, 113, 0.15);
+  color: #b91c1c;
+}
+
+.exam-enroll-badge--withdrawn {
+  background: rgba(248, 113, 113, 0.15);
+  color: #b91c1c;
+}
+
+.exam-enroll-badge--suspended {
+  background: rgba(251, 191, 36, 0.2);
+  color: #b45309;
+}
+
+.exam-enroll-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted, #64748b);
+}
+
+.exam-enroll-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--border, #cbd5e1);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-elevated, rgba(241, 245, 249, 0.6));
+  font-size: 13px;
+  color: var(--text, #334155);
+}
+
+.exam-enroll-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.exam-enroll-btn {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+}
+
+.exam-enroll-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.exam-enroll-btn--primary {
+  background: linear-gradient(135deg, var(--stu-teal-dark, #0f766e), var(--stu-teal, #14b8a6));
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(13, 148, 136, 0.22);
+}
+
+.exam-enroll-btn--outline {
+  background: transparent;
+  border: 1px solid var(--border, #cbd5e1);
+  color: var(--text, #334155);
+}
+
+.exam-enroll-btn--outline:hover:not(:disabled) {
+  border-color: var(--stu-teal, #14b8a6);
+  color: var(--stu-teal-dark, #0f766e);
+}
+
+.exam-enroll-btn--ghost {
+  background: transparent;
+  border: 1px dashed var(--border, #cbd5e1);
+  color: var(--text-muted, #64748b);
+}
+
+.exam-enroll-btn--ghost:hover:not(:disabled) {
+  border-color: var(--stu-teal, #14b8a6);
+  color: var(--stu-teal-dark, #0f766e);
+}

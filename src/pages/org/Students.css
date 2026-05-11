@@ -467,6 +467,233 @@
   color: inherit;
 }
 
+.exam-org-modal-body {
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+}
+
+.exam-org-hint {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.exam-org-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.spin-icon {
+  animation: exam-spin 0.85s linear infinite;
+}
+
+@keyframes exam-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.exam-org-empty {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.exam-org-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.exam-org-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+}
+
+.exam-org-row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.exam-org-status {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.exam-org-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.exam-org-row-actions--stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.exam-org-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.exam-org-row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.exam-org-chip {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.exam-org-chip--implicit,
+.exam-org-chip--approved,
+.exam-org-chip--active {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
+.exam-org-chip--pending {
+  background: rgba(251, 191, 36, 0.28);
+  color: #b45309;
+}
+
+.exam-org-chip--rejected {
+  background: rgba(248, 113, 113, 0.18);
+  color: #b91c1c;
+}
+
+.exam-org-chip--withdrawn {
+  background: rgba(248, 113, 113, 0.15);
+  color: #b91c1c;
+}
+
+.exam-org-chip--suspended {
+  background: rgba(251, 191, 36, 0.22);
+  color: #b45309;
+}
+
+.exam-org-row-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.exam-org-row-hint--emph {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.15);
+  color: var(--text);
+}
+
+.exam-org-row-meta {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.exam-org-row-meta strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.exam-org-review-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--background);
+  border: 1px solid var(--border);
+}
+
+.exam-org-review-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.exam-org-reject-panel {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.exam-org-reject-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.exam-org-reject-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  min-height: 72px;
+  margin-bottom: 8px;
+}
+
+.exam-org-reject-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-danger.btn-small {
+  background: #dc2626;
+  border: 1px solid #dc2626;
+  color: #fff;
+}
+
+.btn-danger.btn-small:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.btn-small {
+  padding: 6px 12px !important;
+  font-size: 13px !important;
+}
+
 @media (max-width: 768px) {
   .form-row-2 {
     grid-template-columns: 1fr;

@@ -301,7 +301,10 @@ function allocateQuestionsBySubject(subjects, requestedTotal) {
   };
 }
 
-async function getEligibleStudentExamMap(studentId, allowedPlanIds = null, orgId = null) {
+/**
+ * Exams granted by active subscription plan(s), before per-student enrollment filtering.
+ */
+async function buildPlanExamEligibilityMap(studentId, allowedPlanIds = null, orgId = null) {
   const activeSubsAll = await getActiveSubscriptionsForStudentContext(studentId, orgId);
   const allowedSet = Array.isArray(allowedPlanIds) ? new Set(allowedPlanIds.filter(Boolean)) : null;
   const activeSubs = allowedSet
@@ -337,6 +340,470 @@ async function getEligibleStudentExamMap(studentId, allowedPlanIds = null, orgId
     }
   }
   return out;
+}
+
+/** Canonical DB enum + legacy text Active (pre-migration). */
+function enrollmentRecordAllowsExamAccess(statusRaw) {
+  const s = String(statusRaw ?? '').trim();
+  if (!s) return true;
+  const u = s.toLowerCase();
+  return u === 'approved' || u === 'active';
+}
+
+function enrollmentStatusHint(statusRaw) {
+  const s = String(statusRaw ?? '').trim();
+  if (!s) return null;
+  const hints = {
+    Pending: 'Awaiting approval from your organization.',
+    Rejected: 'Your organization did not approve access for this exam.',
+    Withdrawn: 'You left this exam (or were withdrawn). Request access — your school must approve.',
+    Suspended: 'Access is paused. Contact your organization or submit a request if shown.',
+    Approved: null,
+    Active: null,
+  };
+  return hints[s] ?? hints[s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()] ?? null;
+}
+
+/** Admin-facing guidance when reviewing enrollments (not shown on student dashboard). */
+function enrollmentStatusHintOrg(hasEnrollmentRow, statusRaw) {
+  if (!hasEnrollmentRow) {
+    return 'Subscription-only access: no enrollment row. Student keeps normal plan access until you withdraw.';
+  }
+  const s = String(statusRaw ?? '').trim();
+  const hints = {
+    Pending:
+      'Awaiting your approval — student cannot take this exam until approved in Pending requests.',
+    Rejected:
+      'Rejected — blocked until the student submits a new request (Pending) or you restore access.',
+    Withdrawn:
+      'Withdrawn — blocked until the student submits a Pending request or you use Approve / enroll.',
+    Suspended:
+      'Suspended — blocked until you approve/enroll or the student submits a Pending request when applicable.',
+    Approved: null,
+    Active: null,
+  };
+  return hints[s] ?? hints[s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()] ?? null;
+}
+
+/**
+ * Organization-enrolled students only: enrollment rows are scoped by OrgID.
+ * Individual learners skip this gate (subscription/plan eligibility only).
+ */
+async function applyStudentEnrollmentGate(studentId, examMap, orgId = null) {
+  if (!examMap || examMap.size === 0) return;
+  const oid = normalizeOrgIdForEnrollment(orgId);
+  if (!oid) return;
+  const ids = [...examMap.keys()];
+  const { data, error } = await supabase
+    .from('StudentExamEnrollments')
+    .select('ExamID, Status')
+    .eq('StudentID', studentId)
+    .eq('OrgID', oid)
+    .in('ExamID', ids);
+  if (error) throw error;
+  for (const row of data || []) {
+    if (!enrollmentRecordAllowsExamAccess(row.Status)) examMap.delete(row.ExamID);
+  }
+}
+
+async function getEligibleStudentExamMap(studentId, allowedPlanIds = null, orgId = null) {
+  const out = await buildPlanExamEligibilityMap(studentId, allowedPlanIds, orgId);
+  await applyStudentEnrollmentGate(studentId, out, orgId);
+  return out;
+}
+
+async function getStudentEnrollmentBlockedExamIdsSet(studentId, examIds, orgId = null) {
+  const oid = normalizeOrgIdForEnrollment(orgId);
+  if (!oid) return new Set();
+  const ids = [...new Set((examIds || []).filter(Boolean))];
+  if (ids.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from('StudentExamEnrollments')
+    .select('ExamID, Status')
+    .eq('StudentID', studentId)
+    .eq('OrgID', oid)
+    .in('ExamID', ids);
+  if (error) throw error;
+  const blocked = new Set();
+  for (const row of data || []) {
+    if (!enrollmentRecordAllowsExamAccess(row.Status)) blocked.add(row.ExamID);
+  }
+  return blocked;
+}
+
+async function isStudentExamAccessAllowed(studentId, examId, orgId = null) {
+  if (!examId) return true;
+  const oid = normalizeOrgIdForEnrollment(orgId);
+  if (!oid) return true;
+  const { data, error } = await supabase
+    .from('StudentExamEnrollments')
+    .select('Status')
+    .eq('StudentID', studentId)
+    .eq('ExamID', examId)
+    .eq('OrgID', oid)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return true;
+  return enrollmentRecordAllowsExamAccess(data.Status);
+}
+
+function normalizeOrgIdForEnrollment(orgId) {
+  if (orgId == null || orgId === '') return null;
+  return String(orgId);
+}
+
+async function upsertStudentExamWithdrawal({
+  studentId,
+  examId,
+  orgId,
+  subscriptionId,
+  initiatedBy,
+  actorUserId,
+  reason,
+}) {
+  const nowIso = new Date().toISOString();
+  const orgStored = normalizeOrgIdForEnrollment(orgId);
+  if (!orgStored) {
+    throw new Error('OrgID is required for exam enrollment updates');
+  }
+
+  const sourceRow =
+    initiatedBy === 'Student' ? 'StudentRequest' : 'DirectAssign';
+  const requestedByTypeRow =
+    initiatedBy === 'Student' ? 'Student' : 'OrgAdmin';
+
+  const { data: existing, error: exErr } = await supabase
+    .from('StudentExamEnrollments')
+    .select('*')
+    .eq('StudentID', studentId)
+    .eq('ExamID', examId)
+    .eq('OrgID', orgStored)
+    .maybeSingle();
+  if (exErr) throw exErr;
+
+  if (existing) {
+    const stLower = String(existing.Status ?? '').trim().toLowerCase();
+    if (stLower === 'withdrawn') {
+      return { ok: false, code: 'ALREADY_WITHDRAWN', enrollment: existing };
+    }
+    const { data: updated, error: upErr } = await supabase
+      .from('StudentExamEnrollments')
+      .update({
+        Status: 'Withdrawn',
+        WithdrawnAt: nowIso,
+        WithdrawalInitiatedBy: initiatedBy,
+        WithdrawalActorUserID: actorUserId ?? null,
+        WithdrawalReason: reason ?? null,
+        ApprovedAt: null,
+        ReviewNote: null,
+        ReviewedBy: null,
+        ReviewedAt: null,
+        OrgID: orgStored ?? existing.OrgID ?? null,
+        SubscriptionID: subscriptionId ?? existing.SubscriptionID ?? null,
+        UpdatedAt: nowIso,
+      })
+      .eq('EnrollmentID', existing.EnrollmentID)
+      .select()
+      .single();
+    if (upErr) throw upErr;
+    return { ok: true, enrollment: updated };
+  }
+
+  const insertPayload = {
+    StudentID: studentId,
+    ExamID: examId,
+    OrgID: orgStored,
+    SubscriptionID: subscriptionId ?? null,
+    Status: 'Withdrawn',
+    Source: sourceRow,
+    RequestedByType: requestedByTypeRow,
+    RequestedAt: nowIso,
+    WithdrawnAt: nowIso,
+    WithdrawalInitiatedBy: initiatedBy,
+    WithdrawalActorUserID: actorUserId ?? null,
+    WithdrawalReason: reason ?? null,
+    CreatedAt: nowIso,
+    UpdatedAt: nowIso,
+  };
+
+  const { data: inserted, error: insErr } = await supabase
+    .from('StudentExamEnrollments')
+    .insert(insertPayload)
+    .select()
+    .single();
+  if (insErr) throw insErr;
+  return { ok: true, enrollment: inserted };
+}
+
+async function upsertStudentExamActivation({
+  studentId,
+  examId,
+  orgId,
+  subscriptionId,
+  approvePendingAsOrg = false,
+  reviewerOrgUserId = null,
+}) {
+  const nowIso = new Date().toISOString();
+  const orgStored = normalizeOrgIdForEnrollment(orgId);
+  if (!orgStored) {
+    throw new Error('OrgID is required for exam enrollment updates');
+  }
+
+  const { data: existing, error: exErr } = await supabase
+    .from('StudentExamEnrollments')
+    .select('*')
+    .eq('StudentID', studentId)
+    .eq('ExamID', examId)
+    .eq('OrgID', orgStored)
+    .maybeSingle();
+  if (exErr) throw exErr;
+
+  const clearWithdrawal = {
+    WithdrawnAt: null,
+    WithdrawalInitiatedBy: null,
+    WithdrawalActorUserID: null,
+    WithdrawalReason: null,
+  };
+
+  if (!existing) {
+    if (!approvePendingAsOrg) {
+      return { ok: false, code: 'ORG_APPROVAL_REQUIRED', enrollment: null };
+    }
+    const insertPayload = {
+      StudentID: studentId,
+      ExamID: examId,
+      OrgID: orgStored,
+      SubscriptionID: subscriptionId ?? null,
+      Status: 'Approved',
+      Source: 'DirectAssign',
+      RequestedByType: approvePendingAsOrg ? 'OrgAdmin' : 'Student',
+      RequestedAt: nowIso,
+      ApprovedAt: nowIso,
+      ReviewNote: null,
+      ReviewedBy: approvePendingAsOrg ? reviewerOrgUserId ?? null : null,
+      ReviewedAt: approvePendingAsOrg ? nowIso : null,
+      ...clearWithdrawal,
+      CreatedAt: nowIso,
+      UpdatedAt: nowIso,
+    };
+    const { data: inserted, error: insErr } = await supabase
+      .from('StudentExamEnrollments')
+      .insert(insertPayload)
+      .select()
+      .single();
+    if (insErr) throw insErr;
+    return { ok: true, enrollment: inserted };
+  }
+
+  const stLower = String(existing.Status ?? '').trim().toLowerCase();
+
+  if (stLower === 'pending') {
+    if (!approvePendingAsOrg) {
+      return { ok: false, code: 'PENDING_APPROVAL', enrollment: existing };
+    }
+    const { data: updated, error: upErr } = await supabase
+      .from('StudentExamEnrollments')
+      .update({
+        Status: 'Approved',
+        ApprovedAt: nowIso,
+        ReviewedBy: reviewerOrgUserId ?? null,
+        ReviewedAt: nowIso,
+        SubscriptionID: subscriptionId ?? existing.SubscriptionID ?? null,
+        ...clearWithdrawal,
+        UpdatedAt: nowIso,
+      })
+      .eq('EnrollmentID', existing.EnrollmentID)
+      .select()
+      .single();
+    if (upErr) throw upErr;
+    return { ok: true, enrollment: updated };
+  }
+
+  if (enrollmentRecordAllowsExamAccess(existing.Status)) {
+    return { ok: true, enrollment: existing, noop: true };
+  }
+
+  const { data: updated, error: upErr } = await supabase
+    .from('StudentExamEnrollments')
+    .update({
+      Status: 'Approved',
+      ApprovedAt: nowIso,
+      ReviewNote: null,
+      ReviewedBy: approvePendingAsOrg ? reviewerOrgUserId ?? null : null,
+      ReviewedAt: approvePendingAsOrg ? nowIso : null,
+      OrgID: orgStored ?? existing.OrgID ?? null,
+      SubscriptionID: subscriptionId ?? existing.SubscriptionID ?? null,
+      ...clearWithdrawal,
+      UpdatedAt: nowIso,
+    })
+    .eq('EnrollmentID', existing.EnrollmentID)
+    .select()
+    .single();
+  if (upErr) throw upErr;
+  return { ok: true, enrollment: updated };
+}
+
+/**
+ * Student submits enrollment access: Pending until OrgAdmin approves (Withdrawn / Rejected / Suspended).
+ * Implicit-only access uses no row — student cannot POST activate/request until there is a row (leave creates Withdrawn).
+ */
+async function studentSubmitEnrollmentAccessRequest({ studentId, examId, orgId, subscriptionId }) {
+  const nowIso = new Date().toISOString();
+  const orgStored = normalizeOrgIdForEnrollment(orgId);
+  if (!orgStored) {
+    throw new Error('OrgID is required for exam enrollment updates');
+  }
+
+  const { data: existing, error: exErr } = await supabase
+    .from('StudentExamEnrollments')
+    .select('*')
+    .eq('StudentID', studentId)
+    .eq('ExamID', examId)
+    .eq('OrgID', orgStored)
+    .maybeSingle();
+  if (exErr) throw exErr;
+
+  if (!existing) {
+    return { ok: false, code: 'NO_ENROLLMENT_ROW', enrollment: null };
+  }
+
+  const stLower = String(existing.Status ?? '').trim().toLowerCase();
+
+  if (enrollmentRecordAllowsExamAccess(existing.Status)) {
+    return { ok: true, enrollment: existing, noop: true };
+  }
+  if (stLower === 'pending') {
+    return { ok: true, enrollment: existing, noop: true, alreadyPending: true };
+  }
+
+  if (stLower !== 'withdrawn' && stLower !== 'rejected' && stLower !== 'suspended') {
+    return { ok: false, code: 'INVALID_STATE', enrollment: existing };
+  }
+
+  const { data: updated, error: upErr } = await supabase
+    .from('StudentExamEnrollments')
+    .update({
+      Status: 'Pending',
+      Source: 'StudentRequest',
+      RequestedByType: 'Student',
+      RequestedAt: nowIso,
+      ReviewNote: null,
+      ReviewedBy: null,
+      ReviewedAt: null,
+      ApprovedAt: null,
+      WithdrawnAt: null,
+      WithdrawalInitiatedBy: null,
+      WithdrawalActorUserID: null,
+      WithdrawalReason: null,
+      SubscriptionID: subscriptionId ?? existing.SubscriptionID ?? null,
+      UpdatedAt: nowIso,
+    })
+    .eq('EnrollmentID', existing.EnrollmentID)
+    .select()
+    .single();
+  if (upErr) throw upErr;
+  return { ok: true, enrollment: updated };
+}
+
+async function orgRejectStudentExamEnrollment({
+  studentId,
+  examId,
+  orgId,
+  reviewerOrgUserId,
+  reviewNote,
+}) {
+  const nowIso = new Date().toISOString();
+  const orgStored = normalizeOrgIdForEnrollment(orgId);
+  if (!orgStored) {
+    throw new Error('OrgID is required for exam enrollment updates');
+  }
+
+  const note =
+    reviewNote != null && String(reviewNote).trim() !== ''
+      ? String(reviewNote).trim().slice(0, 4000)
+      : null;
+
+  const { data: existing, error: exErr } = await supabase
+    .from('StudentExamEnrollments')
+    .select('*')
+    .eq('StudentID', studentId)
+    .eq('ExamID', examId)
+    .eq('OrgID', orgStored)
+    .maybeSingle();
+  if (exErr) throw exErr;
+
+  if (!existing) {
+    return { ok: false, code: 'NO_ROW', enrollment: null };
+  }
+
+  const stLower = String(existing.Status ?? '').trim().toLowerCase();
+  if (stLower !== 'pending') {
+    return { ok: false, code: 'NOT_PENDING', enrollment: existing };
+  }
+
+  const { data: updated, error: upErr } = await supabase
+    .from('StudentExamEnrollments')
+    .update({
+      Status: 'Rejected',
+      ReviewNote: note,
+      ReviewedBy: reviewerOrgUserId ?? null,
+      ReviewedAt: nowIso,
+      ApprovedAt: null,
+      UpdatedAt: nowIso,
+    })
+    .eq('EnrollmentID', existing.EnrollmentID)
+    .select()
+    .single();
+  if (upErr) throw upErr;
+  return { ok: true, enrollment: updated };
+}
+
+async function buildStudentExamEnrollmentListPayload(studentId, orgId = null) {
+  const oid = normalizeOrgIdForEnrollment(orgId);
+  if (!oid) return { exams: [], planExamCount: 0 };
+
+  const planMap = await buildPlanExamEligibilityMap(studentId, null, orgId);
+  const examIds = [...planMap.keys()];
+  if (examIds.length === 0) return { exams: [], planExamCount: 0 };
+
+  const [{ data: exams, error: exErr }, { data: enrollRows, error: enErr }] = await Promise.all([
+    supabase.from('Exams').select('ExamID, ExamName').in('ExamID', examIds),
+    supabase
+      .from('StudentExamEnrollments')
+      .select('*')
+      .eq('StudentID', studentId)
+      .eq('OrgID', oid)
+      .in('ExamID', examIds),
+  ]);
+  if (exErr) throw exErr;
+  if (enErr) throw enErr;
+
+  const nameById = new Map((exams || []).map((e) => [e.ExamID, e.ExamName]));
+  const rowByExam = new Map((enrollRows || []).map((r) => [r.ExamID, r]));
+
+  const rows = examIds
+    .map((examId) => {
+      const meta = planMap.get(examId);
+      const row = rowByExam.get(examId);
+      const status = row ? String(row.Status ?? '').trim() : '';
+      const accessActive = !row || enrollmentRecordAllowsExamAccess(status);
+      const enrollmentLabel = row ? status : 'Implicit';
+      const statusHint = row ? enrollmentStatusHint(status) : null;
+      const statusHintOrg = enrollmentStatusHintOrg(!!row, status);
+      return {
+        examId,
+        examName: nameById.get(examId) || 'Exam',
+        subscriptionId: meta?.subscriptionId ?? null,
+        enrollmentStatus: enrollmentLabel,
+        accessActive,
+        statusHint,
+        statusHintOrg,
+        enrollment: row || null,
+      };
+    })
+    .sort((a, b) => String(a.examName).localeCompare(String(b.examName)));
+
+  return { exams: rows, planExamCount: rows.length };
 }
 
 async function isScheduledModeEnabledForTest(test) {
@@ -666,6 +1133,245 @@ router.delete(
       res.json({ message: 'Subscription cancelled successfully' });
     } catch (error) {
       console.error('Cancel student subscription error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * GET /api/student/exam-enrollments
+ * Exams included in the student's active subscription(s), with enrollment row + access flag.
+ */
+router.get(
+  '/exam-enrollments',
+  authenticate,
+  verifyActiveStatus,
+  requireStudentActor,
+  async (req, res) => {
+    try {
+      const { studentId } = req.user;
+      const orgId = req.user?.orgId ?? req.user?.OrgID ?? null;
+      if (!normalizeOrgIdForEnrollment(orgId)) {
+        return res.status(403).json({
+          error: 'Exam enrollment is available for organization students only.',
+          code: 'ORG_STUDENTS_ONLY',
+        });
+      }
+      const payload = await buildStudentExamEnrollmentListPayload(studentId, orgId);
+      res.json(payload);
+    } catch (error) {
+      console.error('Get student exam enrollments error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/student/exam-enrollments/:examId/withdraw
+ * Student leaves an exam (row retained with Status = Withdrawn).
+ */
+router.post(
+  '/exam-enrollments/:examId/withdraw',
+  authenticate,
+  verifyActiveStatus,
+  requireStudentActor,
+  async (req, res) => {
+    try {
+      const { studentId } = req.user;
+      const orgId = req.user?.orgId ?? req.user?.OrgID ?? null;
+      const examId = req.params.examId != null ? String(req.params.examId).trim() : null;
+      if (!examId) return res.status(400).json({ error: 'Exam ID is required' });
+      if (!normalizeOrgIdForEnrollment(orgId)) {
+        return res.status(403).json({
+          error: 'Exam enrollment is available for organization students only.',
+          code: 'ORG_STUDENTS_ONLY',
+        });
+      }
+
+      const planMap = await buildPlanExamEligibilityMap(studentId, null, orgId);
+      if (!planMap.has(examId)) {
+        return res.status(400).json({
+          error: 'This exam is not included in your active subscription.',
+          code: 'EXAM_NOT_IN_PLAN',
+        });
+      }
+      const meta = planMap.get(examId);
+      const actorUserId = req.user.userId ?? req.user.UserID ?? null;
+      const reason = req.body?.reason != null ? String(req.body.reason).slice(0, 2000) : null;
+
+      const result = await upsertStudentExamWithdrawal({
+        studentId,
+        examId,
+        orgId,
+        subscriptionId: meta?.subscriptionId ?? null,
+        initiatedBy: 'Student',
+        actorUserId,
+        reason,
+      });
+
+      if (!result.ok && result.code === 'ALREADY_WITHDRAWN') {
+        return res.status(409).json({
+          error: 'You have already left this exam.',
+          enrollment: result.enrollment,
+          code: 'ALREADY_WITHDRAWN',
+        });
+      }
+
+      res.json({
+        message: 'You have left this exam. Your history stays on record; you can re-enroll anytime while the exam remains on your plan.',
+        enrollment: result.enrollment,
+      });
+    } catch (error) {
+      console.error('Student withdraw exam error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/student/exam-enrollments/:examId/activate
+ * Student submits an enrollment request → Pending until OrgAdmin approves (no self-service Approved).
+ */
+router.post(
+  '/exam-enrollments/:examId/activate',
+  authenticate,
+  verifyActiveStatus,
+  requireStudentActor,
+  async (req, res) => {
+    try {
+      const { studentId } = req.user;
+      const orgId = req.user?.orgId ?? req.user?.OrgID ?? null;
+      const examId = req.params.examId != null ? String(req.params.examId).trim() : null;
+      if (!examId) return res.status(400).json({ error: 'Exam ID is required' });
+      if (!normalizeOrgIdForEnrollment(orgId)) {
+        return res.status(403).json({
+          error: 'Exam enrollment is available for organization students only.',
+          code: 'ORG_STUDENTS_ONLY',
+        });
+      }
+
+      const planMap = await buildPlanExamEligibilityMap(studentId, null, orgId);
+      if (!planMap.has(examId)) {
+        return res.status(400).json({
+          error: 'This exam is not included in your active subscription.',
+          code: 'EXAM_NOT_IN_PLAN',
+        });
+      }
+      const meta = planMap.get(examId);
+
+      const result = await studentSubmitEnrollmentAccessRequest({
+        studentId,
+        examId,
+        orgId,
+        subscriptionId: meta?.subscriptionId ?? null,
+      });
+
+      if (!result.ok && result.code === 'NO_ENROLLMENT_ROW') {
+        return res.status(400).json({
+          error:
+            'There is no enrollment record yet — you already have access through your subscription. Leave this exam first if you need to submit a request.',
+          code: 'NO_ENROLLMENT_ROW',
+        });
+      }
+
+      if (!result.ok && result.code === 'INVALID_STATE') {
+        return res.status(400).json({
+          error: 'Cannot submit an enrollment request for this exam in its current state.',
+          code: 'INVALID_STATE',
+          enrollment: result.enrollment,
+        });
+      }
+
+      let message =
+        'Request submitted. Your organization must approve before you can access this exam.';
+      if (result.noop && result.alreadyPending) {
+        message = 'Your request is already waiting for approval.';
+      } else if (result.noop) {
+        message = 'You already have access to this exam.';
+      }
+
+      res.json({
+        message,
+        enrollment: result.enrollment,
+        noop: !!result.noop,
+      });
+    } catch (error) {
+      console.error('Student activate exam error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/student/exam-enrollments/:examId/request
+ * Same as activate — student submits Pending until OrgAdmin approves (alias).
+ */
+router.post(
+  '/exam-enrollments/:examId/request',
+  authenticate,
+  verifyActiveStatus,
+  requireStudentActor,
+  async (req, res) => {
+    try {
+      const { studentId } = req.user;
+      const orgId = req.user?.orgId ?? req.user?.OrgID ?? null;
+      const examId = req.params.examId != null ? String(req.params.examId).trim() : null;
+      if (!examId) return res.status(400).json({ error: 'Exam ID is required' });
+      if (!normalizeOrgIdForEnrollment(orgId)) {
+        return res.status(403).json({
+          error: 'Exam enrollment is available for organization students only.',
+          code: 'ORG_STUDENTS_ONLY',
+        });
+      }
+
+      const planMap = await buildPlanExamEligibilityMap(studentId, null, orgId);
+      if (!planMap.has(examId)) {
+        return res.status(400).json({
+          error: 'This exam is not included in your active subscription.',
+          code: 'EXAM_NOT_IN_PLAN',
+        });
+      }
+      const meta = planMap.get(examId);
+
+      const result = await studentSubmitEnrollmentAccessRequest({
+        studentId,
+        examId,
+        orgId,
+        subscriptionId: meta?.subscriptionId ?? null,
+      });
+
+      if (!result.ok && result.code === 'INVALID_STATE') {
+        return res.status(400).json({
+          error:
+            'You can only request access after withdrawal, rejection, or suspension — not while already pending or approved.',
+          code: 'INVALID_STATE',
+          enrollment: result.enrollment,
+        });
+      }
+
+      if (!result.ok && result.code === 'NO_ENROLLMENT_ROW') {
+        return res.status(400).json({
+          error:
+            'There is no enrollment record yet — you already have access through your subscription.',
+          code: 'NO_ENROLLMENT_ROW',
+        });
+      }
+
+      let message =
+        'Your request was sent. You will regain access after your organization approves.';
+      if (result.noop && result.alreadyPending) {
+        message = 'Your request is already waiting for approval.';
+      } else if (result.noop) {
+        message = 'You already have access to this exam.';
+      }
+
+      res.json({
+        message,
+        enrollment: result.enrollment,
+        noop: !!result.noop,
+      });
+    } catch (error) {
+      console.error('Student request exam enrollment error:', error);
       res.status(500).json({ error: 'Internal server error', details: error.message });
     }
   }
@@ -1346,7 +2052,8 @@ router.get('/dashboard/stats', authenticate, async (req, res) => {
  */
 router.get('/assignments', authenticate, async (req, res) => {
   try {
-    const { studentId } = req.user;
+    const { studentId, orgId: rawOrg } = req.user;
+    const orgId = rawOrg ?? req.user?.OrgID ?? null;
 
     if (!studentId) {
       return res.status(401).json({ error: 'Not authenticated as student' });
@@ -1370,7 +2077,7 @@ router.get('/assignments', authenticate, async (req, res) => {
         const { data: test, error: testErr } = await supabase
           .from('Tests')
           .select(
-            'TestID, TestName, TestDate, StartTime, EndTime, DurationMinutes, Status, TotalQuestions, TotalMarks, SubscriptionID'
+            'TestID, ExamID, TestName, TestDate, StartTime, EndTime, DurationMinutes, Status, TotalQuestions, TotalMarks, SubscriptionID'
           )
           .eq('TestID', assignment.TestID)
           .maybeSingle();
@@ -1430,7 +2137,6 @@ router.get('/assignments', authenticate, async (req, res) => {
           ...assignment,
           test: testDto,
           Tests: testForArray ? [testForArray] : [],
-          unavailableReason: scheduledAllowed ? null : 'Scheduled test mode is not included in your subscription plan.',
           isScheduledModeAllowed: scheduledAllowed,
           latestAttempt: enrichAttemptDto(latestRaw, testTotalMarks),
           hasAttempted: attempts && attempts.length > 0,
@@ -1439,9 +2145,37 @@ router.get('/assignments', authenticate, async (req, res) => {
       })
     );
 
+    const examIdsForGate = enrichedAssignments
+      .map((a) => pickCol(a.test ?? {}, ['ExamID', 'examId']))
+      .filter(Boolean);
+    let enrollmentBlockedSet = new Set();
+    try {
+      enrollmentBlockedSet = await getStudentEnrollmentBlockedExamIdsSet(studentId, examIdsForGate, orgId);
+    } catch (gateErr) {
+      console.error('GET /assignments enrollment gate:', gateErr);
+    }
+
+    const assignmentsOut = enrichedAssignments.map((a) => {
+      const examId = pickCol(a.test ?? {}, ['ExamID', 'examId']);
+      const examBlocked = !!(examId && enrollmentBlockedSet.has(examId));
+      const scheduledAllowed = a.isScheduledModeAllowed;
+      let unavailableReason = null;
+      if (!scheduledAllowed) {
+        unavailableReason = 'Scheduled test mode is not included in your subscription plan.';
+      } else if (examBlocked) {
+        unavailableReason =
+          'You are not enrolled in this exam (withdrawn or suspended). Open My Exams to re-enroll while your plan includes it.';
+      }
+      return {
+        ...a,
+        unavailableReason,
+        isExamEnrollmentAllowed: !examBlocked,
+      };
+    });
+
     res.json({
-      assignments: enrichedAssignments,
-      total: enrichedAssignments.length,
+      assignments: assignmentsOut,
+      total: assignmentsOut.length,
     });
   } catch (error) {
     console.error('Get student assignments error:', error);
@@ -1933,7 +2667,8 @@ router.get('/tests/:testId/result-detail', authenticate, async (req, res) => {
 router.post('/tests/:testId/attempts', authenticate, async (req, res) => {
   try {
     // Resolve student identity: JWT uses studentId; fallback to userId when actorType is Student
-    const { studentId: rawStudentId, orgId, actorType, userId } = req.user;
+    const { studentId: rawStudentId, orgId: rawOrgId, actorType, userId } = req.user;
+    const orgId = rawOrgId ?? req.user?.OrgID ?? null;
     const studentId = rawStudentId != null ? String(rawStudentId).trim() : (actorType === 'Student' && userId != null ? String(userId).trim() : null);
     const { testId: rawTestId } = req.params;
     const testId = rawTestId != null ? String(rawTestId).trim() : null;
@@ -1986,7 +2721,7 @@ router.post('/tests/:testId/attempts', authenticate, async (req, res) => {
     const { data: test, error: testError } = await supabase
       .from('Tests')
       .select(
-        'TestID, OrgID, TestName, TestType, DurationMinutes, TotalQuestions, TotalMarks, StartTime, EndTime, Status, ScheduleMode, SubscriptionID'
+        'TestID, OrgID, ExamID, TestName, TestType, DurationMinutes, TotalQuestions, TotalMarks, StartTime, EndTime, Status, ScheduleMode, SubscriptionID'
       )
       .eq('TestID', testId)
       .single();
@@ -2013,6 +2748,18 @@ router.post('/tests/:testId/attempts', authenticate, async (req, res) => {
         error:
           'This assigned test is currently not available because Scheduled mode is not included in the linked subscription plan.',
         code: 'SCHEDULED_MODE_DISABLED',
+      });
+    }
+
+    const examIdForEnrollment = pickCol(test, ['ExamID', 'examId']);
+    if (
+      examIdForEnrollment &&
+      !(await isStudentExamAccessAllowed(studentId, examIdForEnrollment, orgId))
+    ) {
+      return res.status(403).json({
+        error:
+          'You are not enrolled in this exam (withdrawn or suspended). Re-enroll from My Exams if your subscription still includes this exam.',
+        code: 'EXAM_ENROLLMENT_INACTIVE',
       });
     }
 
@@ -2470,7 +3217,8 @@ router.post('/tests/:testId/attempts/:attemptId/submit', authenticate, async (re
  */
 router.get('/tests', authenticate, async (req, res) => {
   try {
-    const { studentId, orgId } = req.user;
+    const { studentId } = req.user;
+    const orgId = req.user?.orgId ?? req.user?.OrgID ?? null;
 
     if (!studentId) {
       return res.status(401).json({ error: 'Not authenticated as student' });
@@ -2504,6 +3252,10 @@ router.get('/tests', authenticate, async (req, res) => {
           return null;
         }
         if (!(await isScheduledModeEnabledForTest(test))) {
+          return null;
+        }
+        const examKey = pickCol(test, ['ExamID', 'examId']);
+        if (examKey && !(await isStudentExamAccessAllowed(studentId, examKey, orgId))) {
           return null;
         }
         const availRowOrg = orgIdFromRow(test);
@@ -2834,6 +3586,816 @@ router.get(
       });
     } catch (error) {
       console.error('List students error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/org/students/exam-enrollments/bulk-assign
+ * Approve / activate enrollment for many students × many exams (Cartesian product).
+ * Each pair must belong to the org and the exam must be on that student's active subscription plan.
+ */
+router.post(
+  '/exam-enrollments/bulk-assign',
+  authenticate,
+  requireRole(['OrgAdmin']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { orgId, orgUserId, userId } = req.user;
+    const reviewerOrgUserId = orgUserId ?? userId ?? null;
+
+    const rawStudentIds = req.body?.studentIds;
+    const rawExamIds = req.body?.examIds;
+    const studentIds = Array.isArray(rawStudentIds)
+      ? [...new Set(rawStudentIds.map((id) => String(id).trim()).filter(Boolean))]
+      : [];
+    const examIds = Array.isArray(rawExamIds)
+      ? [...new Set(rawExamIds.map((id) => String(id).trim()).filter(Boolean))]
+      : [];
+
+    const MAX_STUDENTS = 120;
+    const MAX_EXAMS = 40;
+    const MAX_PAIRS = 1500;
+
+    if (studentIds.length === 0 || examIds.length === 0) {
+      return res.status(400).json({
+        error: 'Provide non-empty studentIds and examIds arrays.',
+        code: 'INVALID_PAYLOAD',
+      });
+    }
+    if (studentIds.length > MAX_STUDENTS) {
+      return res.status(400).json({
+        error: `Too many students (max ${MAX_STUDENTS} per request). Split into smaller batches.`,
+        code: 'LIMIT_STUDENTS',
+      });
+    }
+    if (examIds.length > MAX_EXAMS) {
+      return res.status(400).json({
+        error: `Too many exams (max ${MAX_EXAMS} per request).`,
+        code: 'LIMIT_EXAMS',
+      });
+    }
+    if (studentIds.length * examIds.length > MAX_PAIRS) {
+      return res.status(400).json({
+        error: `Too many student–exam pairs (max ${MAX_PAIRS}). Reduce selection or split batches.`,
+        code: 'LIMIT_PAIRS',
+      });
+    }
+
+    try {
+      const results = [];
+      const errors = [];
+
+      for (const studentId of studentIds) {
+        const { data: student, error: stErr } = await supabase
+          .from('Students')
+          .select('StudentID')
+          .eq('OrgID', orgId)
+          .eq('StudentID', studentId)
+          .maybeSingle();
+
+        if (stErr || !student) {
+          errors.push({
+            studentId,
+            examId: null,
+            code: 'STUDENT_NOT_FOUND',
+            message: 'Student not found in this organization.',
+          });
+          continue;
+        }
+
+        let planMap;
+        try {
+          planMap = await buildPlanExamEligibilityMap(studentId, null, orgId);
+        } catch (e) {
+          errors.push({
+            studentId,
+            examId: null,
+            code: 'PLAN_LOOKUP_FAILED',
+            message: e.message || 'Could not load subscription exams for student.',
+          });
+          continue;
+        }
+
+        for (const examId of examIds) {
+          try {
+            if (!planMap.has(examId)) {
+              errors.push({
+                studentId,
+                examId,
+                code: 'EXAM_NOT_IN_PLAN',
+                message: "Exam is not on this student's active subscription.",
+              });
+              continue;
+            }
+            const meta = planMap.get(examId);
+            const result = await upsertStudentExamActivation({
+              studentId,
+              examId,
+              orgId,
+              subscriptionId: meta?.subscriptionId ?? null,
+              approvePendingAsOrg: true,
+              reviewerOrgUserId,
+            });
+
+            if (!result.ok) {
+              errors.push({
+                studentId,
+                examId,
+                code: result.code || 'ACTIVATION_FAILED',
+                message: 'Could not update enrollment.',
+              });
+              continue;
+            }
+
+            results.push({
+              studentId,
+              examId,
+              noop: !!result.noop,
+              enrollmentId: result.enrollment?.EnrollmentID ?? null,
+            });
+          } catch (e) {
+            errors.push({
+              studentId,
+              examId,
+              code: 'ERROR',
+              message: e.message || 'Unexpected error',
+            });
+          }
+        }
+      }
+
+      res.json({
+        message: `Applied ${results.length} enrollment update(s); ${errors.length} skipped or failed.`,
+        applied: results.length,
+        skippedOrFailed: errors.length,
+        results,
+        errors,
+      });
+    } catch (error) {
+      console.error('Bulk exam enrollment assign error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * GET /api/org/students/exam-enrollments/bulk-students
+ * Candidate students for selected exams (excludes already-active access for all selected exams).
+ * Used by Bulk assign UI so admins only see students who still need enrollment action.
+ */
+router.get(
+  '/exam-enrollments/bulk-students',
+  authenticate,
+  requireRole(['OrgAdmin']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { orgId } = req.user;
+    try {
+      const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+      const limit = Math.min(100, Math.max(5, parseInt(String(req.query.limit || '40'), 10) || 40));
+      const rawSearch =
+        req.query.search != null
+          ? String(req.query.search).trim().slice(0, 120).replace(/%/g, '').replace(/,/g, '')
+          : '';
+      const rawExamIds = req.query.examIds != null ? String(req.query.examIds) : '';
+      const examIds = [...new Set(rawExamIds.split(',').map((x) => x.trim()).filter(Boolean))];
+
+      if (examIds.length === 0) {
+        return res.status(400).json({
+          error: 'examIds query is required (comma-separated list).',
+          code: 'EXAM_IDS_REQUIRED',
+        });
+      }
+
+      let countQ = supabase.from('Students').select('*', { count: 'exact', head: true }).eq('OrgID', orgId);
+      if (rawSearch) {
+        const like = `%${rawSearch}%`;
+        countQ = countQ.or(`FullName.ilike.${like},Email.ilike.${like}`);
+      }
+      const { count: totalStudentsRaw, error: cErr } = await countQ;
+      if (cErr) throw cErr;
+      const totalStudents = typeof totalStudentsRaw === 'number' ? totalStudentsRaw : 0;
+
+      const from = (page - 1) * limit;
+      let listQ = supabase
+        .from('Students')
+        .select('StudentID, FullName, Email')
+        .eq('OrgID', orgId)
+        .order('FullName', { ascending: true });
+      if (rawSearch) {
+        const like = `%${rawSearch}%`;
+        listQ = listQ.or(`FullName.ilike.${like},Email.ilike.${like}`);
+      }
+      const { data: studentsPage, error: stErr } = await listQ.range(from, from + limit - 1);
+      if (stErr) throw stErr;
+      const students = studentsPage || [];
+
+      const out = [];
+      for (const s of students) {
+        const planMap = await buildPlanExamEligibilityMap(s.StudentID, null, orgId);
+        const relevantExamIds = examIds.filter((eid) => planMap.has(eid));
+        if (relevantExamIds.length === 0) continue;
+
+        const { data: enrollRows, error: enErr } = await supabase
+          .from('StudentExamEnrollments')
+          .select('ExamID, Status')
+          .eq('StudentID', s.StudentID)
+          .eq('OrgID', orgId)
+          .in('ExamID', relevantExamIds);
+        if (enErr) throw enErr;
+        const byExam = new Map((enrollRows || []).map((r) => [r.ExamID, r]));
+
+        // Keep student visible if at least one selected exam still needs an enrollment action.
+        let needsAny = false;
+        for (const examId of relevantExamIds) {
+          const row = byExam.get(examId);
+          const isActive = !row || enrollmentRecordAllowsExamAccess(row.Status);
+          if (!isActive) {
+            needsAny = true;
+            break;
+          }
+        }
+        if (!needsAny) continue;
+
+        out.push({
+          studentId: s.StudentID,
+          fullName: s.FullName ?? null,
+          email: s.Email ?? null,
+          relevantExamCount: relevantExamIds.length,
+        });
+      }
+
+      res.json({
+        students: out,
+        pagination: {
+          page,
+          limit,
+          totalStudents,
+          totalStudentPages: totalStudents === 0 ? 0 : Math.ceil(totalStudents / limit),
+          shownCandidates: out.length,
+        },
+      });
+    } catch (error) {
+      console.error('Bulk students candidate list error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * GET /api/org/students/exam-enrollments/pending-requests
+ * Org-wide Pending enrollment rows (student-initiated or awaiting approval).
+ */
+router.get(
+  '/exam-enrollments/pending-requests',
+  authenticate,
+  requireRole(['OrgAdmin']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { orgId } = req.user;
+    try {
+      const { data: pendingRows, error: penErr } = await supabase
+        .from('StudentExamEnrollments')
+        .select('*')
+        .eq('OrgID', orgId)
+        .eq('Status', 'Pending')
+        .order('RequestedAt', { ascending: false })
+        .limit(300);
+
+      if (penErr) throw penErr;
+
+      const rows = pendingRows || [];
+      const sidSet = [...new Set(rows.map((r) => r.StudentID).filter(Boolean))];
+      const eidSet = [...new Set(rows.map((r) => r.ExamID).filter(Boolean))];
+
+      const [{ data: studs }, { data: exams }] = await Promise.all([
+        sidSet.length
+          ? supabase.from('Students').select('StudentID, FullName, Email').eq('OrgID', orgId).in('StudentID', sidSet)
+          : Promise.resolve({ data: [] }),
+        eidSet.length
+          ? supabase.from('Exams').select('ExamID, ExamName').in('ExamID', eidSet)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      const studentById = new Map((studs || []).map((s) => [s.StudentID, s]));
+      const examById = new Map((exams || []).map((e) => [e.ExamID, e]));
+
+      const requests = rows.map((r) => ({
+        enrollmentId: r.EnrollmentID,
+        studentId: r.StudentID,
+        examId: r.ExamID,
+        requestedAt: r.RequestedAt,
+        source: r.Source,
+        requestedByType: r.RequestedByType,
+        subscriptionId: r.SubscriptionID,
+        studentName: studentById.get(r.StudentID)?.FullName ?? null,
+        studentEmail: studentById.get(r.StudentID)?.Email ?? null,
+        examName: examById.get(r.ExamID)?.ExamName ?? null,
+      }));
+
+      res.json({ requests });
+    } catch (error) {
+      console.error('List pending exam enrollment requests error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+const DIRECTORY_STATUS_VALUES = ['Pending', 'Approved', 'Rejected', 'Withdrawn', 'Suspended', 'Implicit'];
+
+function directoryDtoFromEnrollmentRecord(
+  r,
+  studentName,
+  studentEmail,
+  examName,
+  orgUserById = new Map()
+) {
+  const reviewer = r.ReviewedBy ? orgUserById.get(r.ReviewedBy) : null;
+  const reviewerName = reviewer?.FullName || reviewer?.Email || null;
+  return {
+    enrollmentId: r.EnrollmentID,
+    isImplicit: false,
+    studentId: r.StudentID,
+    examId: r.ExamID,
+    subscriptionId: r.SubscriptionID ?? null,
+    status: r.Status,
+    source: r.Source,
+    requestedByType: r.RequestedByType ?? null,
+    requestedAt: r.RequestedAt ?? null,
+    reviewedBy: r.ReviewedBy ?? null,
+    reviewedByName: reviewerName,
+    reviewedAt: r.ReviewedAt ?? null,
+    reviewNote: r.ReviewNote ?? null,
+    approvedAt: r.ApprovedAt ?? null,
+    withdrawnAt: r.WithdrawnAt ?? null,
+    withdrawalInitiatedBy: r.WithdrawalInitiatedBy ?? null,
+    withdrawalActorUserId: r.WithdrawalActorUserID ?? null,
+    withdrawalReason: r.WithdrawalReason ?? null,
+    createdAt: r.CreatedAt ?? null,
+    updatedAt: r.UpdatedAt ?? null,
+    studentName,
+    studentEmail,
+    examName,
+  };
+}
+
+/**
+ * GET /api/org/students/exam-enrollments/directory
+ * Student-batch roster: every subscription-eligible student × exam for this page of students, merged with DB enrollment rows.
+ * Rows without an enrollment record are "Implicit" (subscription-only access). Orphan enrollment rows (exam no longer on plan) are included.
+ */
+router.get(
+  '/exam-enrollments/directory',
+  authenticate,
+  requireRole(['OrgAdmin']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { orgId } = req.user;
+    try {
+      const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+      const studentBatchLimit = Math.min(40, Math.max(5, parseInt(String(req.query.limit || '25'), 10) || 25));
+      const rawSearch =
+        req.query.search != null
+          ? String(req.query.search).trim().slice(0, 120).replace(/%/g, '').replace(/,/g, '')
+          : '';
+      const statusParam = req.query.status != null ? String(req.query.status).trim() : '';
+      const statusFilter = DIRECTORY_STATUS_VALUES.includes(statusParam) ? statusParam : null;
+      const rawExamId =
+        req.query.examId != null ? String(req.query.examId).trim().slice(0, 80) : '';
+      const examIdFilter =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawExamId)
+          ? rawExamId
+          : null;
+
+      const like = rawSearch ? `%${rawSearch}%` : null;
+
+      let countQ = supabase.from('Students').select('*', { count: 'exact', head: true }).eq('OrgID', orgId);
+      if (like) {
+        countQ = countQ.or(`FullName.ilike.${like},Email.ilike.${like}`);
+      }
+      const { count: totalStudentsRaw, error: cErr } = await countQ;
+      if (cErr) throw cErr;
+      const totalStudents = typeof totalStudentsRaw === 'number' ? totalStudentsRaw : 0;
+
+      const from = (page - 1) * studentBatchLimit;
+      let listQ = supabase
+        .from('Students')
+        .select('StudentID, FullName, Email')
+        .eq('OrgID', orgId)
+        .order('FullName', { ascending: true });
+      if (like) {
+        listQ = listQ.or(`FullName.ilike.${like},Email.ilike.${like}`);
+      }
+      const { data: studentsPage, error: lpErr } = await listQ.range(from, from + studentBatchLimit - 1);
+      if (lpErr) throw lpErr;
+
+      if (!studentsPage || studentsPage.length === 0) {
+        return res.json({
+          rows: [],
+          pagination: {
+            page,
+            limit: studentBatchLimit,
+            totalStudents,
+            totalStudentPages: totalStudents === 0 ? 0 : Math.ceil(totalStudents / studentBatchLimit),
+            rowCount: 0,
+          },
+        });
+      }
+
+      const studentIds = studentsPage.map((s) => s.StudentID);
+
+      const { data: enrollRows, error: enErr } = await supabase
+        .from('StudentExamEnrollments')
+        .select(
+          [
+            'EnrollmentID',
+            'StudentID',
+            'ExamID',
+            'OrgID',
+            'SubscriptionID',
+            'Status',
+            'Source',
+            'RequestedByType',
+            'RequestedAt',
+            'ReviewedBy',
+            'ReviewedAt',
+            'ReviewNote',
+            'ApprovedAt',
+            'WithdrawnAt',
+            'WithdrawalInitiatedBy',
+            'WithdrawalActorUserID',
+            'WithdrawalReason',
+            'CreatedAt',
+            'UpdatedAt',
+          ].join(',')
+        )
+        .eq('OrgID', orgId)
+        .in('StudentID', studentIds);
+      if (enErr) throw enErr;
+
+      const enrollMap = new Map();
+      const enrollByStudent = new Map();
+      for (const r of enrollRows || []) {
+        enrollMap.set(`${r.StudentID}:${r.ExamID}`, r);
+        if (!enrollByStudent.has(r.StudentID)) enrollByStudent.set(r.StudentID, []);
+        enrollByStudent.get(r.StudentID).push(r);
+      }
+
+      const planMaps = await Promise.all(
+        studentsPage.map(async (s) => ({
+          student: s,
+          planMap: await buildPlanExamEligibilityMap(s.StudentID, null, orgId),
+        }))
+      );
+
+      const allExamIds = new Set();
+      for (const r of enrollRows || []) {
+        if (!examIdFilter || r.ExamID === examIdFilter) allExamIds.add(r.ExamID);
+      }
+      for (const { planMap } of planMaps) {
+        for (const id of planMap.keys()) {
+          if (!examIdFilter || id === examIdFilter) allExamIds.add(id);
+        }
+      }
+
+      const examIdsArr = [...allExamIds];
+      const { data: exams } =
+        examIdsArr.length > 0
+          ? await supabase.from('Exams').select('ExamID, ExamName').in('ExamID', examIdsArr)
+          : { data: [] };
+      const examById = new Map((exams || []).map((e) => [e.ExamID, e]));
+
+      const reviewedByIds = [
+        ...new Set(
+          (enrollRows || [])
+            .map((r) => r.ReviewedBy)
+            .filter(Boolean)
+        ),
+      ];
+      const { data: orgUsers } =
+        reviewedByIds.length > 0
+          ? await supabase
+              .from('OrgUsers')
+              .select('OrgUserID, FullName, Email')
+              .eq('OrgID', orgId)
+              .in('OrgUserID', reviewedByIds)
+          : { data: [] };
+      const orgUserById = new Map((orgUsers || []).map((u) => [u.OrgUserID, u]));
+
+      const matchesStatusFilter = (dto) => {
+        if (!statusFilter) return true;
+        if (statusFilter === 'Implicit') return dto.isImplicit === true;
+        return dto.status === statusFilter;
+      };
+
+      const merged = [];
+
+      for (const { student, planMap } of planMaps) {
+        let examIds = [...planMap.keys()];
+        if (examIdFilter) examIds = examIds.filter((id) => id === examIdFilter);
+        examIds.sort((a, b) =>
+          String(examById.get(a)?.ExamName || a).localeCompare(String(examById.get(b)?.ExamName || b))
+        );
+
+        const seenExamIds = new Set();
+
+        const sn = student.FullName ?? null;
+        const se = student.Email ?? null;
+
+        for (const examId of examIds) {
+          seenExamIds.add(examId);
+          const existing = enrollMap.get(`${student.StudentID}:${examId}`);
+          const en = examById.get(examId)?.ExamName ?? null;
+          if (existing) {
+            const dto = directoryDtoFromEnrollmentRecord(existing, sn, se, en, orgUserById);
+            if (matchesStatusFilter(dto)) merged.push(dto);
+          } else {
+            const dto = {
+              enrollmentId: null,
+              isImplicit: true,
+              studentId: student.StudentID,
+              examId,
+              subscriptionId: planMap.get(examId)?.subscriptionId ?? null,
+              status: 'Implicit',
+              source: null,
+              requestedByType: null,
+              requestedById: null,
+              requestedAt: null,
+              reviewedBy: null,
+              reviewedAt: null,
+              reviewNote: null,
+              approvedAt: null,
+              withdrawnAt: null,
+              withdrawalInitiatedBy: null,
+              withdrawalActorUserId: null,
+              withdrawalReason: null,
+              createdAt: null,
+              updatedAt: null,
+              studentName: sn,
+              studentEmail: se,
+              examName: en,
+            };
+            if (matchesStatusFilter(dto)) merged.push(dto);
+          }
+        }
+
+        for (const r of enrollByStudent.get(student.StudentID) || []) {
+          if (seenExamIds.has(r.ExamID)) continue;
+          if (examIdFilter && r.ExamID !== examIdFilter) continue;
+          const en = examById.get(r.ExamID)?.ExamName ?? null;
+          const dto = directoryDtoFromEnrollmentRecord(r, sn, se, en, orgUserById);
+          if (matchesStatusFilter(dto)) merged.push(dto);
+        }
+      }
+
+      merged.sort((a, b) => {
+        const n = String(a.studentName || '').localeCompare(String(b.studentName || ''));
+        if (n !== 0) return n;
+        return String(a.examName || '').localeCompare(String(b.examName || ''));
+      });
+
+      res.json({
+        rows: merged,
+        pagination: {
+          page,
+          limit: studentBatchLimit,
+          totalStudents,
+          totalStudentPages: totalStudents === 0 ? 0 : Math.ceil(totalStudents / studentBatchLimit),
+          rowCount: merged.length,
+        },
+      });
+    } catch (error) {
+      console.error('Exam enrollment directory error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * GET /api/org/students/:studentId/exam-enrollments
+ */
+router.get(
+  '/:studentId/exam-enrollments',
+  authenticate,
+  requireRole(['OrgAdmin']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { orgId } = req.user;
+    const { studentId } = req.params;
+
+    try {
+      const { data: student, error } = await supabase
+        .from('Students')
+        .select('StudentID')
+        .eq('OrgID', orgId)
+        .eq('StudentID', studentId)
+        .maybeSingle();
+
+      if (error || !student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+
+      const payload = await buildStudentExamEnrollmentListPayload(studentId, orgId);
+      res.json(payload);
+    } catch (error) {
+      console.error('Org list exam enrollments error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/org/students/:studentId/exam-enrollments/:examId/withdraw
+ */
+router.post(
+  '/:studentId/exam-enrollments/:examId/withdraw',
+  authenticate,
+  requireRole(['OrgAdmin']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { orgId, orgUserId, userId } = req.user;
+    const { studentId, examId: rawExamId } = req.params;
+    const examId = rawExamId != null ? String(rawExamId).trim() : null;
+
+    try {
+      const { data: student, error } = await supabase
+        .from('Students')
+        .select('StudentID')
+        .eq('OrgID', orgId)
+        .eq('StudentID', studentId)
+        .maybeSingle();
+
+      if (error || !student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+      if (!examId) return res.status(400).json({ error: 'Exam ID is required' });
+
+      const planMap = await buildPlanExamEligibilityMap(studentId, null, orgId);
+      if (!planMap.has(examId)) {
+        return res.status(400).json({
+          error: 'This exam is not included in the organization subscription for this student.',
+          code: 'EXAM_NOT_IN_PLAN',
+        });
+      }
+      const meta = planMap.get(examId);
+      const actorUserId = orgUserId ?? userId ?? null;
+      const reason = req.body?.reason != null ? String(req.body.reason).slice(0, 2000) : null;
+
+      const result = await upsertStudentExamWithdrawal({
+        studentId,
+        examId,
+        orgId,
+        subscriptionId: meta?.subscriptionId ?? null,
+        initiatedBy: 'OrgAdmin',
+        actorUserId,
+        reason,
+      });
+
+      if (!result.ok && result.code === 'ALREADY_WITHDRAWN') {
+        return res.status(409).json({
+          error: 'Student already withdrew from this exam.',
+          enrollment: result.enrollment,
+          code: 'ALREADY_WITHDRAWN',
+        });
+      }
+
+      res.json({
+        message: 'Student marked as withdrawn from this exam (record retained).',
+        enrollment: result.enrollment,
+      });
+    } catch (error) {
+      console.error('Org withdraw exam enrollment error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/org/students/:studentId/exam-enrollments/:examId/activate
+ */
+router.post(
+  '/:studentId/exam-enrollments/:examId/activate',
+  authenticate,
+  requireRole(['OrgAdmin']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { orgId } = req.user;
+    const { studentId, examId: rawExamId } = req.params;
+    const examId = rawExamId != null ? String(rawExamId).trim() : null;
+
+    try {
+      const { data: student, error } = await supabase
+        .from('Students')
+        .select('StudentID')
+        .eq('OrgID', orgId)
+        .eq('StudentID', studentId)
+        .maybeSingle();
+
+      if (error || !student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+      if (!examId) return res.status(400).json({ error: 'Exam ID is required' });
+
+      const planMap = await buildPlanExamEligibilityMap(studentId, null, orgId);
+      if (!planMap.has(examId)) {
+        return res.status(400).json({
+          error: 'This exam is not included in the organization subscription for this student.',
+          code: 'EXAM_NOT_IN_PLAN',
+        });
+      }
+      const meta = planMap.get(examId);
+
+      const { orgUserId, userId } = req.user;
+      const reviewerOrgUserId = orgUserId ?? userId ?? null;
+
+      const result = await upsertStudentExamActivation({
+        studentId,
+        examId,
+        orgId,
+        subscriptionId: meta?.subscriptionId ?? null,
+        approvePendingAsOrg: true,
+        reviewerOrgUserId,
+      });
+
+      res.json({
+        message: result.noop ? 'Student already active for this exam.' : 'Student re-enrolled in this exam.',
+        enrollment: result.enrollment,
+        noop: !!result.noop,
+      });
+    } catch (error) {
+      console.error('Org activate exam enrollment error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * POST /api/org/students/:studentId/exam-enrollments/:examId/reject
+ * Org declines a pending student request (optional note shown to student contexts).
+ */
+router.post(
+  '/:studentId/exam-enrollments/:examId/reject',
+  authenticate,
+  requireRole(['OrgAdmin']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { orgId, orgUserId, userId } = req.user;
+    const { studentId, examId: rawExamId } = req.params;
+    const examId = rawExamId != null ? String(rawExamId).trim() : null;
+
+    try {
+      const { data: student, error } = await supabase
+        .from('Students')
+        .select('StudentID')
+        .eq('OrgID', orgId)
+        .eq('StudentID', studentId)
+        .maybeSingle();
+
+      if (error || !student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+      if (!examId) return res.status(400).json({ error: 'Exam ID is required' });
+
+      const planMap = await buildPlanExamEligibilityMap(studentId, null, orgId);
+      if (!planMap.has(examId)) {
+        return res.status(400).json({
+          error: 'This exam is not included in the organization subscription for this student.',
+          code: 'EXAM_NOT_IN_PLAN',
+        });
+      }
+
+      const reviewerOrgUserId = orgUserId ?? userId ?? null;
+      const reviewNote =
+        req.body?.reviewNote != null ? String(req.body.reviewNote).slice(0, 4000) : null;
+
+      const result = await orgRejectStudentExamEnrollment({
+        studentId,
+        examId,
+        orgId,
+        reviewerOrgUserId,
+        reviewNote,
+      });
+
+      if (!result.ok && result.code === 'NO_ROW') {
+        return res.status(404).json({ error: 'Enrollment not found for this exam.', code: 'NO_ROW' });
+      }
+
+      if (!result.ok && result.code === 'NOT_PENDING') {
+        return res.status(409).json({
+          error: 'Only a pending enrollment request can be rejected.',
+          code: 'NOT_PENDING',
+          enrollment: result.enrollment,
+        });
+      }
+
+      res.json({
+        message: 'Enrollment request was rejected.',
+        enrollment: result.enrollment,
+      });
+    } catch (error) {
+      console.error('Org reject exam enrollment error:', error);
       res.status(500).json({ error: 'Internal server error', details: error.message });
     }
   }

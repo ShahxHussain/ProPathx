@@ -18,6 +18,7 @@ import {
   UsersRound,
   List,
   BookOpenCheck,
+  BookMarked,
 } from 'lucide-react';
 import { orgAuth } from '../../services/api';
 import NotificationBell from '../NotificationBell';
@@ -54,6 +55,7 @@ const DashboardLayout = () => {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/org/dashboard' },
     { icon: Users, label: 'Users', path: '/org/users' },
     { icon: GraduationCap, label: 'Students', path: '/org/students' },
+    { icon: BookMarked, label: 'Exam enrollments', path: '/org/student-exam-enrollments' },
     { icon: UsersRound, label: 'Groups', path: '/org/groups' },
     { icon: Search, label: 'Explore Exams', path: '/org/explore-exams' },
     { icon: Package, label: 'Subscription Plans', path: '/org/subscription-plans' },

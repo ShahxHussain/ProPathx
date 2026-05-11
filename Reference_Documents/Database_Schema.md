@@ -562,6 +562,103 @@ CREATE TABLE IF NOT EXISTS public."SubscriptionPlanTestModes" (
     ON DELETE CASCADE
 );
 
+-- ---------------------------------------------------------------------------
+-- StudentExamEnrollments (canonical / scalable) — PHASE: organization students ONLY
+-- One row per (OrgID, StudentID, ExamID). OrgID is REQUIRED; individual / self-registered students
+-- (Students.OrgID IS NULL) do NOT use this table in the current phase — they rely on student-level
+-- subscription + SubscriptionPlanExams only (no per-exam enrollment workflow here).
+-- Rows are not deleted: terminal states use Rejected / Withdrawn; Suspended = pause without losing history.
+-- Keeps subscription linkage (SubscriptionID) + withdrawal audit + request/review workflow for org governance.
+-- Future: optional extension to individuals (would require nullable OrgID + partial unique indexes again).
+-- ---------------------------------------------------------------------------
+
+DO $$
+BEGIN
+  CREATE TYPE public.student_exam_enrollment_status_enum AS ENUM (
+    'Pending', 'Approved', 'Rejected', 'Withdrawn', 'Suspended'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE public.student_exam_enrollment_requester_enum AS ENUM (
+    'Student', 'OrgAdmin', 'System'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE public.student_exam_enrollment_source_enum AS ENUM (
+    'DirectAssign', 'StudentRequest'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS public."StudentExamEnrollments" (
+  "EnrollmentID" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "OrgID" uuid NOT NULL,
+  "StudentID" uuid NOT NULL,
+  "ExamID" uuid NOT NULL,
+  "SubscriptionID" uuid NULL,
+  "Status" public.student_exam_enrollment_status_enum NOT NULL DEFAULT 'Pending',
+  "Source" public.student_exam_enrollment_source_enum NOT NULL DEFAULT 'DirectAssign'::public.student_exam_enrollment_source_enum,
+  "RequestedByType" public.student_exam_enrollment_requester_enum NOT NULL DEFAULT 'OrgAdmin'::public.student_exam_enrollment_requester_enum,
+  "RequestedAt" timestamptz NOT NULL DEFAULT now(),
+  "ReviewedBy" uuid NULL,
+  "ReviewedAt" timestamptz NULL,
+  "ReviewNote" text NULL,
+  "ApprovedAt" timestamptz NULL,
+  "WithdrawnAt" timestamptz NULL,
+  "WithdrawalInitiatedBy" public.student_exam_enrollment_requester_enum NULL,
+  "WithdrawalActorUserID" uuid NULL,
+  "WithdrawalReason" text NULL,
+  "CreatedAt" timestamptz NOT NULL DEFAULT now(),
+  "UpdatedAt" timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT "StudentExamEnrollments_StudentID_fkey"
+    FOREIGN KEY ("StudentID") REFERENCES public."Students"("StudentID") ON DELETE CASCADE,
+  CONSTRAINT "StudentExamEnrollments_ExamID_fkey"
+    FOREIGN KEY ("ExamID") REFERENCES public."Exams"("ExamID") ON DELETE CASCADE,
+  CONSTRAINT "StudentExamEnrollments_OrgID_fkey"
+    FOREIGN KEY ("OrgID") REFERENCES public."Organizations"("OrgID") ON DELETE CASCADE,
+  CONSTRAINT "StudentExamEnrollments_SubscriptionID_fkey"
+    FOREIGN KEY ("SubscriptionID") REFERENCES public."Subscriptions"("SubscriptionID") ON DELETE SET NULL,
+  CONSTRAINT "StudentExamEnrollments_ReviewedBy_fkey"
+    FOREIGN KEY ("ReviewedBy") REFERENCES public."OrgUsers"("OrgUserID") ON DELETE SET NULL,
+
+  CONSTRAINT "StudentExamEnrollments_review_note_len" CHECK (
+    "ReviewNote" IS NULL OR char_length("ReviewNote") <= 4000
+  ),
+  CONSTRAINT "StudentExamEnrollments_withdraw_reason_len" CHECK (
+    "WithdrawalReason" IS NULL OR char_length("WithdrawalReason") <= 4000
+  ),
+
+  CONSTRAINT "StudentExamEnrollments_unique_org_student_exam" UNIQUE ("OrgID", "StudentID", "ExamID")
+);
+
+CREATE INDEX IF NOT EXISTS idx_student_exam_enrollments_student ON public."StudentExamEnrollments" ("StudentID");
+CREATE INDEX IF NOT EXISTS idx_student_exam_enrollments_exam ON public."StudentExamEnrollments" ("ExamID");
+CREATE INDEX IF NOT EXISTS idx_student_exam_enrollments_org_status ON public."StudentExamEnrollments" ("OrgID", "Status");
+CREATE INDEX IF NOT EXISTS idx_student_exam_enrollments_status ON public."StudentExamEnrollments" ("Status");
+CREATE INDEX IF NOT EXISTS idx_student_exam_enrollments_pending_org ON public."StudentExamEnrollments" ("OrgID", "RequestedAt")
+  WHERE "Status" = 'Pending';
+
+COMMENT ON TABLE public."StudentExamEnrollments" IS
+  'Org-scoped exam participation (organization-enrolled students only in current phase). Request/review + withdrawal audit; rows retained (no hard delete).';
+
+-- ---------------------------------------------------------------------------
+-- Migrating + backfill (copy-paste once): Reference_Documents/sql/student_exam_enrollments_migrate_and_backfill.sql
+-- Covers enums, nullable OrgID → backfill from Students, drop individual-only rows, text Status → enum
+-- (Active→Approved), WithdrawalInitiatedBy text→enum, ApprovedAt backfill, old UNIQUE swap, indexes.
+-- Greenfield still uses: Reference_Documents/sql/student_exam_enrollments.sql (or run migrate script only — it CREATE IF NOT EXISTS).
+-- After migration: align API/UI — legacy code used Status text 'Active'; canonical enum is 'Approved'.
+-- ---------------------------------------------------------------------------
+-- Implementation alignment: Align backend/routes/students.js and UI after DB migration.
 
 ALTER TABLE public."Subscriptions"
 ADD COLUMN IF NOT EXISTS "ActivatedAt" TIMESTAMP WITH TIME ZONE;

@@ -18,6 +18,7 @@ import Tests from './pages/org/Tests';
 import TestWizardPage from './pages/org/testWizard/TestWizardPage';
 import TestAssignments from './pages/org/TestAssignments';
 import Students from './pages/org/Students';
+import OrgStudentExamEnrollments from './pages/org/OrgStudentExamEnrollments';
 import Groups from './pages/org/Groups';
 import OrgLogs from './pages/org/Logs';
 import OrgSubscriptionPlans from './pages/org/SubscriptionPlans';
@@ -56,6 +57,7 @@ import StudentTestResult from './pages/student/TestResult';
 import StudentReports from './pages/student/Reports';
 import StudentSubscriptionPlans from './pages/student/SubscriptionPlans';
 import SelfTestBuilder from './pages/student/SelfTestBuilder';
+import ExamEnrollments from './pages/student/ExamEnrollments';
 import './App.css';
 import Maintenance from './pages/Maintenance';
 
@@ -220,6 +222,18 @@ const IndividualStudentRoute = ({ children }) => {
   return children;
 };
 
+/** Org-enrolled students only (exam enrollment & related APIs). */
+const OrganizationStudentRoute = ({ children }) => {
+  if (!studentAuth.isAuthenticated()) {
+    return <Navigate to="/" replace />;
+  }
+  const user = studentAuth.getCurrentUserSync();
+  if (isIndividualStudentUser(user)) {
+    return <Navigate to="/student/dashboard" replace />;
+  }
+  return children;
+};
+
 function App() {
   return (
     <BrowserRouter>
@@ -261,6 +275,7 @@ function AppContent() {
             <Route path="tests" element={<Tests />} />
             <Route path="test-assignments" element={<TestAssignments />} />
             <Route path="students" element={<Students />} />
+            <Route path="student-exam-enrollments" element={<OrgStudentExamEnrollments />} />
             <Route path="groups" element={<Groups />} />
             <Route path="logs" element={<OrgLogs />} />
             <Route path="question-bank" element={<QuestionBank />} />
@@ -351,6 +366,14 @@ function AppContent() {
           }
         >
           <Route path="dashboard" element={<StudentDashboard />} />
+          <Route
+            path="my-exams"
+            element={
+              <OrganizationStudentRoute>
+                <ExamEnrollments />
+              </OrganizationStudentRoute>
+            }
+          />
           <Route
             path="self-test"
             element={

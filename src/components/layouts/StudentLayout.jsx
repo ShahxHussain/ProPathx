@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   BookOpen,
+  BookMarked,
   LogOut,
   Menu,
   X,
@@ -51,6 +52,7 @@ const StudentLayout = () => {
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/student/dashboard' },
+    ...(!isIndividualStudent ? [{ icon: BookMarked, label: 'My exams', path: '/student/my-exams' }] : []),
     { icon: Sparkles, label: 'Self Test Builder', path: '/student/self-test' },
     { icon: BookOpen, label: 'My Assignments', path: '/student/assignments' },
     {
