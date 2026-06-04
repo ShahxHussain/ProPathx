@@ -1,39 +1,71 @@
-import { useState, useEffect } from 'react';
-import { UserPlus, Shield, CheckCircle, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import {
+  UserPlus,
+  Shield,
+  AlertCircle,
+  CheckCircle2,
+  Mail,
+  Lock,
+  Phone,
+  User,
+  Loader2,
+} from 'lucide-react';
 import { adminAPI } from '../../services/api';
+import './Dashboard.css';
+import './CreateOrganization.css';
 import './CreatePlatformUser.css';
 
+const INITIAL = {
+  fullName: '',
+  email: '',
+  password: '',
+  phone: '',
+  role: 'Reviewer',
+};
+
+function Field({ label, required, icon: Icon, hint, className = '', children }) {
+  return (
+    <label className={`sa-org-field ${className}`.trim()}>
+      <span className="sa-org-field__label">
+        {label}
+        {required && <span className="sa-org-field__req">*</span>}
+      </span>
+      {Icon ? (
+        <div className="sa-org-field__input-wrap">
+          <Icon size={16} className="sa-org-field__icon" aria-hidden />
+          {children}
+        </div>
+      ) : (
+        children
+      )}
+      {hint && <span className="sa-org-field__hint">{hint}</span>}
+    </label>
+  );
+}
+
 const CreatePlatformUser = () => {
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    password: '',
-    phone: '',
-    role: 'Reviewer',
-  });
+  const [formData, setFormData] = useState(INITIAL);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  const [createdUser, setCreatedUser] = useState(null);
+  const [success, setSuccess] = useState('');
+
+  const handleChange = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setError('');
+    setSuccess('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccess(false);
+    setSuccess('');
     setLoading(true);
 
     try {
-      const response = await adminAPI.createPlatformUser(formData);
-      setCreatedUser(response.user);
-      setSuccess(true);
-      // Reset form
-      setFormData({
-        fullName: '',
-        email: '',
-        password: '',
-        phone: '',
-        role: 'Reviewer',
-      });
+      await adminAPI.createPlatformUser(formData);
+      setSuccess('Platform user created successfully.');
+      setFormData(INITIAL);
+      setTimeout(() => setSuccess(''), 6000);
     } catch (err) {
       setError(err.message || 'Failed to create platform user');
     } finally {
@@ -42,144 +74,115 @@ const CreatePlatformUser = () => {
   };
 
   return (
-    <div className="create-platform-user-page">
-      <div className="page-header">
-        <div className="header-icon">
-          <Shield size={32} />
-        </div>
-        <div>
-          <h1>Create Platform User</h1>
-          <p className="page-subtitle">
-            Create global Reviewer or Subject Expert accounts that work at the platform level
-          </p>
-        </div>
+    <div className="admin-dashboard sa-dash sa-plat-create-page">
+      <div className="sa-org-create-top">
+        <h1 className="sa-org-create-title sa-plat-create-title">
+          <Shield size={26} aria-hidden />
+          Create platform user
+        </h1>
+        <p className="sa-org-create-subtitle">
+          Global Reviewer or Subject Expert (org login page).
+        </p>
       </div>
 
-      <div className="create-user-card">
-        <div className="card-header">
-          <UserPlus size={24} />
-          <h2>New Platform User</h2>
+      {error && (
+        <div className="sa-banner sa-banner--error sa-org-create-banner" role="alert">
+          <AlertCircle size={18} aria-hidden />
+          <span>{error}</span>
         </div>
+      )}
 
-        {success && createdUser && (
-          <div className="notice success">
-            <CheckCircle size={20} />
-            <div>
-              <strong>Platform user created successfully!</strong>
-              <div className="success-details">
-                <span>Name: {createdUser.fullName}</span>
-                <span>Email: {createdUser.email}</span>
-                <span>Role: {createdUser.role}</span>
-              </div>
-            </div>
-          </div>
-        )}
+      {success && (
+        <div className="sa-org-create-banner sa-org-create-banner--success" role="status">
+          <CheckCircle2 size={18} aria-hidden />
+          <span>{success}</span>
+        </div>
+      )}
 
-        {error && (
-          <div className="notice error">
-            <XCircle size={20} />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form className="create-user-form" onSubmit={handleSubmit}>
-          <div className="form-row">
-            <label>
-              <span>Full Name *</span>
+      <form className="sa-panel sa-org-create-form" onSubmit={handleSubmit}>
+        <section className="sa-org-create-section">
+          <h2 className="sa-plat-section-title">User details</h2>
+          <div className="sa-org-create-grid">
+            <Field label="Full name" required icon={User}>
               <input
                 type="text"
                 value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                placeholder="Enter full name"
+                onChange={(e) => handleChange('fullName', e.target.value)}
+                placeholder="Full name"
                 required
                 disabled={loading}
+                autoComplete="name"
               />
-            </label>
-          </div>
+            </Field>
 
-          <div className="form-row">
-            <label>
-              <span>Email *</span>
+            <Field label="Email" required icon={Mail} hint="Must be unique.">
               <input
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="user@example.com"
+                onChange={(e) => handleChange('email', e.target.value)}
+                placeholder="email@example.com"
                 required
                 disabled={loading}
+                autoComplete="email"
               />
-              <small>Must be unique across all users (platform and organization)</small>
-            </label>
-          </div>
+            </Field>
 
-          <div className="form-row">
-            <label>
-              <span>Password *</span>
-              <input
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="Enter password"
-                minLength={8}
-                required
-                disabled={loading}
-              />
-              <small>Minimum 8 characters</small>
-            </label>
-          </div>
-
-          <div className="form-row">
-            <label>
-              <span>Phone</span>
+            <Field label="Phone" icon={Phone}>
               <input
                 type="tel"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="+92 300 0000000"
+                onChange={(e) => handleChange('phone', e.target.value)}
+                placeholder="Optional"
                 disabled={loading}
+                autoComplete="tel"
               />
-            </label>
-          </div>
+            </Field>
 
-          <div className="form-row">
-            <label>
-              <span>Role *</span>
+            <Field label="Password" required icon={Lock} hint="Min. 8 characters.">
+              <input
+                type="password"
+                value={formData.password}
+                onChange={(e) => handleChange('password', e.target.value)}
+                placeholder="Password"
+                minLength={8}
+                required
+                disabled={loading}
+                autoComplete="new-password"
+              />
+            </Field>
+
+            <Field label="Role" required>
               <select
                 value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                onChange={(e) => handleChange('role', e.target.value)}
                 required
                 disabled={loading}
               >
                 <option value="Reviewer">Reviewer</option>
                 <option value="Subject Expert">Subject Expert</option>
               </select>
-              <small>Platform-level role (not organization-specific)</small>
-            </label>
+            </Field>
           </div>
+        </section>
 
-          <div className="form-actions">
-            <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Platform User'}
-            </button>
-          </div>
-        </form>
-
-        <div className="info-box">
-          <h3>Platform Users vs Organization Users</h3>
-          <ul>
-            <li>
-              <strong>Platform Users</strong> (created here) work globally across all organizations
-            </li>
-            <li>
-              <strong>Organization Users</strong> are created by OrgAdmins and work only within their organization
-            </li>
-            <li>Platform users have access to system-wide resources and can review content from any organization</li>
-          </ul>
+        <div className="sa-org-create-footer">
+          <button type="submit" className="sa-org-create-submit" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 size={18} className="sa-spin" aria-hidden />
+                Creating…
+              </>
+            ) : (
+              <>
+                <UserPlus size={18} aria-hidden />
+                Create platform user
+              </>
+            )}
+          </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 };
 
 export default CreatePlatformUser;
-

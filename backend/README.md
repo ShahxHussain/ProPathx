@@ -2,6 +2,25 @@
 
 Organization authentication and user management API for ProPath multi-tenant exam platform.
 
+## Project layout
+
+```
+backend/
+  config/       Supabase client
+  middleware/   Auth, validation
+  routes/       Thin HTTP handlers (mount in routes/index.js)
+    org/        Org-scoped routes (auth, users, students, groups, settings, tests/)
+    shared/     Cross-portal routes (profile, questions, notifications, reviewers)
+    student/    Student portal
+    admin/      SuperAdmin
+  db/
+    migrations/ Ordered SQL for Supabase
+  services/     Business logic — see services/README.md
+  utils/        Shared low-level helpers (JWT, password, logging)
+```
+
+New features: add logic in `services/`, wire it from a route handler.
+
 ## Setup
 
 1. **Install dependencies:**
@@ -27,6 +46,12 @@ Organization authentication and user management API for ProPath multi-tenant exa
    # or for development with auto-reload:
    npm run dev
    ```
+
+4. **Smoke test (optional):**
+   ```bash
+   npm run test:smoke
+   ```
+   See [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md#ci-github-actions) for full auth smoke with env vars.
 
 ## API Endpoints
 
@@ -87,10 +112,18 @@ Organization/OrgUser login.
     "email": "admin@org.com",
     "role": "OrgAdmin",
     "orgId": "uuid",
-    "orgName": "ProPath Academy"
+    "orgName": "ProPath Academy",
+    "mustChangePassword": false
   }
 }
 ```
+
+When `mustChangePassword` is `true` (SuperAdmin- or OrgAdmin-created accounts), the client must call `POST /api/org/auth/first-password` before other org APIs. Run `backend/scripts/org_users_must_change_password.sql` in Supabase first.
+
+#### POST `/api/org/auth/first-password`
+Set password on first login (Bearer token required; no current password).
+
+**Request Body:** `{ "newPassword": "...", "confirmPassword": "..." }`
 
 ### User Management (OrgAdmin only)
 

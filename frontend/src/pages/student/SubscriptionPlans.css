@@ -1,0 +1,108 @@
+/**
+ * Individual student subscription plans — teal theme on shared org-plans layout.
+ */
+
+.student-layout .stu-plans-page .org-ex-enroll-title-icon,
+.student-layout .stu-plans-page .org-plans-stat--active .org-plans-stat-value,
+.student-layout .stu-plans-page .org-plans-price,
+.student-layout .stu-plans-page .org-plans-filter.active,
+.student-layout .stu-plans-page .org-plans-pill--available,
+.student-layout .stu-plans-page .org-plans-active-meta--renew {
+  color: var(--stu-teal-dark, #115e59);
+}
+
+.student-layout .stu-plans-page .org-plans-header h1 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 700;
+  color: var(--stu-ink, #1c1917);
+}
+
+.student-layout .stu-plans-page .page-subtitle {
+  color: var(--stu-muted, #78716c);
+}
+
+.student-layout .stu-plans-page .org-plans-filter.active {
+  box-shadow: 0 1px 3px rgba(17, 94, 89, 0.12);
+}
+
+.student-layout .stu-plans-page .org-plans-filter-count {
+  background: var(--stu-teal-soft, #ccfbf1);
+  color: var(--stu-teal-dark, #115e59);
+}
+
+.student-layout .stu-plans-page .org-plans-card {
+  border-radius: 16px;
+  border-color: var(--stu-border, #e7e5e4);
+  background: var(--stu-surface, #fff);
+  box-shadow: 0 8px 28px rgba(28, 25, 23, 0.06);
+}
+
+.student-layout .stu-plans-page .org-plans-card--available:hover {
+  border-color: #5eead4;
+  box-shadow: 0 12px 36px rgba(17, 94, 89, 0.12);
+}
+
+.student-layout .stu-plans-page .org-plans-active-card {
+  border-color: color-mix(in srgb, var(--stu-teal-dark, #115e59) 28%, var(--stu-border, #e7e5e4));
+  background: color-mix(in srgb, var(--stu-teal-soft, #ccfbf1) 40%, var(--stu-surface, #fff));
+}
+
+.student-layout .stu-plans-page .org-plans-pill--active,
+.student-layout .stu-plans-page .org-plans-pill--subscribed {
+  background: var(--stu-teal-soft, #ccfbf1);
+  color: var(--stu-teal-dark, #115e59);
+}
+
+.student-layout .stu-plans-page .org-plans-icon-btn:hover {
+  border-color: var(--stu-teal-dark, #115e59);
+  color: var(--stu-teal-dark, #115e59);
+  background: var(--stu-teal-soft, #ccfbf1);
+}
+
+.student-layout .stu-plans-page .org-plans-feature-tag {
+  background: var(--stu-teal-soft, #ccfbf1);
+  color: var(--stu-teal-dark, #115e59);
+  border: 1px solid #99f6e4;
+}
+
+.student-layout .stu-plans-page .btn-primary.org-plans-cta,
+.student-layout .stu-plans-page .org-plans-modal-footer .btn-primary {
+  background: var(--stu-teal-dark, #115e59);
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.student-layout .stu-plans-page .btn-primary.org-plans-cta:hover:not(:disabled),
+.student-layout .stu-plans-page .org-plans-modal-footer .btn-primary:hover:not(:disabled) {
+  background: #0f766e;
+}
+
+.student-layout .stu-plans-page .org-plans-modal {
+  border-radius: 20px;
+  border: 1px solid var(--stu-border, #e7e5e4);
+}
+
+.student-layout .stu-plans-page .org-plans-footnote {
+  color: var(--stu-muted, #78716c);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .student-layout .stu-plans-page .org-plans-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .student-layout .stu-plans-page .org-plans-filters {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .student-layout .stu-plans-page .org-plans-filter {
+    flex-shrink: 0;
+  }
+
+  .student-layout .stu-plans-page .org-plans-grid {
+    grid-template-columns: 1fr;
+  }
+}

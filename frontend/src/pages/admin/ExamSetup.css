@@ -54,9 +54,75 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 20px;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
   padding-bottom: 24px;
   border-bottom: 1px solid var(--border, #e2e8f0);
+}
+
+/* Content pipeline */
+.exam-setup-pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+}
+
+.exam-setup-pipeline__step {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--border, #e2e8f0);
+  font-weight: 500;
+}
+
+.exam-setup-pipeline__step--active {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.08);
+}
+
+/* Stats strip */
+.exam-setup-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 640px) {
+  .exam-setup-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.exam-setup-stat {
+  padding: 14px 16px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.exam-setup-stat__value {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text, #0f172a);
+  line-height: 1.1;
+}
+
+.exam-setup-stat__label {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted, #64748b);
 }
 
 .exam-setup-hero-main {
@@ -249,6 +315,46 @@
 .exam-setup-subject-actions {
   display: flex;
   gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Icon buttons — explicit stroke so edit/delete stay visible */
+.exam-setup-page .icon-btn {
+  border: 1px solid var(--border, #e2e8f0);
+  background: var(--surface, #fff);
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.exam-setup-page .icon-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: #0f172a;
+  stroke-width: 2;
+  fill: none;
+  pointer-events: none;
+}
+
+.exam-setup-page .icon-btn:hover {
+  border-color: #dc2626;
+  background: #fff;
+}
+
+.exam-setup-page .icon-btn:hover svg {
+  stroke: #dc2626;
+}
+
+.exam-setup-page .icon-btn.danger svg {
+  stroke: #ef4444;
+}
+
+.exam-setup-page .icon-btn.danger:hover {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.exam-setup-page .icon-btn.danger:hover svg {
+  stroke: #dc2626;
 }
 
 .exam-setup-subject-body {

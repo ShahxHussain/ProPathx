@@ -31,8 +31,6 @@
 
 **Frontend** (`frontend/.env.local`):
 - `REACT_APP_API_URL`
-- `REACT_APP_SUPABASE_URL`
-- `REACT_APP_SUPABASE_ANON_KEY`
 
 ## Main Roles
 - SuperAdmin
@@ -45,3 +43,8 @@
 - Frontend static app
 - Backend API service
 - Supabase as managed DB/backend service
+
+## Improvements & refactor tracker
+See **[docs/IMPROVEMENTS_TRACKER.md](../docs/IMPROVEMENTS_TRACKER.md)** for folder-structure plans, feature status, and what is already done (tables with statuses).
+
+**Client handoff docs:** [ARCHITECTURE.md](../docs/ARCHITECTURE.md) · [API_OVERVIEW.md](../docs/API_OVERVIEW.md) · [DEPLOYMENT.md](../docs/DEPLOYMENT.md)

@@ -1,4 +1,4 @@
-@import '../org/Dashboard.css';
+@import '../../features/org/pages/Dashboard.css';
 
 /* Reviewer: accent-tinted portal chrome on top of shared portal shell */
 .dashboard-page.portal-dashboard.reviewer-dashboard::before {

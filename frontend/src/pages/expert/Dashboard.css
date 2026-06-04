@@ -1,4 +1,4 @@
-@import '../org/Dashboard.css';
+@import '../../features/org/pages/Dashboard.css';
 
 .od-sk-chart--short {
   min-height: 200px;

@@ -1,18 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import authRoutes from './routes/auth.js';
-import userRoutes from './routes/users.js';
-import adminRoutes from './routes/admin.js';
-import questionRoutes from './routes/questions.js';
-import reviewerRoutes from './routes/reviewers.js';
-import notificationRoutes from './routes/notifications.js';
-import testRoutes from './routes/tests.js';
-import studentRoutes from './routes/students.js';
-import groupRoutes from './routes/groups.js';
-import orgSettingsRoutes from './routes/orgSettings.js';
-import studentAuthRoutes from './routes/auth.js';
+import { registerApiRoutes } from './routes/index.js';
 import { recordRequest } from './utils/metricsStore.js';
+import { warnIfSupabaseUnreachable } from './config/database.js';
 
 dotenv.config();
 
@@ -36,18 +27,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-app.use('/api/org/auth', authRoutes);
-app.use('/api/student/auth', studentAuthRoutes);
-app.use('/api/student', studentRoutes);
-app.use('/api/org/users', userRoutes);
-app.use('/api/org/tests', testRoutes);
-app.use('/api/org/students', studentRoutes);
-app.use('/api/org/groups', groupRoutes);
-app.use('/api/org/settings', orgSettingsRoutes);
-app.use('/api/questions', questionRoutes);
-app.use('/api/reviewers', reviewerRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/notifications', notificationRoutes);
+registerApiRoutes(app);
 
 // Debug: Log registered admin routes (development only)
 if (process.env.NODE_ENV === 'development') {
@@ -71,5 +51,6 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(` ProPath API server running on port ${PORT}`);
   console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
+  warnIfSupabaseUnreachable();
 });
 

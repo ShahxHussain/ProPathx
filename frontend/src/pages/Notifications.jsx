@@ -10,9 +10,20 @@ import {
   Clock3,
   TriangleAlert,
   Info,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { notificationAPI } from '../services/api';
 import './Notifications.css';
+
+const TYPE_META = {
+  System: { tone: 'system', icon: Info, label: 'System' },
+  Payment: { tone: 'payment', icon: CircleDollarSign, label: 'Payment' },
+  Exam: { tone: 'exam', icon: FileText, label: 'Exam' },
+  Result: { tone: 'result', icon: GraduationCap, label: 'Result' },
+  Reminder: { tone: 'reminder', icon: Clock3, label: 'Reminder' },
+  Alert: { tone: 'alert', icon: TriangleAlert, label: 'Alert' },
+};
 
 const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
@@ -20,8 +31,8 @@ const Notifications = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectedNotification, setSelectedNotification] = useState(null);
-  const [filter, setFilter] = useState('all'); // all, unread, read
-  const [typeFilter, setTypeFilter] = useState('all'); // all, System, Payment, Exam, etc.
+  const [filter, setFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
 
   useEffect(() => {
     loadNotifications();
@@ -49,19 +60,14 @@ const Notifications = () => {
 
   const applyFilters = () => {
     let filtered = [...notifications];
-
-    // Apply read/unread filter
     if (filter === 'unread') {
       filtered = filtered.filter((n) => !n.IsRead);
     } else if (filter === 'read') {
       filtered = filtered.filter((n) => n.IsRead);
     }
-
-    // Apply type filter
     if (typeFilter !== 'all') {
       filtered = filtered.filter((n) => n.NotificationType === typeFilter);
     }
-
     setFilteredNotifications(filtered);
   };
 
@@ -92,10 +98,7 @@ const Notifications = () => {
   };
 
   const handleDelete = async (notificationId) => {
-    if (!window.confirm('Are you sure you want to delete this notification?')) {
-      return;
-    }
-
+    if (!window.confirm('Delete this notification?')) return;
     try {
       await notificationAPI.deleteNotification(notificationId);
       setNotifications((prev) => prev.filter((notif) => notif.NotificationID !== notificationId));
@@ -105,40 +108,6 @@ const Notifications = () => {
     } catch (error) {
       console.error('Failed to delete notification:', error);
       alert('Failed to delete notification');
-    }
-  };
-
-  const getNotificationIcon = (type, size = 18) => {
-    switch (type) {
-      case 'Payment':
-        return <CircleDollarSign size={size} />;
-      case 'Exam':
-        return <FileText size={size} />;
-      case 'Result':
-        return <GraduationCap size={size} />;
-      case 'Reminder':
-        return <Clock3 size={size} />;
-      case 'Alert':
-        return <TriangleAlert size={size} />;
-      default:
-        return <Info size={size} />;
-    }
-  };
-
-  const getNotificationColor = (type) => {
-    switch (type) {
-      case 'Payment':
-        return 'green';
-      case 'Exam':
-        return 'purple';
-      case 'Result':
-        return 'gold';
-      case 'Reminder':
-        return 'orange';
-      case 'Alert':
-        return 'red';
-      default:
-        return 'blue';
     }
   };
 
@@ -155,68 +124,89 @@ const Notifications = () => {
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  const unreadCount = notifications.filter((n) => !n.IsRead).length;
   const formatDateTime = (dateString) => {
     if (!dateString) return '—';
     try {
-      return new Date(dateString).toLocaleString();
+      return new Date(dateString).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
     } catch {
       return '—';
     }
   };
 
+  const unreadCount = notifications.filter((n) => !n.IsRead).length;
+  const readCount = notifications.length - unreadCount;
+
+  const getTypeMeta = (type) => TYPE_META[type] || TYPE_META.System;
+
   return (
     <div className="notifications-page">
-      <div className="notifications-header">
-        <div>
+      <header className="notif-header">
+        <div className="notif-header__main">
           <h1>Notifications</h1>
-          <p className="subtitle">
-            {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount !== 1 ? 's' : ''}` : 'All caught up!'}
+          <p className="notif-header__sub">
+            {unreadCount > 0
+              ? `${unreadCount} unread · ${notifications.length} total`
+              : 'All caught up — no unread notifications'}
           </p>
         </div>
         {unreadCount > 0 && (
-          <button className="btn-mark-all-read" onClick={handleMarkAllAsRead}>
-            <CheckCircle2 size={18} />
-            Mark all as read
+          <button type="button" className="notif-btn notif-btn--primary" onClick={handleMarkAllAsRead}>
+            <CheckCircle2 size={17} />
+            Mark all read
           </button>
         )}
-      </div>
+      </header>
 
-      <div className="notifications-filters">
-        <div className="filter-group">
-          <Filter size={16} />
-          <span>Filter:</span>
-          <button
-            className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
-            onClick={() => setFilter('all')}
-          >
-            All ({notifications.length})
-          </button>
-          <button
-            className={`filter-btn ${filter === 'unread' ? 'active' : ''}`}
-            onClick={() => setFilter('unread')}
-          >
-            Unread ({unreadCount})
-          </button>
-          <button
-            className={`filter-btn ${filter === 'read' ? 'active' : ''}`}
-            onClick={() => setFilter('read')}
-          >
-            Read ({notifications.length - unreadCount})
-          </button>
+      <div className="notif-toolbar">
+        <div className="notif-toolbar__group">
+          <Filter size={15} aria-hidden />
+          <span className="notif-toolbar__label">Status</span>
+          <div className="notif-segment" role="tablist" aria-label="Filter by read status">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filter === 'all'}
+              className={`notif-segment__btn${filter === 'all' ? ' is-active' : ''}`}
+              onClick={() => setFilter('all')}
+            >
+              All <span className="notif-segment__count">{notifications.length}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filter === 'unread'}
+              className={`notif-segment__btn${filter === 'unread' ? ' is-active' : ''}`}
+              onClick={() => setFilter('unread')}
+            >
+              Unread <span className="notif-segment__count">{unreadCount}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filter === 'read'}
+              className={`notif-segment__btn${filter === 'read' ? ' is-active' : ''}`}
+              onClick={() => setFilter('read')}
+            >
+              Read <span className="notif-segment__count">{readCount}</span>
+            </button>
+          </div>
         </div>
 
-        <div className="filter-group">
-          <span>Type:</span>
+        <div className="notif-toolbar__group">
+          <span className="notif-toolbar__label">Type</span>
           <select
-            className="type-filter-select"
+            className="notif-select"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
+            aria-label="Filter by notification type"
           >
-            <option value="all">All Types</option>
+            <option value="all">All types</option>
             <option value="System">System</option>
             <option value="Payment">Payment</option>
             <option value="Exam">Exam</option>
@@ -227,150 +217,177 @@ const Notifications = () => {
         </div>
       </div>
 
-      <div className="notifications-list">
+      <div className="notif-list">
         {loadError && !loading && (
-          <div className="empty-state" style={{ paddingTop: 24, paddingBottom: 24 }}>
+          <div className="notif-empty notif-empty--error">
             <Bell size={40} />
             <h2>Could not load notifications</h2>
             <p>{loadError}</p>
           </div>
         )}
+
         {loading ? (
-          <div className="loading-state">
-            <Bell size={48} />
-            <p>Loading notifications...</p>
+          <div className="notif-empty">
+            <div className="notif-spinner" />
+            <p>Loading notifications…</p>
           </div>
         ) : filteredNotifications.length === 0 ? (
-          <div className="empty-state">
-            <Bell size={64} />
-            <h2>No notifications found</h2>
+          <div className="notif-empty">
+            <Bell size={48} strokeWidth={1.5} />
+            <h2>No notifications</h2>
             <p>
               {filter === 'unread'
-                ? "You're all caught up! No unread notifications."
+                ? "You're all caught up."
                 : filter === 'read'
-                ? 'No read notifications found.'
-                : typeFilter !== 'all'
-                ? `No ${typeFilter} notifications found.`
-                : 'No notifications yet.'}
+                  ? 'No read notifications yet.'
+                  : typeFilter !== 'all'
+                    ? `No ${typeFilter.toLowerCase()} notifications.`
+                    : 'Notifications you receive will appear here.'}
             </p>
           </div>
         ) : (
-          filteredNotifications.map((notification) => (
-            <div
-              key={notification.NotificationID}
-              className={`notification-card notification-card-${getNotificationColor(
-                notification.NotificationType
-              )} ${!notification.IsRead ? 'unread' : ''}`}
-              role="button"
-              tabIndex={0}
-              onClick={() => setSelectedNotification(notification)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setSelectedNotification(notification);
-                }
-              }}
-            >
-              <div className="notification-icon-large">{getNotificationIcon(notification.NotificationType, 24)}</div>
-              <div className="notification-content-full">
-                <div className="notification-header-card">
-                  <h3>{notification.Title}</h3>
-                  <div className="notification-type-badge">{notification.NotificationType}</div>
-                </div>
-                <p className="notification-message-full">{notification.Message}</p>
-                <div className="notification-footer-card">
-                  <span className="notification-time-full">{formatTime(notification.CreatedAt)}</span>
-                  {notification.IsRead && notification.ReadAt && (
-                    <span className="notification-read-time">Read {formatTime(notification.ReadAt)}</span>
+          filteredNotifications.map((notification) => {
+            const meta = getTypeMeta(notification.NotificationType);
+            const Icon = meta.icon;
+
+            return (
+              <article
+                key={notification.NotificationID}
+                className={`notif-card notif-card--${meta.tone}${!notification.IsRead ? ' notif-card--unread' : ''}`}
+              >
+                <button
+                  type="button"
+                  className="notif-card__main"
+                  onClick={() => setSelectedNotification(notification)}
+                >
+                  <span className="notif-card__icon" aria-hidden>
+                    <Icon size={20} strokeWidth={2} />
+                  </span>
+                  <span className="notif-card__content">
+                    <span className="notif-card__row">
+                      <span className={`notif-card__type notif-card__type--${meta.tone}`}>{meta.label}</span>
+                      {!notification.IsRead && <span className="notif-card__dot">Unread</span>}
+                    </span>
+                    <span className="notif-card__title">{notification.Title}</span>
+                    <span className="notif-card__message">{notification.Message}</span>
+                    <span className="notif-card__meta">
+                      <time dateTime={notification.CreatedAt}>{formatTime(notification.CreatedAt)}</time>
+                      {notification.IsRead && notification.ReadAt && (
+                        <>
+                          <span className="notif-card__meta-sep" aria-hidden>
+                            ·
+                          </span>
+                          <span>Read {formatTime(notification.ReadAt)}</span>
+                        </>
+                      )}
+                    </span>
+                  </span>
+                </button>
+
+                <div className="notif-card__actions">
+                  {!notification.IsRead && (
+                    <button
+                      type="button"
+                      className="notif-icon-btn"
+                      onClick={() => handleMarkAsRead(notification.NotificationID)}
+                      title="Mark as read"
+                      aria-label="Mark as read"
+                    >
+                      <Check size={17} />
+                    </button>
                   )}
-                </div>
-              </div>
-              <div className="notification-actions">
-                {!notification.IsRead && (
                   <button
-                    className="action-btn mark-read"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleMarkAsRead(notification.NotificationID);
-                    }}
-                    title="Mark as read"
+                    type="button"
+                    className="notif-icon-btn notif-icon-btn--danger"
+                    onClick={() => handleDelete(notification.NotificationID)}
+                    title="Delete"
+                    aria-label="Delete notification"
                   >
-                    <Check size={18} />
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+              </article>
+            );
+          })
+        )}
+      </div>
+
+      {selectedNotification && (() => {
+        const meta = getTypeMeta(selectedNotification.NotificationType);
+        const Icon = meta.icon;
+        return (
+          <div className="notif-modal-overlay" onClick={() => setSelectedNotification(null)} role="presentation">
+            <div
+              className="notif-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="notif-modal-title"
+            >
+              <div className="notif-modal__header">
+                <div className={`notif-modal__icon notif-modal__icon--${meta.tone}`}>
+                  <Icon size={22} />
+                </div>
+                <div className="notif-modal__head-text">
+                  <span className={`notif-card__type notif-card__type--${meta.tone}`}>{meta.label}</span>
+                  <h2 id="notif-modal-title">{selectedNotification.Title}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="notif-icon-btn"
+                  onClick={() => setSelectedNotification(null)}
+                  aria-label="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="notif-modal__body">
+                <p>{selectedNotification.Message}</p>
+                <dl className="notif-modal__meta">
+                  <div>
+                    <dt>Sent</dt>
+                    <dd>{formatDateTime(selectedNotification.CreatedAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>Status</dt>
+                    <dd>{selectedNotification.IsRead ? 'Read' : 'Unread'}</dd>
+                  </div>
+                  {selectedNotification.ReadAt && (
+                    <div>
+                      <dt>Read at</dt>
+                      <dd>{formatDateTime(selectedNotification.ReadAt)}</dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+
+              <div className="notif-modal__footer">
+                {!selectedNotification.IsRead && (
+                  <button
+                    type="button"
+                    className="notif-btn notif-btn--secondary"
+                    onClick={() => handleMarkAsRead(selectedNotification.NotificationID)}
+                  >
+                    <Check size={16} />
+                    Mark as read
                   </button>
                 )}
                 <button
-                  className="action-btn action-btn-text delete"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(notification.NotificationID);
-                  }}
-                  title="Delete"
-                  aria-label="Delete notification"
+                  type="button"
+                  className="notif-btn notif-btn--danger"
+                  onClick={() => handleDelete(selectedNotification.NotificationID)}
                 >
+                  <Trash2 size={16} />
                   Delete
                 </button>
               </div>
             </div>
-          ))
-        )}
-      </div>
-
-      {selectedNotification && (
-        <div className="notification-modal-overlay" onClick={() => setSelectedNotification(null)}>
-          <div className="notification-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="notification-modal-header">
-              <div className="notification-modal-title-wrap">
-                <div className="notification-icon-large">
-                  {getNotificationIcon(selectedNotification.NotificationType, 22)}
-                </div>
-                <div>
-                  <h3>{selectedNotification.Title}</h3>
-                  <div className="notification-type-badge">{selectedNotification.NotificationType}</div>
-                </div>
-              </div>
-              <button
-                className="action-btn action-btn-text notification-modal-close-btn"
-                onClick={() => setSelectedNotification(null)}
-                aria-label="Close notification details"
-                title="Close"
-              >
-                Close
-              </button>
-            </div>
-            <div className="notification-modal-body">
-              <p>{selectedNotification.Message}</p>
-              <div className="notification-modal-meta">
-                <span><strong>Sent:</strong> {formatDateTime(selectedNotification.CreatedAt)}</span>
-                <span><strong>Status:</strong> {selectedNotification.IsRead ? 'Read' : 'Unread'}</span>
-                <span><strong>Read at:</strong> {formatDateTime(selectedNotification.ReadAt)}</span>
-              </div>
-            </div>
-            <div className="notification-modal-actions">
-              {!selectedNotification.IsRead && (
-                <button
-                  className="action-btn mark-read"
-                  onClick={() => handleMarkAsRead(selectedNotification.NotificationID)}
-                >
-                  <Check size={18} />
-                </button>
-              )}
-              <button
-                className="action-btn action-btn-text delete"
-                onClick={() => handleDelete(selectedNotification.NotificationID)}
-                aria-label="Delete notification"
-                title="Delete"
-              >
-                Delete
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
 
 export default Notifications;
-
-
-

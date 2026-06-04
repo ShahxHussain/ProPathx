@@ -21,5 +21,26 @@ export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   },
 });
 
+/** Warn once at startup if Supabase is unreachable (DNS / network / paused project). */
+export async function warnIfSupabaseUnreachable() {
+  try {
+    const host = new URL(supabaseUrl).hostname;
+    const { error } = await supabase.from('Organizations').select('OrgID').limit(1);
+    if (error) {
+      const msg = `${error.message || ''} ${error.details || ''}`.toLowerCase();
+      if (msg.includes('fetch failed') || msg.includes('enotfound') || msg.includes('econnrefused')) {
+        console.error(
+          `\n⚠️  Supabase unreachable at ${host}. API calls will fail until this is fixed.\n` +
+            '   → Verify SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in backend/.env\n' +
+            '   → Confirm the project is active in the Supabase dashboard\n' +
+            '   → Check internet / VPN / firewall\n'
+        );
+      }
+    }
+  } catch (err) {
+    console.error('⚠️  Supabase startup check failed:', err.message);
+  }
+}
+
 export default supabase;
 

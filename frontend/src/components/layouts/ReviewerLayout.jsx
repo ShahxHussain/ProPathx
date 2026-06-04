@@ -13,6 +13,7 @@ import {
 import { orgAuth } from '../../services/api';
 import NotificationBell from '../NotificationBell';
 import AnnouncementBanner from '../AnnouncementBanner';
+import ProfileMenu from '../ProfileMenu';
 import './ReviewerLayout.css';
 
 const ReviewerLayout = () => {
@@ -108,24 +109,23 @@ const ReviewerLayout = () => {
       <main className="dashboard-main">
         <AnnouncementBanner />
         <div className="dashboard-header">
-          <button
-            className="mobile-menu-toggle"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label="Toggle menu"
-          >
-            <Menu size={24} />
-          </button>
-          <div className="header-title">
-            {menuItems.find((item) => isActive(item.path))?.label || 'Dashboard'}
+          <div className="dashboard-header__start">
+            <button
+              className="mobile-menu-toggle"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label="Toggle menu"
+            >
+              <Menu size={24} />
+            </button>
+            <div className="header-title">
+              {location.pathname.endsWith('/profile')
+                ? 'My profile'
+                : menuItems.find((item) => isActive(item.path))?.label || 'Dashboard'}
+            </div>
           </div>
           <div className="header-actions">
             <NotificationBell />
-            <div className="header-user">
-              <div className="user-info">
-                <div className="user-name">{user?.fullName || 'Reviewer'}</div>
-                <div className="user-role">{user?.role || 'Reviewer'}</div>
-              </div>
-            </div>
+            <ProfileMenu user={user} profilePath="/reviewer/profile" onLogout={handleLogout} />
           </div>
         </div>
 

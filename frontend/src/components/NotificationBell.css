@@ -1,5 +1,13 @@
 .notification-bell-container {
   position: relative;
+  display: block;
+  width: auto;
+  max-width: none;
+  flex: 0 0 auto;
+}
+
+.dashboard-header .notification-bell-container {
+  flex: 0 0 auto;
 }
 
 .notification-bell {

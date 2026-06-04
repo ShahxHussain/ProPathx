@@ -25,6 +25,7 @@ import {
 import { orgAuth } from '../../services/api';
 import NotificationBell from '../NotificationBell';
 import AnnouncementBanner from '../AnnouncementBanner';
+import ProfileMenu from '../ProfileMenu';
 import './AdminLayout.css';
 
 const AdminLayout = () => {
@@ -125,25 +126,24 @@ const AdminLayout = () => {
       <main className="dashboard-main">
         <AnnouncementBanner />
         <div className="dashboard-header">
-          <button
-            className="mobile-menu-toggle"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label="Toggle menu"
-          >
-            <Menu size={24} />
-          </button>
-              <div className="header-title">
-                {menuItems.find((item) => isActive(item.path))?.label || 'Dashboard'}
-              </div>
-              <div className="header-actions">
-                <NotificationBell />
-                <div className="header-user">
-                  <div className="user-info">
-                    <div className="user-name">{user?.fullName || 'Super Admin'}</div>
-                    <div className="user-role">Super Admin</div>
-                  </div>
-                </div>
-              </div>
+          <div className="dashboard-header__start">
+            <button
+              className="mobile-menu-toggle"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label="Toggle menu"
+            >
+              <Menu size={24} />
+            </button>
+            <div className="header-title">
+              {location.pathname.endsWith('/profile')
+                ? 'My profile'
+                : menuItems.find((item) => isActive(item.path))?.label || 'Dashboard'}
+            </div>
+          </div>
+          <div className="header-actions">
+            <NotificationBell />
+            <ProfileMenu user={user} profilePath="/admin/profile" onLogout={handleLogout} />
+          </div>
         </div>
 
         <div className="dashboard-content">

@@ -1,140 +1,212 @@
-/* System Health page */
-.health-page {
-  padding: 1.5rem 2rem 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
+/* System Health — balanced view (SuperAdmin dashboard styling) */
+
+.sa-health-page {
+  max-width: 1680px;
 }
 
-.health-header {
-  margin-bottom: 1.5rem;
+.sa-health-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
-.health-header h1 {
+.sa-health-title {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 1.75rem;
-  font-weight: 600;
-  color: #111827;
-  margin: 0 0 0.25rem 0;
-}
-
-.health-subtitle {
-  font-size: 0.9rem;
-  color: #6b7280;
+  gap: 10px;
   margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text, #0f172a);
 }
 
-/* Status strip */
-.health-status-strip {
+.sa-health-title svg {
+  color: var(--sa-crimson, #dc2626);
+  flex-shrink: 0;
+}
+
+.sa-health-top__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sa-health-updated {
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+}
+
+.sa-health-page .sa-btn--ghost {
+  background: var(--surface, #fff);
+  color: var(--text, #0f172a);
+  border: 1px solid var(--border, #e2e8f0);
+}
+
+.sa-health-page .sa-btn--ghost:hover:not(:disabled) {
+  border-color: var(--sa-crimson, #dc2626);
+  color: var(--sa-crimson, #dc2626);
+}
+
+.sa-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sa-health-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px;
+  color: var(--text-muted, #64748b);
+  font-size: 14px;
+}
+
+.sa-health-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Stat cards */
+.sa-health-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.health-status-card {
+.sa-health-stats--secondary {
+  margin-bottom: 4px;
+}
+
+@media (max-width: 1000px) {
+  .sa-health-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .sa-health-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sa-health-stat {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, var(--sa-shadow);
+}
+
+.sa-health-stat--ok {
+  border-left: 3px solid #22c55e;
+}
+
+.sa-health-stat--warn {
+  border-left: 3px solid #eab308;
+}
+
+.sa-health-stat--error {
+  border-left: 3px solid #ef4444;
+}
+
+.sa-health-stat__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem 1.25rem;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--background, #f8fafc);
+  color: var(--text-muted, #64748b);
 }
 
-.health-status-card.ok {
-  border-left: 4px solid #22c55e;
+.sa-health-stat__icon--ok {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
 }
 
-.health-status-card.ok svg {
-  color: #22c55e;
+.sa-health-stat__icon--warn {
+  background: rgba(234, 179, 8, 0.12);
+  color: #ca8a04;
 }
 
-.health-status-card.error {
-  border-left: 4px solid #ef4444;
-}
-
-.health-status-card.error svg {
-  color: #ef4444;
-}
-
-.health-status-card.warn {
-  border-left: 4px solid #eab308;
-}
-
-.health-status-card.warn svg {
-  color: #eab308;
-}
-
-.health-status-card.overall {
-  font-weight: 600;
-}
-
-.health-status-label {
-  display: block;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #6b7280;
-  margin-bottom: 0.2rem;
-}
-
-.health-status-value {
-  font-size: 0.95rem;
-  color: #111827;
-}
-
-/* Chart cards */
-.health-chart-card {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.75rem;
-  padding: 1.25rem;
-  margin-bottom: 1.25rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-}
-
-.health-chart-card h2 {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: #111827;
-  margin: 0 0 1rem 0;
-}
-
-.health-chart-card h2 svg {
+.sa-health-stat__icon--error {
+  background: rgba(239, 68, 68, 0.1);
   color: #dc2626;
 }
 
-.health-chart {
-  min-height: 260px;
+.sa-health-stat__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.health-error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  margin-bottom: 1rem;
+.sa-health-stat__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #64748b);
 }
 
-.health-loading {
-  text-align: center;
-  padding: 3rem;
-  color: #6b7280;
+.sa-health-stat__value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text, #0f172a);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
-.health-footer {
-  font-size: 0.8rem;
-  color: #9ca3af;
-  margin-top: 1.5rem;
+.sa-health-stat__hint {
+  font-size: 11px;
+  color: var(--text-muted, #94a3b8);
+  line-height: 1.35;
+  margin-top: 2px;
 }
 
-.health-footer strong {
-  color: #6b7280;
+/* Charts — single scrollable grid */
+.sa-health-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .sa-health-charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sa-health-panel .sa-panel__head {
+  align-items: flex-start;
+}
+
+.sa-health-panel .sa-panel__subtitle {
+  margin: 4px 0 0;
+}
+
+.sa-health-badge {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted, #64748b);
+  background: var(--background, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 999px;
+}
+
+.sa-health-panel.sa-panel--chart {
+  min-height: 0;
+  margin-bottom: 0;
 }

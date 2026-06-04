@@ -13,5 +13,16 @@ export const getDashboardRoute = (role) => {
   return routes[role] || '/dashboard';
 };
 
+/**
+ * Route after org-side login (or first-password completion)
+ * @param {{ role?: string, mustChangePassword?: boolean }} user
+ */
+export const getPostLoginRoute = (user) => {
+  if (user?.mustChangePassword) {
+    return '/welcome';
+  }
+  return getDashboardRoute(user?.role);
+};
+
 
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, CheckCircle, AlertCircle, Search } from 'lucide-react';
 import { testAPI, groupAPI } from '../../services/api';
-import '../../pages/org/Tests.css';
+import '../../features/org/pages/Tests.css';
 
 const MIN_QUESTIONS_GATE = 1;
 

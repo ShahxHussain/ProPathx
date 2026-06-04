@@ -16,6 +16,7 @@ import {
 import { studentAuth } from '../../services/api';
 import NotificationBell from '../NotificationBell';
 import AnnouncementBanner from '../AnnouncementBanner';
+import ProfileMenu from '../ProfileMenu';
 import '../../pages/student/student-theme.css';
 import './DashboardLayout.css';
 import './StudentLayout.css';
@@ -132,7 +133,7 @@ const StudentLayout = () => {
       <main className="dashboard-main">
         <AnnouncementBanner />
         <div className="dashboard-header">
-          <div className="header-left">
+          <div className="dashboard-header__start">
             <button
               className="mobile-menu-toggle"
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -140,9 +141,15 @@ const StudentLayout = () => {
             >
               <Menu size={20} />
             </button>
+            <div className="header-title">
+              {location.pathname.endsWith('/profile')
+                ? 'My profile'
+                : menuItems.find((item) => navItemActive(item))?.label || 'Dashboard'}
+            </div>
           </div>
-          <div className="header-right">
+          <div className="header-actions">
             <NotificationBell />
+            <ProfileMenu user={user} profilePath="/student/profile" onLogout={handleLogout} />
           </div>
         </div>
         <div className="dashboard-content">

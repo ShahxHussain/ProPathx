@@ -1,5 +1,7 @@
 import { verifyToken, extractToken } from '../utils/jwt.js';
 import { supabase } from '../config/database.js';
+import { resolveMustChangePassword } from '../utils/orgMustChangePassword.js';
+import { isSupabaseConnectivityError } from '../utils/supabaseErrors.js';
 
 /**
  * JWT Authentication Middleware
@@ -112,7 +114,16 @@ export const verifyActiveStatus = async (req, res, next) => {
           .eq('OrgID', orgId)
           .single();
 
-        if (orgError || !org) {
+        if (orgError) {
+          if (isSupabaseConnectivityError(orgError)) {
+            return res.status(503).json({
+              error: 'Cannot reach the database. Check Supabase configuration and network.',
+              code: 'DATABASE_UNAVAILABLE',
+            });
+          }
+          return res.status(404).json({ error: 'Organization not found' });
+        }
+        if (!org) {
           return res.status(404).json({ error: 'Organization not found' });
         }
 
@@ -121,11 +132,11 @@ export const verifyActiveStatus = async (req, res, next) => {
         }
       }
 
-      // Verify org user is active
+      // Verify org user is active (and password change completed when required)
       if (orgUserId) {
         const { data: orgUser, error: userError } = await supabase
           .from('OrgUsers')
-          .select('Status')
+          .select('Status, MustChangePassword, LastLogin, Role, OrgID')
           .eq('OrgUserID', orgUserId)
           .single();
 
@@ -135,6 +146,27 @@ export const verifyActiveStatus = async (req, res, next) => {
 
         if (orgUser.Status !== 'Active') {
           return res.status(403).json({ error: 'User account is inactive' });
+        }
+
+        let organization = null;
+        if (orgId) {
+          const { data: org } = await supabase
+            .from('Organizations')
+            .select('CreatedBy')
+            .eq('OrgID', orgUser.OrgID || orgId)
+            .single();
+          organization = org;
+        }
+
+        if (resolveMustChangePassword(orgUser, organization)) {
+          const requestPath = (req.originalUrl || req.url || '').split('?')[0];
+          const isFirstPasswordRoute = requestPath.includes('/auth/first-password');
+          if (!isFirstPasswordRoute) {
+            return res.status(403).json({
+              error: 'Please set a new password before continuing',
+              code: 'MUST_CHANGE_PASSWORD',
+            });
+          }
         }
       }
 

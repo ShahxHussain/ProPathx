@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
   ChevronRight,
   BookOpen,
@@ -13,12 +13,11 @@ import {
   Layers,
 } from 'lucide-react';
 import { adminAPI } from '../../services/api';
-import '../org/Exams.css';
+import '../../features/org/pages/Exams.css';
 import './ExamSetup.css';
 
 const ExamSetup = () => {
   const { examId } = useParams();
-  const navigate = useNavigate();
   const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -187,12 +186,20 @@ const ExamSetup = () => {
   }
 
   const subjects = exam.subjects || [];
+  const contentStats = subjects.reduce(
+    (acc, s) => {
+      acc.chapters += (s.chapters || []).length;
+      acc.topics += (s.topics || []).length;
+      return acc;
+    },
+    { chapters: 0, topics: 0 }
+  );
 
   return (
     <div className="exam-setup-page">
       <nav className="exam-setup-breadcrumb" aria-label="Breadcrumb">
         <Link to="/admin/exams" className="exam-setup-breadcrumb-link">
-          Exams
+          Exams &amp; Content
         </Link>
         <ChevronRight size={16} aria-hidden />
         <span className="exam-setup-breadcrumb-current">
@@ -211,7 +218,7 @@ const ExamSetup = () => {
               <p className="exam-setup-hero-desc">{exam.Description}</p>
             )}
             <p className="exam-setup-hero-hint">
-              Build the content structure below: add <strong>subjects</strong>, then <strong>chapters</strong> (optional) and <strong>topics</strong>. Topics are where questions are attached.
+              Add subjects, optional chapters, then topics — questions attach to topics.
             </p>
           </div>
         </div>
@@ -220,6 +227,35 @@ const ExamSetup = () => {
           Back to list
         </Link>
       </header>
+
+      <div className="exam-setup-pipeline" aria-hidden>
+        <span className="exam-setup-pipeline__step exam-setup-pipeline__step--active">Exam</span>
+        <ChevronRight size={14} />
+        <span className={`exam-setup-pipeline__step${subjects.length ? ' exam-setup-pipeline__step--active' : ''}`}>Subjects</span>
+        <ChevronRight size={14} />
+        <span className={`exam-setup-pipeline__step${contentStats.chapters ? ' exam-setup-pipeline__step--active' : ''}`}>Chapters</span>
+        <ChevronRight size={14} />
+        <span className={`exam-setup-pipeline__step${contentStats.topics ? ' exam-setup-pipeline__step--active' : ''}`}>Topics</span>
+      </div>
+
+      <div className="exam-setup-stats">
+        <div className="exam-setup-stat">
+          <span className="exam-setup-stat__value">{subjects.length}</span>
+          <span className="exam-setup-stat__label">Subjects</span>
+        </div>
+        <div className="exam-setup-stat">
+          <span className="exam-setup-stat__value">{contentStats.chapters}</span>
+          <span className="exam-setup-stat__label">Chapters</span>
+        </div>
+        <div className="exam-setup-stat">
+          <span className="exam-setup-stat__value">{contentStats.topics}</span>
+          <span className="exam-setup-stat__label">Topics</span>
+        </div>
+        <div className="exam-setup-stat">
+          <span className="exam-setup-stat__value">{totalWeightage.toFixed(0)}%</span>
+          <span className="exam-setup-stat__label">Weight total</span>
+        </div>
+      </div>
 
       {error && (
         <div className="notice error exam-setup-notice">{error}</div>
