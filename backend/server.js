@@ -10,6 +10,7 @@ import notificationRoutes from './routes/notifications.js';
 import testRoutes from './routes/tests.js';
 import studentRoutes from './routes/students.js';
 import groupRoutes from './routes/groups.js';
+import orgSettingsRoutes from './routes/orgSettings.js';
 import studentAuthRoutes from './routes/auth.js';
 import { recordRequest } from './utils/metricsStore.js';
 
@@ -42,6 +43,7 @@ app.use('/api/org/users', userRoutes);
 app.use('/api/org/tests', testRoutes);
 app.use('/api/org/students', studentRoutes);
 app.use('/api/org/groups', groupRoutes);
+app.use('/api/org/settings', orgSettingsRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/reviewers', reviewerRoutes);
 app.use('/api/admin', adminRoutes);

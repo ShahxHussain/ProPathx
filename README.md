@@ -42,14 +42,16 @@ propath/
 │   ├── routes/                      # API routes (admin/org/auth/questions/tests/etc)
 │   ├── utils/                       # JWT, password, logs, subscription utilities
 │   └── server.js                    # Server entry
-├── src/                             # React frontend (SPA)
-│   ├── components/                  # Shared UI components
-│   ├── components/layouts/          # Layouts per role (AdminLayout/DashboardLayout/etc)
-│   ├── pages/                       # Screens per role
-│   └── services/                    # API client layer
+├── frontend/                        # React SPA (Create React App)
+│   ├── public/                      # Static assets
+│   ├── src/                         # App source
+│   │   ├── components/              # Shared UI + layouts
+│   │   ├── pages/                   # Screens per role
+│   │   └── services/                # API client layer
+│   └── package.json
 ├── Reference_Documents/             # System design & schema (source of truth)
 ├── Implementations_Docs/            # Feature-level implementation specs
-└── settings.md                      # SuperAdmin settings feature plan
+└── package.json                     # Root scripts (start:frontend, start:backend)
 ```
 
 ---
@@ -85,16 +87,17 @@ curl http://localhost:3001/health
 ### 2) Frontend
 
 ```bash
+cd frontend
 npm install
 ```
 
-Create `.env.local` in repo root:
+Create `frontend/.env.local`:
 
 ```env
 REACT_APP_API_URL=http://localhost:3001
 ```
 
-Start the app:
+Start the app (from `frontend/`, or from repo root with `npm start`):
 
 ```bash
 npm start

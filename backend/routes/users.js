@@ -3,9 +3,29 @@ import { supabase } from '../config/database.js';
 import { hashPassword } from '../utils/password.js';
 import { createLog, getClientIP, getUserAgent } from '../utils/logger.js';
 import { authenticate, requireRole, verifyActiveStatus } from '../middleware/auth.js';
-import { validateCreateUser } from '../middleware/validation.js';
+import { validateCreateUser, validateUpdateOrgUser } from '../middleware/validation.js';
 
 const router = express.Router();
+
+function getActorOrgUserId(req) {
+  return String(req.user.orgUserId ?? req.user.userId ?? '');
+}
+
+function orgAdminManageGuard(targetUser, req) {
+  if (!targetUser) {
+    return { ok: false, status: 404, error: 'User not found' };
+  }
+  if (targetUser.OrgID !== req.user.orgId) {
+    return { ok: false, status: 403, error: 'Access denied' };
+  }
+  if (targetUser.Role === 'OrgAdmin') {
+    return { ok: false, status: 403, error: 'Organization administrators cannot be modified here' };
+  }
+  if (String(targetUser.OrgUserID) === getActorOrgUserId(req)) {
+    return { ok: false, status: 403, error: 'You cannot modify your own account on this page' };
+  }
+  return { ok: true };
+}
 
 /**
  * POST /api/org/users
@@ -114,6 +134,163 @@ router.get('/', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, asy
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
+
+/**
+ * PUT /api/org/users/:orgUserId
+ * Update Reviewer or Subject Expert in same organization (OrgAdmin only)
+ */
+router.put(
+  '/:orgUserId',
+  authenticate,
+  requireRole(['OrgAdmin']),
+  verifyActiveStatus,
+  validateUpdateOrgUser,
+  async (req, res) => {
+    const { orgUserId } = req.params;
+    const { fullName, email, password, phone, role, status } = req.body;
+    const { orgId, orgUserId: actorOrgUserId } = req.user;
+    const ipAddress = getClientIP(req);
+    const userAgent = getUserAgent(req);
+
+    try {
+      const { data: existingUser, error: fetchError } = await supabase
+        .from('OrgUsers')
+        .select('*')
+        .eq('OrgUserID', orgUserId)
+        .maybeSingle();
+
+      if (fetchError) {
+        return res.status(500).json({ error: 'Failed to load user', details: fetchError.message });
+      }
+
+      const guard = orgAdminManageGuard(existingUser, req);
+      if (!guard.ok) {
+        return res.status(guard.status).json({ error: guard.error });
+      }
+
+      if (email && email !== existingUser.Email) {
+        const { data: emailConflict } = await supabase
+          .from('OrgUsers')
+          .select('OrgUserID')
+          .eq('Email', email)
+          .neq('OrgUserID', orgUserId)
+          .maybeSingle();
+
+        if (emailConflict) {
+          return res.status(409).json({ error: 'Email already registered' });
+        }
+      }
+
+      const updateData = {};
+      if (fullName) updateData.FullName = fullName;
+      if (email) updateData.Email = email;
+      if (phone !== undefined) updateData.Phone = phone || null;
+      if (role) updateData.Role = role;
+      if (status) updateData.Status = status;
+      if (password) {
+        updateData.PasswordHash = await hashPassword(password);
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ error: 'No fields to update' });
+      }
+
+      const { data: updatedUser, error: updateError } = await supabase
+        .from('OrgUsers')
+        .update(updateData)
+        .eq('OrgUserID', orgUserId)
+        .eq('OrgID', orgId)
+        .select('OrgUserID, FullName, Email, Role, Phone, Status, CreatedAt, LastLogin')
+        .single();
+
+      if (updateError) {
+        return res.status(500).json({ error: 'Failed to update user', details: updateError.message });
+      }
+
+      await createLog({
+        actorType: 'OrgUser',
+        actorID: actorOrgUserId,
+        actionType: 'Update',
+        entityType: 'OrgUser',
+        entityID: orgUserId,
+        description: `Updated ${updatedUser.Role}: ${updatedUser.FullName}`,
+        ipAddress,
+        userAgent,
+        oldData: existingUser,
+        newData: updateData,
+      });
+
+      res.json({
+        message: 'User updated successfully',
+        user: updatedUser,
+      });
+    } catch (error) {
+      console.error('Update org user error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * DELETE /api/org/users/:orgUserId
+ * Delete Reviewer or Subject Expert in same organization (OrgAdmin only)
+ */
+router.delete(
+  '/:orgUserId',
+  authenticate,
+  requireRole(['OrgAdmin']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { orgUserId } = req.params;
+    const { orgId, orgUserId: actorOrgUserId } = req.user;
+    const ipAddress = getClientIP(req);
+    const userAgent = getUserAgent(req);
+
+    try {
+      const { data: existingUser, error: fetchError } = await supabase
+        .from('OrgUsers')
+        .select('*')
+        .eq('OrgUserID', orgUserId)
+        .maybeSingle();
+
+      if (fetchError) {
+        return res.status(500).json({ error: 'Failed to load user', details: fetchError.message });
+      }
+
+      const guard = orgAdminManageGuard(existingUser, req);
+      if (!guard.ok) {
+        return res.status(guard.status).json({ error: guard.error });
+      }
+
+      const { error: deleteError } = await supabase
+        .from('OrgUsers')
+        .delete()
+        .eq('OrgUserID', orgUserId)
+        .eq('OrgID', orgId);
+
+      if (deleteError) {
+        return res.status(500).json({ error: 'Failed to delete user', details: deleteError.message });
+      }
+
+      await createLog({
+        actorType: 'OrgUser',
+        actorID: actorOrgUserId,
+        actionType: 'Delete',
+        entityType: 'OrgUser',
+        entityID: orgUserId,
+        description: `Deleted ${existingUser.Role}: ${existingUser.FullName}`,
+        ipAddress,
+        userAgent,
+        oldData: existingUser,
+      });
+
+      res.json({ message: 'User deleted successfully' });
+    } catch (error) {
+      console.error('Delete org user error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
 
 export default router;
 

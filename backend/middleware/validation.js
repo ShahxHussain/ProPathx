@@ -127,6 +127,28 @@ export const validateUpdatePlatformUser = [
 ];
 
 /**
+ * Update org user (OrgAdmin) — Reviewer / Subject Expert only
+ */
+export const validateUpdateOrgUser = [
+  body('fullName').optional().trim().notEmpty().withMessage('Full name cannot be empty'),
+  body('email').optional().trim().isEmail().withMessage('Valid email is required'),
+  body('password')
+    .optional()
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters'),
+  body('phone').optional().trim(),
+  body('role')
+    .optional()
+    .isIn(['Reviewer', 'Subject Expert'])
+    .withMessage('Role must be either "Reviewer" or "Subject Expert"'),
+  body('status')
+    .optional()
+    .isIn(['Active', 'Inactive', 'Suspended'])
+    .withMessage('Status must be Active, Inactive, or Suspended'),
+  handleValidationErrors,
+];
+
+/**
  * Create organization validation rules (for SuperAdmin)
  * Note: orgEmail is used for both organization and OrgAdmin email
  */

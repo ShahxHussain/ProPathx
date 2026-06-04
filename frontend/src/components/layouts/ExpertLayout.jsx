@@ -1,0 +1,152 @@
+import { useState, useEffect } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  FilePlus,
+  FileText,
+  BarChart3,
+  LogOut,
+  Menu,
+  X,
+  GraduationCap,
+  Bell,
+} from 'lucide-react';
+import { orgAuth } from '../../services/api';
+import NotificationBell from '../NotificationBell';
+import AnnouncementBanner from '../AnnouncementBanner';
+import './ExpertLayout.css';
+
+const ExpertLayout = () => {
+  // Start with sidebar closed on mobile
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const user = orgAuth.getCurrentUser();
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth <= 768) {
+        setSidebarOpen(false);
+      } else {
+        setSidebarOpen(true);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handleLogout = () => {
+    orgAuth.logout();
+    navigate('/');
+  };
+
+  const menuItems = [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/expert/dashboard' },
+    { icon: FilePlus, label: 'Create Question', path: '/expert/create' },
+    { icon: FileText, label: 'My Questions', path: '/expert/questions' },
+    { icon: BarChart3, label: 'Performance', path: '/expert/performance' },
+    { icon: Bell, label: 'Notifications', path: '/expert/notifications' },
+  ];
+
+  const isActive = (path) => location.pathname === path;
+
+  return (
+    <div className="dashboard-layout expert-layout expert-portal">
+      {/* Sidebar */}
+      <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+        <div className="sidebar-header">
+          <div className="logo">
+            <GraduationCap size={24} />
+            <span className="logo-text">ProPath Expert</span>
+          </div>
+          <button
+            className="sidebar-toggle"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label="Toggle sidebar"
+          >
+            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+
+        <div className="sidebar-content">
+          <div className="org-info">
+            <div className="org-name">
+              {user?.userType === 'Platform' 
+                ? 'Platform Expert' 
+                : user?.orgName || 'Organization'}
+            </div>
+            <div className="org-email">{user?.email || ''}</div>
+          </div>
+
+          <nav className="sidebar-nav">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.path}
+                  className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
+                  onClick={() => navigate(item.path)}
+                >
+                  <Icon size={20} />
+                  {sidebarOpen && <span>{item.label}</span>}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="sidebar-footer">
+          <button className="nav-item logout" onClick={handleLogout}>
+            <LogOut size={20} />
+            {sidebarOpen && <span>Logout</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="dashboard-main">
+        <AnnouncementBanner />
+        <div className="dashboard-header">
+          <button
+            className="mobile-menu-toggle"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label="Toggle menu"
+          >
+            <Menu size={24} />
+          </button>
+          <div className="header-title">
+            {menuItems.find((item) => isActive(item.path))?.label || 'Dashboard'}
+          </div>
+          <div className="header-actions">
+            <NotificationBell />
+            <div className="header-user">
+              <div className="user-info">
+                <div className="user-name">{user?.fullName || 'Expert'}</div>
+                <div className="user-role">{user?.role || 'Subject Expert'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="dashboard-content">
+          <Outlet />
+        </div>
+      </main>
+
+      {/* Mobile Overlay */}
+      {sidebarOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+export default ExpertLayout;
+
+
+

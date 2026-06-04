@@ -1,0 +1,455 @@
+/* Settings — extends Exam enrollments layout (OrgStudentExamEnrollments.css) */
+
+.org-settings-page {
+  max-width: none;
+  width: 100%;
+}
+
+.org-settings-tab-body {
+  margin-top: 4px;
+}
+
+.org-settings-panels-single {
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 900px) {
+  .org-settings-panels-single {
+    grid-template-columns: 1fr;
+  }
+}
+
+.org-settings-segment {
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  gap: 8px;
+}
+
+.org-settings-segment-btn {
+  margin-top: 0 !important;
+  border: 1px solid var(--border, #e2e8f0) !important;
+  border-radius: 10px !important;
+  padding: 8px 20px !important;
+}
+
+.org-settings-segment-btn.active {
+  border-color: var(--primary, #2563eb) !important;
+  background: rgba(37, 99, 235, 0.08) !important;
+}
+
+.org-settings-mode-list {
+  max-height: none;
+}
+
+.org-settings-mode-disabled-hint {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #92400e;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: 10px;
+}
+
+.org-settings-mode-item--disabled {
+  opacity: 0.55;
+}
+
+.org-settings-mode-label--disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.org-settings-mode-label--disabled:hover {
+  background: transparent;
+}
+
+.org-settings-mode-unavailable {
+  color: #b45309 !important;
+  font-style: italic;
+}
+
+.org-settings-field {
+  margin-bottom: 12px;
+}
+
+.org-settings-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #334155);
+  margin-bottom: 6px;
+}
+
+.org-settings-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: var(--text, #0f172a);
+}
+
+.org-settings-input:focus {
+  outline: none;
+  border-color: var(--primary, #2563eb);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
+.org-settings-panel-actions {
+  margin-top: 16px;
+  padding: 12px 0 0;
+  border: none;
+  border-top: 1px dashed var(--border, #cbd5e1);
+  background: transparent;
+  justify-content: flex-end;
+}
+
+.org-ex-enroll-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.org-settings-notice-success {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #166534;
+}
+
+.org-settings-notice-success a,
+.notice.warn a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.org-settings-sub-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.org-settings-sub-head h2 {
+  margin: 0 0 4px;
+}
+
+.org-settings-plans-link {
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.org-settings-qb-stats {
+  margin-bottom: 16px;
+}
+
+.org-settings-stat-text {
+  font-size: 18px !important;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.org-settings-usage-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text, #334155);
+}
+
+.org-settings-subscription .org-ex-enroll-panel {
+  max-width: 100%;
+}
+
+.org-settings-sub-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.org-settings-sub-toolbar-hint {
+  margin: 0;
+  max-width: 560px;
+}
+
+.org-settings-sub-empty {
+  text-align: center;
+  padding: 32px 24px !important;
+}
+
+.org-settings-sub-empty-icon {
+  color: var(--text-muted, #94a3b8);
+  margin-bottom: 12px;
+}
+
+.org-settings-sub-empty h2 {
+  margin: 0 0 8px;
+}
+
+.org-sub-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border, #e2e8f0);
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 55%, #fff 100%);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.org-sub-hero-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, #64748b);
+  margin-bottom: 4px;
+}
+
+.org-sub-hero-title {
+  margin: 0 0 10px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text, #0f172a);
+}
+
+.org-sub-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.org-sub-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.org-sub-badge--active {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.org-sub-badge--renew {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+
+.org-sub-badge--warn {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.org-sub-badge--muted {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.org-sub-hero-price {
+  text-align: right;
+}
+
+.org-sub-hero-price-value {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1e40af;
+  line-height: 1.1;
+}
+
+.org-sub-hero-price-meta {
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+}
+
+.org-sub-details-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 900px) {
+  .org-sub-details-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .org-sub-details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.org-sub-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border, #e2e8f0);
+  background: var(--surface, #fff);
+}
+
+.org-sub-detail svg {
+  color: #2563eb;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.org-sub-detail-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #94a3b8);
+  margin-bottom: 2px;
+}
+
+.org-sub-detail strong {
+  font-size: 14px;
+  color: var(--text, #0f172a);
+}
+
+.org-settings-saving-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+}
+
+.org-sub-mode-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.org-sub-mode-badge {
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.org-sub-features {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.org-sub-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text, #334155);
+}
+
+.org-sub-features li svg {
+  color: #16a34a;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.org-sub-usage-panel h2,
+.org-sub-exams-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+
+.org-sub-usage-stats {
+  margin-bottom: 0 !important;
+}
+
+.org-sub-exams-table-wrap {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.org-sub-exams-table td {
+  vertical-align: top;
+  font-size: 13px;
+}
+
+.org-sub-limits-cell,
+.org-sub-usage-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-muted, #64748b);
+  font-size: 12px;
+}
+
+.org-sub-exam-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.org-sub-exam-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.org-sub-exam-flag--req {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.org-sub-exam-flag--ai {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+/* spin-icon used with Loader2 (QuestionBank) */
+.org-settings-page .spin-icon {
+  animation: org-settings-spin 0.8s linear infinite;
+}
+
+@keyframes org-settings-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

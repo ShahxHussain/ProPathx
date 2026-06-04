@@ -2,6 +2,7 @@ import express from 'express';
 import os from 'os';
 import { supabase } from '../config/database.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
+import { ensureOrgEnrollmentSettings } from '../utils/orgEnrollmentSettings.js';
 import { generateToken } from '../utils/jwt.js';
 import { createLog, getClientIP, getUserAgent } from '../utils/logger.js';
 import { recordHealthSample, getRequestSeries, getHealthSeries } from '../utils/metricsStore.js';
@@ -642,6 +643,12 @@ router.post(
         // Rollback: delete organization if user creation fails
         await supabase.from('Organizations').delete().eq('OrgID', newOrg.OrgID);
         return res.status(500).json({ error: 'Failed to create admin user', details: userError.message });
+      }
+
+      try {
+        await ensureOrgEnrollmentSettings(newOrg.OrgID, newUser.OrgUserID);
+      } catch (settingsErr) {
+        console.error('Failed to init org enrollment settings:', settingsErr);
       }
 
       // Create log

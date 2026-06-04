@@ -24,6 +24,30 @@ function bindingFromTestRow(test) {
 /** PostgREST: disambiguate Questions ↔ Options embed (see students.js same constant). */
 const PG_OPTIONS_BY_QUESTION_FK = 'Options!Options_QuestionID_fkey';
 
+function enrollmentStatusAllowsTestAssignment(statusRaw) {
+  const normalized = String(statusRaw || '').trim().toLowerCase();
+  return normalized === 'approved' || normalized === 'active';
+}
+
+async function getEligibleStudentIdsForTestExam({ orgId, examId, studentIds }) {
+  const uniqueStudentIds = [...new Set((studentIds || []).filter(Boolean))];
+  if (!uniqueStudentIds.length || !examId) return new Set();
+  const { data, error } = await supabase
+    .from('StudentExamEnrollments')
+    .select('StudentID, Status')
+    .eq('OrgID', orgId)
+    .eq('ExamID', examId)
+    .in('StudentID', uniqueStudentIds);
+  if (error) throw error;
+  const allowed = new Set();
+  for (const row of data || []) {
+    if (enrollmentStatusAllowsTestAssignment(row.Status)) {
+      allowed.add(row.StudentID);
+    }
+  }
+  return allowed;
+}
+
 async function ensureScheduledModeEnabledForTestSubscription(test) {
   const subscriptionId = test?.SubscriptionID ?? test?.subscriptionId ?? null;
   if (!subscriptionId) {
@@ -1682,7 +1706,7 @@ router.delete('/:testId/questions/:questionId', authenticate, requireRole(['OrgA
   try {
     const { data: test, error: testError } = await supabase
       .from('Tests')
-      .select('TestID, TestName, OrgID, SubscriptionID')
+      .select('TestID, TestName, OrgID, ExamID, SubscriptionID')
       .eq('TestID', testId)
       .eq('OrgID', orgId)
       .single();
@@ -1734,6 +1758,67 @@ router.delete('/:testId/questions/:questionId', authenticate, requireRole(['OrgA
 });
 
 /**
+ * GET /api/org/tests/:testId/eligible-students
+ * Eligible students for assignment, scoped by test exam + active enrollment status.
+ */
+router.get('/:testId/eligible-students', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
+  const { testId } = req.params;
+  const { orgId } = req.user;
+  try {
+    const rawSearch = req.query.search != null ? String(req.query.search).trim().slice(0, 120).replace(/%/g, '') : '';
+    const limit = Math.min(2000, Math.max(1, parseInt(String(req.query.limit || '1000'), 10) || 1000));
+    const { data: test, error: testError } = await supabase
+      .from('Tests')
+      .select('TestID, TestName, ExamID, OrgID')
+      .eq('TestID', testId)
+      .eq('OrgID', orgId)
+      .single();
+    if (testError || !test) return res.status(404).json({ error: 'Test not found' });
+
+    let studentsQ = supabase
+      .from('Students')
+      .select('StudentID, FullName, Email')
+      .eq('OrgID', orgId)
+      .eq('Status', 'Active')
+      .order('FullName', { ascending: true })
+      .limit(limit);
+    if (rawSearch) {
+      const like = `%${rawSearch}%`;
+      studentsQ = studentsQ.or(`FullName.ilike.${like},Email.ilike.${like}`);
+    }
+    const { data: students, error: stErr } = await studentsQ;
+    if (stErr) return res.status(500).json({ error: 'Failed to fetch students', details: stErr.message });
+
+    const studentList = students || [];
+    const eligibleIds = await getEligibleStudentIdsForTestExam({
+      orgId,
+      examId: test.ExamID,
+      studentIds: studentList.map((s) => s.StudentID),
+    });
+
+    const eligibleStudents = studentList
+      .filter((s) => eligibleIds.has(s.StudentID))
+      .map((s) => ({
+        studentId: s.StudentID,
+        fullName: s.FullName ?? null,
+        email: s.Email ?? null,
+      }));
+
+    res.json({
+      test: { testId: test.TestID, testName: test.TestName, examId: test.ExamID },
+      students: eligibleStudents,
+      totals: {
+        activeStudents: studentList.length,
+        eligibleStudents: eligibleStudents.length,
+      },
+    });
+  } catch (error) {
+    console.error('Eligible students for test assignment error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
  * POST /api/org/tests/:testId/assign/single
  * Assign test to a single student
  */
@@ -1755,7 +1840,7 @@ router.post('/:testId/assign/single', authenticate, requireRole(['OrgAdmin']), v
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
       .from('Tests')
-      .select('TestID, TestName, OrgID, SubscriptionID')
+      .select('TestID, TestName, OrgID, ExamID, SubscriptionID')
       .eq('TestID', testId)
       .eq('OrgID', orgId)
       .single();
@@ -1778,6 +1863,17 @@ router.post('/:testId/assign/single', authenticate, requireRole(['OrgAdmin']), v
 
     if (studentError || !student) {
       return res.status(404).json({ error: 'Student not found' });
+    }
+    const eligibleIds = await getEligibleStudentIdsForTestExam({
+      orgId,
+      examId: test.ExamID,
+      studentIds: [studentId],
+    });
+    if (!eligibleIds.has(studentId)) {
+      return res.status(403).json({
+        error: 'Student is not currently eligible for this exam. Approve exam enrollment first.',
+        code: 'EXAM_ENROLLMENT_REQUIRED',
+      });
     }
 
     // Check if assignment already exists
@@ -1900,7 +1996,7 @@ router.post('/:testId/assign/multiple', authenticate, requireRole(['OrgAdmin']),
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
       .from('Tests')
-      .select('TestID, TestName, OrgID, SubscriptionID')
+      .select('TestID, TestName, OrgID, ExamID, SubscriptionID')
       .eq('TestID', testId)
       .eq('OrgID', orgId)
       .single();
@@ -1927,6 +2023,19 @@ router.post('/:testId/assign/multiple', authenticate, requireRole(['OrgAdmin']),
 
     if (students.length !== studentIds.length) {
       return res.status(400).json({ error: 'Some students do not belong to your organization' });
+    }
+    const eligibleIds = await getEligibleStudentIdsForTestExam({
+      orgId,
+      examId: test.ExamID,
+      studentIds,
+    });
+    const ineligibleStudentIds = studentIds.filter((id) => !eligibleIds.has(id));
+    if (ineligibleStudentIds.length > 0) {
+      return res.status(403).json({
+        error: 'Some selected students are not eligible for this exam yet.',
+        code: 'EXAM_ENROLLMENT_REQUIRED',
+        details: { ineligibleStudentIds },
+      });
     }
 
     // Check existing assignments
@@ -2041,7 +2150,7 @@ router.post('/:testId/assign/group', authenticate, requireRole(['OrgAdmin']), ve
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
       .from('Tests')
-      .select('TestID, TestName, OrgID, SubscriptionID')
+      .select('TestID, TestName, OrgID, ExamID, SubscriptionID')
       .eq('TestID', testId)
       .eq('OrgID', orgId)
       .single();
@@ -2082,13 +2191,25 @@ router.post('/:testId/assign/group', authenticate, requireRole(['OrgAdmin']), ve
     }
 
     const studentIds = members.map(m => m.StudentID);
+    const eligibleIds = await getEligibleStudentIdsForTestExam({
+      orgId,
+      examId: test.ExamID,
+      studentIds,
+    });
+    const filteredStudentIds = studentIds.filter((id) => eligibleIds.has(id));
+    if (!filteredStudentIds.length) {
+      return res.status(403).json({
+        error: 'No students in this group are currently eligible for this exam.',
+        code: 'EXAM_ENROLLMENT_REQUIRED',
+      });
+    }
 
     // Check existing assignments
     const { data: existing, error: existingError } = await supabase
       .from('TestAssignments')
       .select('StudentID')
       .eq('TestID', testId)
-      .in('StudentID', studentIds);
+      .in('StudentID', filteredStudentIds);
 
     if (existingError) {
       console.error('Error checking existing assignments:', existingError);
@@ -2096,21 +2217,21 @@ router.post('/:testId/assign/group', authenticate, requireRole(['OrgAdmin']), ve
     }
 
     const existingStudentIds = new Set((existing || []).map(a => a.StudentID));
-    const newStudentIds = studentIds.filter(id => !existingStudentIds.has(id));
+    const newStudentIds = filteredStudentIds.filter(id => !existingStudentIds.has(id));
 
     if (replaceExisting && existingStudentIds.size > 0) {
       const { error: delError } = await supabase
         .from('TestAssignments')
         .delete()
         .eq('TestID', testId)
-        .in('StudentID', studentIds);
+        .in('StudentID', filteredStudentIds);
 
       if (delError) {
         console.error('Error deleting existing assignments:', delError);
         return res.status(500).json({ error: 'Failed to replace assignments', details: delError.message });
       }
 
-      const { error: clearAttemptsError } = await deleteStudentAttemptsForTest(supabase, testId, studentIds);
+      const { error: clearAttemptsError } = await deleteStudentAttemptsForTest(supabase, testId, filteredStudentIds);
       if (clearAttemptsError) {
         console.error('Error clearing attempts for reassignment:', clearAttemptsError);
         return res.status(500).json({
@@ -2140,7 +2261,7 @@ router.post('/:testId/assign/group', authenticate, requireRole(['OrgAdmin']), ve
           scope: 'group',
           testId,
           groupId,
-          totalStudentsInGroup: studentIds.length,
+          totalStudentsInGroup: filteredStudentIds.length,
           alreadyAssignedCount: existingStudentIds.size,
           alreadyAssignedStudents: (existingStudents || []).map(s => ({
             studentId: s.StudentID,
@@ -2153,7 +2274,7 @@ router.post('/:testId/assign/group', authenticate, requireRole(['OrgAdmin']), ve
     }
 
     // Create assignments
-    const insertStudentIds = replaceExisting ? studentIds : newStudentIds;
+    const insertStudentIds = replaceExisting ? filteredStudentIds : newStudentIds;
     const assignmentsToInsert = insertStudentIds.map((studentId) => ({
       TestID: testId,
       StudentID: studentId,
@@ -2269,13 +2390,25 @@ router.post('/:testId/assign/groups', authenticate, requireRole(['OrgAdmin']), v
 
     // Get unique student IDs
     const studentIds = [...new Set(allMembers.map(m => m.StudentID))];
+    const eligibleIds = await getEligibleStudentIdsForTestExam({
+      orgId,
+      examId: test.ExamID,
+      studentIds,
+    });
+    const eligibleStudentIds = studentIds.filter((id) => eligibleIds.has(id));
+    if (!eligibleStudentIds.length) {
+      return res.status(403).json({
+        error: 'No students in the selected groups are currently eligible for this exam.',
+        code: 'EXAM_ENROLLMENT_REQUIRED',
+      });
+    }
 
     // Check existing assignments
     const { data: existing, error: existingError } = await supabase
       .from('TestAssignments')
       .select('StudentID')
       .eq('TestID', testId)
-      .in('StudentID', studentIds);
+      .in('StudentID', eligibleStudentIds);
 
     if (existingError) {
       console.error('Error checking existing assignments:', existingError);
@@ -2283,21 +2416,21 @@ router.post('/:testId/assign/groups', authenticate, requireRole(['OrgAdmin']), v
     }
 
     const existingStudentIds = new Set((existing || []).map(a => a.StudentID));
-    const newStudentIds = studentIds.filter(id => !existingStudentIds.has(id));
+    const newStudentIds = eligibleStudentIds.filter(id => !existingStudentIds.has(id));
 
     if (replaceExisting && existingStudentIds.size > 0) {
       const { error: delError } = await supabase
         .from('TestAssignments')
         .delete()
         .eq('TestID', testId)
-        .in('StudentID', studentIds);
+        .in('StudentID', eligibleStudentIds);
 
       if (delError) {
         console.error('Error deleting existing assignments:', delError);
         return res.status(500).json({ error: 'Failed to replace assignments', details: delError.message });
       }
 
-      const { error: clearAttemptsError } = await deleteStudentAttemptsForTest(supabase, testId, studentIds);
+      const { error: clearAttemptsError } = await deleteStudentAttemptsForTest(supabase, testId, eligibleStudentIds);
       if (clearAttemptsError) {
         console.error('Error clearing attempts for reassignment:', clearAttemptsError);
         return res.status(500).json({
@@ -2327,7 +2460,7 @@ router.post('/:testId/assign/groups', authenticate, requireRole(['OrgAdmin']), v
           scope: 'groups',
           testId,
           groupIds,
-          totalUniqueStudentsInGroups: studentIds.length,
+          totalUniqueStudentsInGroups: eligibleStudentIds.length,
           alreadyAssignedCount: existingStudentIds.size,
           alreadyAssignedStudents: (existingStudents || []).map(s => ({
             studentId: s.StudentID,
@@ -2340,7 +2473,7 @@ router.post('/:testId/assign/groups', authenticate, requireRole(['OrgAdmin']), v
     }
 
     // Create assignments with group mapping
-    const insertStudentIds = replaceExisting ? studentIds : newStudentIds;
+    const insertStudentIds = replaceExisting ? eligibleStudentIds : newStudentIds;
     const assignmentsToInsert = insertStudentIds.map(studentId => {
       // Find which group(s) this student belongs to
       const studentGroups = allMembers.filter(m => m.StudentID === studentId).map(m => m.GroupID);
@@ -2411,7 +2544,7 @@ router.post('/:testId/assign/all', authenticate, requireRole(['OrgAdmin']), veri
     // Verify test belongs to organization
     const { data: test, error: testError } = await supabase
       .from('Tests')
-      .select('TestID, TestName, OrgID')
+      .select('TestID, TestName, OrgID, ExamID')
       .eq('TestID', testId)
       .eq('OrgID', orgId)
       .single();
@@ -2437,13 +2570,25 @@ router.post('/:testId/assign/all', authenticate, requireRole(['OrgAdmin']), veri
     }
 
     const studentIds = students.map(s => s.StudentID);
+    const eligibleIds = await getEligibleStudentIdsForTestExam({
+      orgId,
+      examId: test.ExamID,
+      studentIds,
+    });
+    const eligibleStudentIds = studentIds.filter((id) => eligibleIds.has(id));
+    if (!eligibleStudentIds.length) {
+      return res.status(403).json({
+        error: 'No active students are currently eligible for this exam.',
+        code: 'EXAM_ENROLLMENT_REQUIRED',
+      });
+    }
 
     // Check existing assignments
     const { data: existing, error: existingError } = await supabase
       .from('TestAssignments')
       .select('StudentID')
       .eq('TestID', testId)
-      .in('StudentID', studentIds);
+      .in('StudentID', eligibleStudentIds);
 
     if (existingError) {
       console.error('Error checking existing assignments:', existingError);
@@ -2451,21 +2596,21 @@ router.post('/:testId/assign/all', authenticate, requireRole(['OrgAdmin']), veri
     }
 
     const existingStudentIds = new Set((existing || []).map(a => a.StudentID));
-    const newStudentIds = studentIds.filter(id => !existingStudentIds.has(id));
+    const newStudentIds = eligibleStudentIds.filter(id => !existingStudentIds.has(id));
 
     if (replaceExisting && existingStudentIds.size > 0) {
       const { error: delError } = await supabase
         .from('TestAssignments')
         .delete()
         .eq('TestID', testId)
-        .in('StudentID', studentIds);
+        .in('StudentID', eligibleStudentIds);
 
       if (delError) {
         console.error('Error deleting existing assignments:', delError);
         return res.status(500).json({ error: 'Failed to replace assignments', details: delError.message });
       }
 
-      const { error: clearAttemptsError } = await deleteStudentAttemptsForTest(supabase, testId, studentIds);
+      const { error: clearAttemptsError } = await deleteStudentAttemptsForTest(supabase, testId, eligibleStudentIds);
       if (clearAttemptsError) {
         console.error('Error clearing attempts for reassignment:', clearAttemptsError);
         return res.status(500).json({
@@ -2480,7 +2625,7 @@ router.post('/:testId/assign/all', authenticate, requireRole(['OrgAdmin']), veri
     }
 
     // Create assignments
-    const insertStudentIds = replaceExisting ? studentIds : newStudentIds;
+    const insertStudentIds = replaceExisting ? eligibleStudentIds : newStudentIds;
     const assignmentsToInsert = insertStudentIds.map((studentId) => ({
       TestID: testId,
       StudentID: studentId,
