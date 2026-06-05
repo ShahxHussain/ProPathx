@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { orgAuth, adminAPI } from '../../../services/api';
 import OrgSignupForm from '../../../components/OrgSignupForm';
 import OrgLoginForm from '../../../components/OrgLoginForm';
@@ -12,6 +12,16 @@ export default function AuthPage() {
   const [successMessage, setSuccessMessage] = useState('');
   const [loginType, setLoginType] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const preset = location.state?.loginType;
+    if (preset === 'org' || preset === 'student') {
+      setLoginType(preset);
+      setMode('signin');
+      setSuccessMessage('');
+    }
+  }, [location.state]);
 
   const handleLoginSuccess = (response) => {
     const user = response.user;
@@ -138,17 +148,17 @@ export default function AuthPage() {
     <div className="page">
       <div className="auth-shell">
         <div className="auth-brand-panel">
-          <div className="auth-brand-chip">ProPath</div>
+          <Link to="/" className="auth-brand-chip">ProPath</Link>
           <div className="auth-brand-lines" aria-hidden>
             <span className="line line-1" />
             <span className="line line-2" />
             <span className="line line-3" />
           </div>
-          <h1 className="auth-brand-title">Assessment Intelligence Platform</h1>
+          <h1 className="auth-brand-title">Learning Intelligence Platform</h1>
           <p className="auth-brand-copy">
-            Adaptive testing, role-based workflows, and performance analytics in one secure experience.
+            Adaptive practice, role-based workflows, and progress analytics in one secure experience.
           </p>
-          <p className="auth-brand-highlight">Ace your exams and career with us.</p>
+          <p className="auth-brand-highlight">Grow skills and confidence with structured learning.</p>
           <ul className="auth-brand-points">
             <li>Role-aware workspaces for Admins, Reviewers, Experts, and Students.</li>
             <li>Smart question delivery with adaptive and data-informed progression.</li>
@@ -157,7 +167,7 @@ export default function AuthPage() {
           <div className="auth-brand-grid">
             <div className="auth-brand-grid-item">
               <strong>Adaptive</strong>
-              <span>Smartly balanced assessments</span>
+              <span>Personalized practice paths</span>
             </div>
             <div className="auth-brand-grid-item">
               <strong>Reliable</strong>

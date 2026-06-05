@@ -82,7 +82,7 @@ export const ProtectedRoute = ({ children, requireSuperAdmin = false, allowedRol
   const isStudentAuth = studentAuth.isAuthenticated();
 
   if (!isOrgAuth && !isStudentAuth) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   if (isOrgAuth && orgAuth.mustChangePassword() && location.pathname !== '/welcome') {
@@ -120,7 +120,7 @@ export const ProtectedRoute = ({ children, requireSuperAdmin = false, allowedRol
 
 export const WelcomePasswordRoute = () => {
   if (!orgAuth.isAuthenticated()) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
   const user = orgAuth.getCurrentUser();
   if (!user?.mustChangePassword) {
@@ -163,7 +163,7 @@ export const isIndividualStudentUser = (user) => {
 
 export const IndividualStudentRoute = ({ children }) => {
   if (!studentAuth.isAuthenticated()) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   const user = studentAuth.getCurrentUserSync();
@@ -176,7 +176,7 @@ export const IndividualStudentRoute = ({ children }) => {
 
 export const OrganizationStudentRoute = ({ children }) => {
   if (!studentAuth.isAuthenticated()) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
   const user = studentAuth.getCurrentUserSync();
   if (isIndividualStudentUser(user)) {

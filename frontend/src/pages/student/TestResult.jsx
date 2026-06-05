@@ -243,7 +243,7 @@ export default function TestResult() {
                 <div className="test-result-kpi">
                   <BookMarked className="test-result-kpi-icon" size={22} aria-hidden />
                   <div>
-                    <span className="test-result-kpi-label">Exam program</span>
+                    <span className="test-result-kpi-label">Learning program</span>
                     <span className="test-result-kpi-value">{data.test.examName}</span>
                   </div>
                 </div>

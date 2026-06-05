@@ -72,6 +72,7 @@
   padding: 0;
   border: none;
   background: transparent;
+  text-decoration: none;
   font-size: clamp(2rem, 4vw, 3rem);
   font-weight: 900;
   letter-spacing: -0.03em;
