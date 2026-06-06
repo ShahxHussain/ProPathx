@@ -1,4 +1,4 @@
-import { Activity, Bell, FileText, GraduationCap, Layers, LayoutDashboard, TrendingUp, Users } from 'lucide-react';
+import { Layers } from 'lucide-react';
 import { PREVIEW_ACTIVITY, PREVIEW_CHART, PREVIEW_NAV, PREVIEW_STATS } from './data';
 
 export default function HeroPreview() {

@@ -14,6 +14,7 @@ import orgStudentRoutes from './org/students.js';
 import groupRoutes from './org/groups.js';
 import orgSettingsRoutes from './org/settings.js';
 import profileRoutes from './shared/profile.js';
+import contactRoutes from './public/contact.js';
 
 /**
  * @param {import('express').Express} app
@@ -32,6 +33,7 @@ export function registerApiRoutes(app) {
   app.use('/api/admin', adminRoutes);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/profile', profileRoutes);
+  app.use('/api/contact', contactRoutes);
 }
 
 export default registerApiRoutes;

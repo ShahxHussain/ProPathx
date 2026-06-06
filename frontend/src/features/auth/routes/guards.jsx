@@ -129,8 +129,9 @@ export const WelcomePasswordRoute = () => {
   return <OrgWelcomePassword />;
 };
 
-export const PublicRoute = ({ children }) => {
-  if (orgAuth.isAuthenticated()) {
+/** @param {{ allowAuthenticated?: boolean }} props — marketing pages stay reachable when logged in */
+export const PublicRoute = ({ children, allowAuthenticated = false }) => {
+  if (!allowAuthenticated && orgAuth.isAuthenticated()) {
     const user = orgAuth.getCurrentUser();
     if (user?.mustChangePassword) {
       return <Navigate to="/welcome" replace />;
@@ -148,7 +149,7 @@ export const PublicRoute = ({ children }) => {
       return <Navigate to="/expert/dashboard" replace />;
     }
   }
-  if (studentAuth.isAuthenticated()) {
+  if (!allowAuthenticated && studentAuth.isAuthenticated()) {
     return <Navigate to="/student/dashboard" replace />;
   }
   return children;

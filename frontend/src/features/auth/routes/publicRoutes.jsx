@@ -1,6 +1,8 @@
 import { Route } from 'react-router-dom';
 import Maintenance from '../../../pages/Maintenance';
 import Landing from '../../../pages/landing';
+import About from '../../../pages/landing/About';
+import Contact from '../../../pages/landing/Contact';
 import AuthPage from '../pages/AuthPage';
 import { PublicRoute, WelcomePasswordRoute } from './guards';
 
@@ -13,6 +15,22 @@ export function AuthFeatureRoutes() {
         element={
           <PublicRoute>
             <Landing />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/about"
+        element={
+          <PublicRoute allowAuthenticated>
+            <About />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/contact"
+        element={
+          <PublicRoute allowAuthenticated>
+            <Contact />
           </PublicRoute>
         }
       />

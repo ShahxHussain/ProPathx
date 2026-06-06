@@ -184,7 +184,7 @@ export default function PlatformSection() {
 
       <p className="landing-section__kicker">Platform</p>
 
-      <h2 className="landing-section__title">Built on a schema designed for scale</h2>
+      <h2 className="landing-section__title">Built for programs that scale</h2>
 
       <p className="landing-section__lead">
 

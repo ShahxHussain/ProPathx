@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthFeatureRoutes } from '../features/auth/routes/publicRoutes';
 import { OrgFeatureRoutes } from '../features/org/routes';
 import { ReviewerFeatureRoutes } from '../features/reviewer/routes';
@@ -7,8 +7,10 @@ import { AdminFeatureRoutes } from '../features/admin/routes';
 import { StudentFeatureRoutes } from '../features/student/routes';
 
 export default function AppRoutes() {
+  const location = useLocation();
+
   return (
-    <Routes>
+    <Routes location={location} key={location.pathname}>
       {AuthFeatureRoutes()}
       {OrgFeatureRoutes()}
       {ReviewerFeatureRoutes()}

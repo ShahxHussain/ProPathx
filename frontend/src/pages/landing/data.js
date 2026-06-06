@@ -32,6 +32,8 @@ export const NAV_LINKS = [
   { href: '#portals', label: 'Portals' },
   { href: '#roadmap', label: 'Roadmap' },
   { href: '#security', label: 'Security' },
+  { href: '/about', label: 'About', route: true },
+  { href: '/contact', label: 'Contact', route: true },
 ];
 
 export const METRICS = [
@@ -135,7 +137,7 @@ export const PLATFORM_TABS = [
     nodes: ['Plans', 'Subscriptions', 'Enrollments', 'Usage', 'Payments'],
     highlights: [
       'Org & individual student plan audiences',
-      'StudentExamEnrollments with approval workflows',
+      'Exam enrollment requests with approval workflows',
       'Per-exam limits: students, tests, questions, AI quota',
     ],
     panel: {
@@ -155,14 +157,14 @@ export const PLATFORM_TABS = [
     desc: 'Every action leaves a trace. Role-based portals, maintenance controls, notifications, and comprehensive logs keep institutions compliant and informed.',
     nodes: ['Roles', 'Logs', 'Notifications', 'Certificates', 'Feedback'],
     highlights: [
-      'Actor + entity audit trail with before/after JSON',
+      'Full audit trail of who changed what and when',
       'Targeted notifications by role or organization',
       'Certificates, feedback & maintenance mode controls',
     ],
     panel: {
       type: 'audit',
       events: [
-        { actor: 'OrgAdmin', action: 'Assigned test', time: '09:14' },
+        { actor: 'Org Admin', action: 'Assigned test', time: '09:14' },
         { actor: 'Reviewer', action: 'Verified question', time: '09:02' },
         { actor: 'Student', action: 'Completed attempt', time: '08:47' },
         { actor: 'System', action: 'Usage counter sync', time: '08:30' },
@@ -180,11 +182,11 @@ export const ROLE_STEPS = [
     layer: 'overview',
     layerLabel: 'Architecture',
     title: 'Platform layer + organization layer',
-    desc: 'ProPath is multi-tenant by design. A platform layer (Users) runs global exams, plans, and governance. Each organization gets its own admins, staff, and enrolled students — isolated, but on the same engine.',
+    desc: 'ProPath is multi-tenant by design. A platform layer runs global exams, plans, and governance. Each organization gets its own admins, staff, and enrolled students — isolated, but on the same engine.',
     features: [
-      'Platform Users — SuperAdmin, Reviewer, Subject Expert, Support, AI',
-      'OrgUsers — OrgAdmin, Reviewer, Subject Expert scoped to your institute',
-      'Students — org-enrolled (OrgID set) or individual self-registered learners',
+      'Platform staff — Super Admin, Reviewer, Subject Expert, Support, AI',
+      'Institute staff — Org Admin, Reviewer, Subject Expert scoped to your institute',
+      'Students — org-enrolled or independent self-registered learners',
     ],
     panel: { type: 'layers' },
   },
@@ -198,11 +200,11 @@ export const ROLE_STEPS = [
     title: 'Super Admin — global platform control',
     desc: 'Owns the full system: organizations, subscription plans, exam hierarchies, maintenance, AI configuration, and cross-tenant audit. The only role with unrestricted platform scope.',
     features: [
-      'Approve & manage organizations and platform Users',
+      'Approve & manage organizations and platform staff',
       'Define subscription plans, exam catalogs & system settings',
       'Global analytics, logs, impersonation support & health monitoring',
     ],
-    panel: { type: 'portal', name: 'Super Admin', scope: 'Global / all tenants', table: 'Users' },
+    panel: { type: 'portal', name: 'Super Admin', scope: 'Global / all organizations', badge: 'Platform-wide access' },
   },
   {
     id: 'platform-staff',
@@ -212,7 +214,7 @@ export const ROLE_STEPS = [
     layer: 'platform',
     layerLabel: 'Platform layer',
     title: 'Our platform experts & reviewers',
-    desc: 'ProPath\'s own Subject Experts and Reviewers (Users table) build and verify the global question bank — shared exam content that organizations can subscribe to and extend.',
+    desc: 'ProPath\'s own Subject Experts and Reviewers build and verify the global question bank — shared exam content that organizations can subscribe to and extend.',
     features: [
       'Platform Subject Experts — author MCQs for global exams & topics',
       'Platform Reviewers — verify difficulty, correctness & metadata',
@@ -220,7 +222,7 @@ export const ROLE_STEPS = [
     ],
     panel: {
       type: 'dual-role',
-      scope: 'Platform Users',
+      scope: 'Platform staff',
       roles: [
         { name: 'Subject Expert', duty: 'Global question authoring' },
         { name: 'Reviewer', duty: 'Platform-wide verification' },
@@ -235,13 +237,13 @@ export const ROLE_STEPS = [
     layer: 'organization',
     layerLabel: 'Organization layer',
     title: 'Org Admin — your institute\'s control center',
-    desc: 'Each organization\'s administrator manages OrgUsers, students, groups, exam enrollments, tests, subscriptions, and notifications — all within tenant boundaries.',
+    desc: 'Each organization\'s administrator manages staff, students, groups, exam enrollments, tests, subscriptions, and notifications — all within your institute\'s boundaries.',
     features: [
-      'Enroll students, manage groups & StudentExamEnrollments',
+      'Enroll students, manage groups & exam enrollment requests',
       'Create tests, assignments, and org notifications',
       'View usage counters, payments & performance analytics',
     ],
-    panel: { type: 'portal', name: 'Org Admin', scope: 'Your organization', table: 'OrgUsers' },
+    panel: { type: 'portal', name: 'Org Admin', scope: 'Your organization', badge: 'Institute workspace' },
   },
   {
     id: 'org-staff',
@@ -251,15 +253,15 @@ export const ROLE_STEPS = [
     layer: 'organization',
     layerLabel: 'Organization layer',
     title: 'Your experts & reviewers',
-    desc: 'Your institute\'s Subject Experts and Reviewers (OrgUsers) create org-scoped questions, run internal review workflows, and maintain quality for your own tests and question bank.',
+    desc: 'Your institute\'s Subject Experts and Reviewers create org-scoped questions, run internal review workflows, and maintain quality for your own tests and question bank.',
     features: [
       'Your Subject Experts — org-level MCQs tagged by topic & difficulty',
       'Your Reviewers — approve or reject before tests go live',
-      'Separate from platform staff; permissions limited to your OrgID',
+      'Separate from platform staff; permissions limited to your institute',
     ],
     panel: {
       type: 'dual-role',
-      scope: 'OrgUsers',
+      scope: 'Institute staff',
       roles: [
         { name: 'Subject Expert', duty: 'Your org question pools' },
         { name: 'Reviewer', duty: 'Your org verification queue' },
@@ -274,7 +276,7 @@ export const ROLE_STEPS = [
     layer: 'learners',
     layerLabel: 'Learner layer',
     title: 'Organization students & individual learners',
-    desc: 'Students share one portal experience but two enrollment models: org-enrolled students (OrgID set, assignments & enrollments) and individual learners (self-registered, personal subscription & self-tests).',
+    desc: 'Students share one portal experience but two enrollment models: org-enrolled students with assignments & enrollments, and individual learners on a personal subscription with self-study.',
     features: [
       'Org students — assigned tests, groups, org analytics & certificates',
       'Individual students — personal plans, self-test builder & explore exams',
@@ -285,7 +287,7 @@ export const ROLE_STEPS = [
       types: [
         {
           name: 'Organization student',
-          detail: 'OrgID set · enrollments & assignments',
+          detail: 'Institute-enrolled · assignments & groups',
           color: 'navy',
         },
         {
@@ -305,10 +307,10 @@ export const ROADMAP_ITEMS = [
     icon: Brain,
     title: 'Adaptive learning engine',
     tagline: 'Personalized practice paths from your existing syllabus',
-    desc: 'Rule-based adaptation across accuracy, difficulty handling, and pace — scoped by SuperAdmin guardrails and OrgAdmin policy. Topic-first targeting with optional chapter remediation.',
+    desc: 'Rule-based adaptation across accuracy, difficulty handling, and pace — scoped by platform guardrails and institute policy. Topic-first targeting with optional chapter remediation.',
     features: [
       'Topic, chapter, or combined targeting modes',
-      'Mastery profiles with cold-start calibration',
+      'Mastery profiles with initial skill calibration',
       'Separate adaptive track from scheduled exams',
     ],
     preview: {
@@ -327,11 +329,11 @@ export const ROADMAP_ITEMS = [
     icon: Sparkles,
     title: 'AI RAG MCQ generation',
     tagline: 'Generate verified-style questions from your context',
-    desc: 'Upload syllabus notes, past papers, or institutional material. RAG retrieves relevant context and drafts MCQs with explanations — routed through your review pipeline before delivery.',
+    desc: 'Upload syllabus notes, past papers, or institutional material. AI retrieves relevant context and drafts practice questions with explanations — routed through your review pipeline before delivery.',
     features: [
       'Context-grounded generation (not hallucinated trivia)',
       'Difficulty, type & topic tagging on create',
-      'Expert review + audit log for AIQuestionGeneration',
+      'Expert review + audit log for every AI-generated question',
     ],
     preview: {
       type: 'rag',

@@ -133,7 +133,7 @@ export default function Landing() {
             <div className="lp-trust-tags">
               <span>Multi-tenant isolation</span>
               <span>Progress &amp; mastery signals</span>
-              <span>Audit trail (Logs)</span>
+              <span>Comprehensive audit logs</span>
               <span>Subscription entitlements</span>
             </div>
           </div>
@@ -162,6 +162,8 @@ export default function Landing() {
         </span>
         <p>© {new Date().getFullYear()} ProPath. Learning intelligence platform.</p>
         <div className="landing-footer__links">
+          <Link to="/about">About</Link>
+          <Link to="/contact">Contact</Link>
           <Link to="/login">Sign in</Link>
           <Link to="/admin/login">Admin access</Link>
         </div>

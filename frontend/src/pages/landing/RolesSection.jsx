@@ -38,7 +38,7 @@ function RolePreview({ step }) {
 
           </ul>
 
-          <span className="lp-layer-col__table">Users table</span>
+          <span className="lp-layer-col__meta">Platform team & staff</span>
 
         </div>
 
@@ -66,13 +66,13 @@ function RolePreview({ step }) {
 
           </ul>
 
-          <span className="lp-layer-col__table">OrgUsers + Students</span>
+          <span className="lp-layer-col__meta">Institute staff & students</span>
 
         </div>
 
         <p className="lp-layer-footnote">
 
-          <strong>+ Individual students</strong> — self-registered learners on a personal subscription (OrgID null).
+          <strong>+ Individual students</strong> — self-registered learners on a personal subscription, independent of any institute.
 
         </p>
 
@@ -94,7 +94,7 @@ function RolePreview({ step }) {
 
         <h4>{panel.name}</h4>
 
-        <span className="lp-role-panel__table">{panel.table}</span>
+        {panel.badge && <span className="lp-role-panel__meta">{panel.badge}</span>}
 
         <div className="lp-role-panel__portal-mock">
 

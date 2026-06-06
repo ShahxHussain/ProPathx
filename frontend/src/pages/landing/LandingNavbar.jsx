@@ -1,9 +1,53 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowRight, Layers, Menu, X } from 'lucide-react';
 import { NAV_LINKS } from './data';
 
+function navHref(item, pathname) {
+  if (item.route) return item.href;
+  if (pathname !== '/' && item.href.startsWith('#')) return `/${item.href}`;
+  return item.href;
+}
+
+function NavItem({ item, className, onClick, pathname }) {
+  const handleRouteClick = (event) => {
+    onClick?.(event);
+    if (!event.defaultPrevented) {
+      window.scrollTo(0, 0);
+    }
+  };
+
+  if (item.route) {
+    const active = pathname === item.href;
+    return (
+      <Link
+        to={item.href}
+        className={`${className}${active ? ' is-active' : ''}`}
+        onClick={handleRouteClick}
+      >
+        {item.label}
+      </Link>
+    );
+  }
+
+  const href = navHref(item, pathname);
+  const handleHashClick = (event) => {
+    onClick?.(event);
+    if (pathname !== '/' && item.href.startsWith('#')) {
+      event.preventDefault();
+      window.location.assign(href);
+    }
+  };
+
+  return (
+    <a href={href} className={className} onClick={handleHashClick}>
+      {item.label}
+    </a>
+  );
+}
+
 export default function LandingNavbar({ onSignIn, onGetStarted }) {
+  const { pathname } = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -34,10 +78,8 @@ export default function LandingNavbar({ onSignIn, onGetStarted }) {
         </Link>
 
         <nav className="landing-nav__links" aria-label="Sections">
-          {NAV_LINKS.map(({ href, label }) => (
-            <a key={href} href={href} className="landing-nav__link">
-              {label}
-            </a>
+          {NAV_LINKS.map((item) => (
+            <NavItem key={item.href} item={item} className="landing-nav__link" pathname={pathname} />
           ))}
         </nav>
 
@@ -64,10 +106,14 @@ export default function LandingNavbar({ onSignIn, onGetStarted }) {
 
       <div className={`landing-nav__drawer${mobileOpen ? ' is-open' : ''}`} aria-hidden={!mobileOpen}>
         <nav className="landing-nav__drawer-links">
-          {NAV_LINKS.map(({ href, label }) => (
-            <a key={href} href={href} className="landing-nav__drawer-link" onClick={closeMobile}>
-              {label}
-            </a>
+          {NAV_LINKS.map((item) => (
+            <NavItem
+              key={item.href}
+              item={item}
+              className="landing-nav__drawer-link"
+              pathname={pathname}
+              onClick={closeMobile}
+            />
           ))}
         </nav>
         <div className="landing-nav__drawer-actions">
