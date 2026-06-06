@@ -1,21 +1,46 @@
 /**
- * ProPath portal design tokens — shared density for all authenticated role shells.
- * SuperAdmin, OrgAdmin, Student, Reviewer, Subject Expert.
- *
- * Apply `.app-portal` on each layout root. Typography/spacing use `em` (scale with
- * portal font-size). Structural widths use `rem` (root-relative, stable layout).
+ * ProPath portal density — all authenticated shells (`.dashboard-layout`).
+ * Desktop targets the same comfortable scale as ~85% browser zoom at 100%.
+ * Landing / login pages are unaffected (no `.dashboard-layout` in DOM).
  */
 
-.app-portal {
-  /* ~90% comfortable density vs legacy 16px / 280px sidebar layouts */
-  --portal-density: 0.9;
-  font-size: 90%;
+:root {
+  --portal-density: 0.85;
+}
 
-  /* Layout structure (rem @ 16px root ≈ 90% of previous px values) */
-  --portal-sidebar-width: 15.75rem; /* 252px */
-  --portal-sidebar-collapsed-width: 4.5rem; /* 72px */
+/* Desktop: scale entire portal UI (sidebar, pages, modals, px/rem/icons) */
+@media (min-width: 769px) {
+  html:has(.dashboard-layout) {
+    zoom: var(--portal-density);
+  }
 
-  /* Typography (em → scales with portal font-size) */
+  /* Zoom shrinks 100vh — extend sidebar so logout stays at the visual bottom */
+  html:has(.dashboard-layout) .dashboard-layout .sidebar {
+    height: calc(100dvh / var(--portal-density));
+    min-height: calc(100dvh / var(--portal-density));
+  }
+}
+
+/* Mobile: full size for touch targets & readability */
+@media (max-width: 768px) {
+  html:has(.dashboard-layout) {
+    zoom: 1;
+  }
+}
+
+/* Fallback when `zoom` is unavailable: em-scaled shell typography & spacing */
+@supports not (zoom: 1) {
+  @media (min-width: 769px) {
+    .dashboard-layout {
+      font-size: calc(1rem * var(--portal-density));
+    }
+  }
+}
+
+.dashboard-layout {
+  --portal-sidebar-width: 17.5em;
+  --portal-sidebar-collapsed-width: 5em;
+
   --portal-text-xs: 0.75em;
   --portal-text-sm: 0.8125em;
   --portal-text-base: 1em;
@@ -24,7 +49,6 @@
   --portal-text-2xl: 1.375em;
   --portal-text-3xl: 1.75em;
 
-  /* Spacing (em) */
   --portal-space-1: 0.25em;
   --portal-space-2: 0.5em;
   --portal-space-3: 0.75em;
@@ -34,19 +58,16 @@
   --portal-space-8: 2em;
   --portal-space-10: 2.5em;
 
-  /* Radii (em) */
   --portal-radius-sm: 0.375em;
   --portal-radius-md: 0.5em;
   --portal-radius-lg: 0.625em;
   --portal-radius-xl: 0.875em;
 
-  /* Surfaces / borders (alias to global theme + portal mix) */
   --portal-border: color-mix(in srgb, var(--border) 88%, transparent);
   --portal-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
   --portal-shadow-md: 0 4px 20px -4px rgba(15, 23, 42, 0.08);
   --portal-shadow-lg: 0 10px 36px -8px rgba(15, 23, 42, 0.12);
 
-  /* Premium dashboard pages (.portal-dashboard) */
   --od-radius-sm: var(--portal-radius-md);
   --od-radius: var(--portal-radius-xl);
   --od-radius-lg: 1.125em;
@@ -58,26 +79,19 @@
   --od-accent-soft: color-mix(in srgb, var(--primary, #1e3a8a) 12%, transparent);
 }
 
-/* Role accent overrides (optional; layout shells may set --od-accent) */
-.app-portal.reviewer-portal {
+.dashboard-layout.reviewer-portal,
+.dashboard-layout.reviewer-layout {
   --od-accent: var(--accent, #0f766e);
   --od-accent-soft: color-mix(in srgb, var(--accent, #14b8a6) 12%, transparent);
 }
 
-.app-portal.expert-portal {
+.dashboard-layout.expert-portal,
+.dashboard-layout.expert-layout {
   --od-accent: #5b21b6;
   --od-accent-soft: color-mix(in srgb, #7c3aed 14%, transparent);
 }
 
-.app-portal.admin-portal {
+.dashboard-layout.admin-layout {
   --od-accent: #b91c1c;
   --od-accent-soft: color-mix(in srgb, #dc2626 12%, transparent);
-}
-
-/* Mobile: full-size type & touch-friendly drawer width */
-@media (max-width: 768px) {
-  .app-portal {
-    font-size: 100%;
-    --portal-sidebar-width: 17.5rem;
-  }
 }

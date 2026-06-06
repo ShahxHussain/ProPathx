@@ -6,6 +6,8 @@ import OrgLoginForm from '../../../components/OrgLoginForm';
 import StudentLoginForm from '../../../components/StudentLoginForm';
 import StudentSignupForm from '../../../components/StudentSignupForm';
 import { getPostLoginRoute } from '../../../utils/roleRedirect';
+import AuthBrandPanel from '../components/AuthBrandPanel';
+import { getAuthBrandContent } from '../authBrandContent';
 
 export default function AuthPage() {
   const [mode, setMode] = useState('signin');
@@ -144,56 +146,20 @@ export default function AuthPage() {
     }, 3000);
   };
 
+  const brand = getAuthBrandContent(loginType, mode);
+
   return (
     <div className="page">
       <div className="auth-shell">
-        <div className="auth-brand-panel">
-          <Link to="/" className="auth-brand-chip">ProPath</Link>
-          <div className="auth-brand-lines" aria-hidden>
-            <span className="line line-1" />
-            <span className="line line-2" />
-            <span className="line line-3" />
-          </div>
-          <h1 className="auth-brand-title">Learning Intelligence Platform</h1>
-          <p className="auth-brand-copy">
-            Adaptive practice, role-based workflows, and progress analytics in one secure experience.
-          </p>
-          <p className="auth-brand-highlight">Grow skills and confidence with structured learning.</p>
-          <ul className="auth-brand-points">
-            <li>Role-aware workspaces for Admins, Reviewers, Experts, and Students.</li>
-            <li>Smart question delivery with adaptive and data-informed progression.</li>
-            <li>Clear reporting with performance trends, mastery signals, and audit logs.</li>
-          </ul>
-          <div className="auth-brand-grid">
-            <div className="auth-brand-grid-item">
-              <strong>Adaptive</strong>
-              <span>Personalized practice paths</span>
-            </div>
-            <div className="auth-brand-grid-item">
-              <strong>Reliable</strong>
-              <span>Audit-ready enterprise controls</span>
-            </div>
-            <div className="auth-brand-grid-item">
-              <strong>Scalable</strong>
-              <span>Built for organizations and individual learners</span>
-            </div>
-            <div className="auth-brand-grid-item">
-              <strong>Insightful</strong>
-              <span>Actionable dashboards for better outcomes</span>
-            </div>
-          </div>
-          <div className="auth-brand-foot">
-            <span>Secure access</span>
-            <span>Tenant-safe architecture</span>
-            <span>Performance analytics</span>
-          </div>
-        </div>
+        <AuthBrandPanel loginType={loginType} mode={mode} />
 
         <div className="card auth-card">
           {!loginType ? (
             <div className="auth-portal-entry">
+              <Link to="/" className="auth-mobile-logo">ProPath</Link>
+              <p className="auth-mobile-tagline">{brand.highlight}</p>
               <h2>Choose your portal</h2>
-              <p className="muted">Continue with the experience tailored for your role.</p>
+              <p className="muted">{brand.copy}</p>
               <div className="auth-portal-actions">
                 <button
                   type="button"
@@ -225,6 +191,7 @@ export default function AuthPage() {
             </div>
           ) : (
             <div className="auth-form-stage">
+              <p className="auth-mobile-tagline auth-mobile-tagline--form">{brand.highlight}</p>
               <div className="auth-stage-topbar">
                 <button
                   type="button"

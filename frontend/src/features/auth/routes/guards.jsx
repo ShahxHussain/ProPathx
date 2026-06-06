@@ -76,7 +76,7 @@ export const ProtectedRoute = ({ children, requireSuperAdmin = false, allowedRol
     return () => {
       cancelled = true;
     };
-  }, [location.pathname]);
+  }, []);
 
   const isOrgAuth = orgAuth.isAuthenticated();
   const isStudentAuth = studentAuth.isAuthenticated();
@@ -102,7 +102,7 @@ export const ProtectedRoute = ({ children, requireSuperAdmin = false, allowedRol
   }
 
   if (!maintenanceChecked) {
-    return null;
+    return <div className="route-guard-loading" aria-busy="true" aria-label="Loading" />;
   }
 
   if (maintenanceBlocked) {
