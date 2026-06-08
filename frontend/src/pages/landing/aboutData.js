@@ -1,5 +1,8 @@
+import israrPhoto from './assets/israr.jpeg';
 import shahHussainPhoto from './assets/shah-hussain.jpg';
-import ziaPhoto from './assets/zia.jpg';
+import fiazPhoto from './assets/fiaz.png';
+import ahmadPhoto from './assets/ahmad.png';
+import ziaPhoto from './assets/zia.jpeg';
 
 export const CO_FOUNDERS = [
   {
@@ -9,6 +12,7 @@ export const CO_FOUNDERS = [
     focus: 'Software consulting & investment support',
     bio: 'Advises on platform strategy, technical due diligence, and investment readiness. Helps connect engineering depth with the partnerships and capital ProPath needs to scale responsibly.',
     initials: 'IK',
+    photo: israrPhoto,
     accent: 'navy',
   },
   {
@@ -28,6 +32,7 @@ export const CO_FOUNDERS = [
     focus: 'Sprint review & product experience',
     bio: 'Co-originator of the ProPath idea. Shapes product direction in sprint reviews — from org admin flows to the student learning journey — so every screen serves how institutes teach and learners grow.',
     initials: 'FG',
+    photo: fiazPhoto,
     accent: 'slate',
   },
   {
@@ -37,6 +42,7 @@ export const CO_FOUNDERS = [
     focus: 'Assessment rigor & learning outcomes',
     bio: 'Co-originator of the ProPath idea. Shapes product direction in sprint reviews — from org admin flows to the student learning journey — so every screen serves how institutes teach and learners grow.',
     initials: 'AK',
+    photo: ahmadPhoto,
     accent: 'indigo',
   },
   {
