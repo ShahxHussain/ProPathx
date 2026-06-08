@@ -125,6 +125,7 @@ export default function PlatformSection() {
           <div className="lp-platform__mobile-tabbar lp-tabs--mobile">
             <button
               type="button"
+              role="tab"
               className="lp-platform__tab is-active"
               aria-selected
               onClick={() => scrollToTab(active.id)}

@@ -149,6 +149,7 @@ export default function RolesSection() {
           <div className={`lp-roles__mobile-tabbar lp-tabs--mobile lp-roles__mobile-tabbar--${active.color}`}>
             <button
               type="button"
+              role="tab"
               className={`lp-roles__tab lp-roles__tab--${active.color} is-active`}
               aria-selected
               onClick={() => scrollToTab(active.id)}

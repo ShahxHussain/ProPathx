@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowRight, Layers, Menu, X } from 'lucide-react';
+import { ArrowRight, Menu, X } from 'lucide-react';
 import { NAV_LINKS } from './data';
+import LandingLogo from './LandingLogo'; // brand mark
 
 function navHref(item, pathname) {
   if (item.route) return item.href;
@@ -70,12 +71,7 @@ export default function LandingNavbar({ onSignIn, onGetStarted }) {
   return (
     <header className={`landing-header${scrolled ? ' landing-header--scrolled' : ''}`}>
       <div className="landing-nav">
-        <Link to="/" className="landing-logo" onClick={closeMobile}>
-          <span className="landing-logo__mark" aria-hidden>
-            <Layers size={17} strokeWidth={2.25} />
-          </span>
-          <span className="landing-logo__text">ProPath</span>
-        </Link>
+        <LandingLogo to="/" onClick={closeMobile} />
 
         <nav className="landing-nav__links" aria-label="Sections">
           {NAV_LINKS.map((item) => (

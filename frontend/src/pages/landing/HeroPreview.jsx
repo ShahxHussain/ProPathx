@@ -1,5 +1,5 @@
-import { Layers } from 'lucide-react';
 import { PREVIEW_ACTIVITY, PREVIEW_CHART, PREVIEW_NAV, PREVIEW_STATS } from './data';
+import LandingLogo from './LandingLogo'; // brand mark
 
 export default function HeroPreview() {
   return (
@@ -20,8 +20,7 @@ export default function HeroPreview() {
       <div className="lp-preview__app">
         <aside className="lp-preview__sidebar">
           <div className="lp-preview__brand">
-            <Layers size={16} strokeWidth={2.25} />
-            <span>ProPath</span>
+            <LandingLogo size="xs" />
           </div>
           <div className="lp-preview__org">
             <span className="lp-preview__org-name">Northbridge Medical Institute</span>

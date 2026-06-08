@@ -233,38 +233,25 @@
 .landing-logo {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--lp-ink);
+  line-height: 0;
   text-decoration: none;
+  flex-shrink: 0;
 }
 
-.landing-logo--sm {
-  font-size: 0.95rem;
+.landing-logo--image .landing-logo__image {
+  display: block;
+  width: auto;
+  height: 34px;
+  object-fit: contain;
 }
 
-.landing-logo__mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--lp-accent), var(--lp-accent-hover));
-  color: #fff;
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--lp-accent) 32%, transparent);
-}
-
-.landing-logo__mark--sm {
-  width: 28px;
+.landing-logo--sm .landing-logo__image {
   height: 28px;
-  border-radius: 8px;
 }
 
-.landing-logo__text {
-  color: var(--lp-accent);
+.landing-logo--xs .landing-logo__image {
+  height: 20px;
+  object-position: left center;
 }
 
 .landing-nav__links {
@@ -771,13 +758,14 @@
 .lp-preview__brand {
   display: flex;
   align-items: center;
-  gap: 7px;
   margin-bottom: 8px;
-  padding: 0 4px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--lp-accent);
+  padding: 0 2px;
+  overflow: hidden;
   flex-shrink: 0;
+}
+
+.lp-preview__brand .landing-logo {
+  max-width: 100%;
 }
 
 .lp-preview__org {
@@ -1108,7 +1096,6 @@
     display: none;
   }
 
-  .lp-preview__brand span,
   .lp-preview__nav-item span {
     display: none;
   }

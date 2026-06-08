@@ -1,8 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Layers, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { ABOUT_VALUES, CO_FOUNDERS } from './aboutData';
 import LandingBackground from './LandingBackground';
 import LandingNavbar from './LandingNavbar';
+import LandingLogo from './LandingLogo';
 import { useReveal } from './useReveal';
 import './Landing.css';
 import './About.css';
@@ -122,12 +123,7 @@ export default function About() {
       </main>
 
       <footer className="landing-footer">
-        <span className="landing-logo landing-logo--sm">
-          <span className="landing-logo__mark landing-logo__mark--sm" aria-hidden>
-            <Layers size={14} strokeWidth={2.25} />
-          </span>
-          <span className="landing-logo__text">ProPath</span>
-        </span>
+        <LandingLogo size="sm" />
         <p>© {new Date().getFullYear()} ProPath. Learning intelligence platform.</p>
         <div className="landing-footer__links">
           <Link to="/">Home</Link>
