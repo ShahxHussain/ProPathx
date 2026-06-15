@@ -16,6 +16,32 @@ import { adminAPI } from '../../services/api';
 import '../../features/org/pages/Exams.css';
 import './ExamSetup.css';
 
+function parseSubjectWeight(value) {
+  if (value == null || value === '') return 0;
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function sumSubjectWeights(subjects, excludeSubjectId) {
+  return (subjects || [])
+    .filter((s) => !excludeSubjectId || s.SubjectID !== excludeSubjectId)
+    .reduce((sum, s) => sum + parseSubjectWeight(s.Weightage), 0);
+}
+
+function getWeightValidationError(subjects, weightage, excludeSubjectId) {
+  if (weightage === '' || weightage == null) return null;
+  const w = parseFloat(weightage);
+  if (!Number.isFinite(w)) return 'Enter a valid weight percentage';
+  if (w < 0 || w > 100) return 'Weightage must be between 0 and 100%';
+  const otherTotal = sumSubjectWeights(subjects, excludeSubjectId);
+  const nextTotal = otherTotal + w;
+  if (nextTotal > 100.001) {
+    const remaining = Math.max(0, 100 - otherTotal);
+    return `Total weight cannot exceed 100%. Remaining available: ${remaining.toFixed(1)}%`;
+  }
+  return null;
+}
+
 const ExamSetup = () => {
   const { examId } = useParams();
   const [exam, setExam] = useState(null);
@@ -51,10 +77,27 @@ const ExamSetup = () => {
     return () => clearTimeout(t);
   }, [success]);
 
-  const totalWeightage = (exam?.subjects || []).reduce((sum, s) => sum + (parseFloat(s.Weightage) || 0), 0);
-  const canAddSubject = Math.abs(totalWeightage - 100) > 0.01;
+  const totalWeightage = sumSubjectWeights(exam?.subjects || []);
+  const plannedSubjects =
+    exam?.NoOfSubjects != null && exam?.NoOfSubjects !== ''
+      ? Number(exam.NoOfSubjects)
+      : null;
+  const subjects = exam?.subjects || [];
+  const atSubjectLimit = plannedSubjects != null && subjects.length >= plannedSubjects;
+  const canAddSubject = !atSubjectLimit;
+  const remainingWeight = Math.max(0, 100 - totalWeightage);
+  const weightOverLimit = totalWeightage > 100.001;
 
   const handleCreateSubject = async (data) => {
+    const weightError = getWeightValidationError(subjects, data.weightage ?? '');
+    if (weightError) {
+      setError(weightError);
+      return;
+    }
+    if (atSubjectLimit) {
+      setError(`This exam plan allows at most ${plannedSubjects} subject${plannedSubjects === 1 ? '' : 's'}.`);
+      return;
+    }
     try {
       setError('');
       await adminAPI.createSubject(examId, data);
@@ -67,6 +110,11 @@ const ExamSetup = () => {
   };
 
   const handleUpdateSubject = async (subjectId, data) => {
+    const weightError = getWeightValidationError(subjects, data.weightage ?? '', subjectId);
+    if (weightError) {
+      setError(weightError);
+      return;
+    }
     try {
       setError('');
       await adminAPI.updateSubject(examId, subjectId, data);
@@ -185,7 +233,6 @@ const ExamSetup = () => {
     );
   }
 
-  const subjects = exam.subjects || [];
   const contentStats = subjects.reduce(
     (acc, s) => {
       acc.chapters += (s.chapters || []).length;
@@ -240,7 +287,10 @@ const ExamSetup = () => {
 
       <div className="exam-setup-stats">
         <div className="exam-setup-stat">
-          <span className="exam-setup-stat__value">{subjects.length}</span>
+          <span className="exam-setup-stat__value">
+            {subjects.length}
+            {plannedSubjects != null ? ` / ${plannedSubjects}` : ''}
+          </span>
           <span className="exam-setup-stat__label">Subjects</span>
         </div>
         <div className="exam-setup-stat">
@@ -251,7 +301,7 @@ const ExamSetup = () => {
           <span className="exam-setup-stat__value">{contentStats.topics}</span>
           <span className="exam-setup-stat__label">Topics</span>
         </div>
-        <div className="exam-setup-stat">
+        <div className={`exam-setup-stat${weightOverLimit ? ' exam-setup-stat--warn' : ''}`}>
           <span className="exam-setup-stat__value">{totalWeightage.toFixed(0)}%</span>
           <span className="exam-setup-stat__label">Weight total</span>
         </div>
@@ -272,9 +322,12 @@ const ExamSetup = () => {
           </div>
           {subjects.length > 0 && (
             <p className="exam-setup-structure-meta">
-              {subjects.length} subject{subjects.length !== 1 ? 's' : ''}
+              {subjects.length}
+              {plannedSubjects != null ? ` / ${plannedSubjects}` : ''} subject{subjects.length !== 1 ? 's' : ''}
               {totalWeightage > 0 && ` · ${totalWeightage.toFixed(1)}% weight total`}
-              {!canAddSubject && ' · 100% — add more by editing weights'}
+              {remainingWeight > 0.01 && ` · ${remainingWeight.toFixed(1)}% remaining`}
+              {weightOverLimit && ' · exceeds 100% — edit weights'}
+              {atSubjectLimit && plannedSubjects != null && ' · subject plan full'}
             </p>
           )}
         </div>
@@ -314,6 +367,9 @@ const ExamSetup = () => {
                 </button>
               ) : (
                 <AddSubjectCard
+                  subjects={subjects}
+                  remainingWeight={remainingWeight}
+                  plannedSubjects={plannedSubjects}
                   onClose={() => setShowAddSubject(false)}
                   onSubmit={handleCreateSubject}
                 />
@@ -322,7 +378,9 @@ const ExamSetup = () => {
           )}
           {!canAddSubject && subjects.length > 0 && (
             <p className="exam-setup-weightage-note">
-              Total weight is 100%. Edit a subject to change its weight if you want to add more subjects.
+              {plannedSubjects != null
+                ? `This exam plan allows ${plannedSubjects} subject${plannedSubjects === 1 ? '' : 's'} only. Remove a subject or update the exam plan to add more.`
+                : 'Cannot add more subjects.'}
             </p>
           )}
         </div>
@@ -347,6 +405,7 @@ const ExamSetup = () => {
       {editingSubject && (
         <EditSubjectModal
           subject={editingSubject}
+          subjects={subjects}
           onClose={() => setEditingSubject(null)}
           onSubmit={(data) => handleUpdateSubject(editingSubject.SubjectID, data)}
         />
@@ -514,24 +573,36 @@ function SubjectSetupCard({
   );
 }
 
-function AddSubjectCard({ onClose, onSubmit }) {
+function AddSubjectCard({ subjects, remainingWeight, plannedSubjects, onClose, onSubmit }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [weightage, setWeightage] = useState('');
+  const [fieldError, setFieldError] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim()) return;
+    const weightError = getWeightValidationError(subjects, weightage);
+    if (weightError) {
+      setFieldError(weightError);
+      return;
+    }
+    setFieldError('');
     onSubmit({
       subjectName: name.trim(),
       description: description.trim() || null,
-      weightage: weightage ? parseFloat(weightage) : null,
+      weightage: weightage === '' ? null : parseFloat(weightage),
     });
   };
 
   return (
     <div className="exam-setup-form-card">
       <h4>New subject</h4>
+      {plannedSubjects != null && (
+        <p className="exam-setup-form-hint">
+          Plan: {subjects.length} / {plannedSubjects} subjects · {remainingWeight.toFixed(1)}% weight remaining
+        </p>
+      )}
       <form onSubmit={handleSubmit}>
         <div className="exam-setup-field">
           <label htmlFor="sub-name">Name *</label>
@@ -550,11 +621,14 @@ function AddSubjectCard({ onClose, onSubmit }) {
             id="sub-weight"
             type="number"
             value={weightage}
-            onChange={(e) => setWeightage(e.target.value)}
+            onChange={(e) => {
+              setWeightage(e.target.value);
+              setFieldError('');
+            }}
             min={0}
-            max={100}
+            max={Math.min(100, remainingWeight)}
             step={0.01}
-            placeholder="0–100"
+            placeholder={`0–${remainingWeight.toFixed(1)}`}
           />
         </div>
         <div className="exam-setup-field">
@@ -567,6 +641,7 @@ function AddSubjectCard({ onClose, onSubmit }) {
             placeholder="Short description"
           />
         </div>
+        {fieldError && <p className="exam-setup-field-error">{fieldError}</p>}
         <div className="exam-setup-form-actions">
           <button type="submit" className="btn btn-primary">Add subject</button>
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
@@ -709,15 +784,24 @@ function AddTopicCard({ subject, onClose, onSubmit }) {
   );
 }
 
-function EditSubjectModal({ subject, onClose, onSubmit }) {
+function EditSubjectModal({ subject, subjects, onClose, onSubmit }) {
   const [name, setName] = useState(subject.SubjectName || '');
   const [description, setDescription] = useState(subject.Description || '');
   const [weightage, setWeightage] = useState(subject.Weightage ?? '');
   const [loading, setLoading] = useState(false);
+  const [fieldError, setFieldError] = useState('');
+  const otherTotal = sumSubjectWeights(subjects, subject.SubjectID);
+  const remainingWeight = Math.max(0, 100 - otherTotal);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) return;
+    const weightError = getWeightValidationError(subjects, weightage, subject.SubjectID);
+    if (weightError) {
+      setFieldError(weightError);
+      return;
+    }
+    setFieldError('');
     setLoading(true);
     try {
       await onSubmit({
@@ -744,8 +828,21 @@ function EditSubjectModal({ subject, onClose, onSubmit }) {
           </div>
           <div className="form-group">
             <label>Weightage %</label>
-            <input type="number" value={weightage} onChange={(e) => setWeightage(e.target.value)} min={0} max={100} step={0.01} placeholder="0–100" />
+            <input
+              type="number"
+              value={weightage}
+              onChange={(e) => {
+                setWeightage(e.target.value);
+                setFieldError('');
+              }}
+              min={0}
+              max={Math.min(100, remainingWeight)}
+              step={0.01}
+              placeholder={`0–${remainingWeight.toFixed(1)}`}
+            />
+            <small className="muted">Other subjects total {otherTotal.toFixed(1)}% · {remainingWeight.toFixed(1)}% available</small>
           </div>
+          {fieldError && <p className="exam-setup-field-error">{fieldError}</p>}
           <div className="form-group">
             <label>Description</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />

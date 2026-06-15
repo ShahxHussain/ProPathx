@@ -125,6 +125,21 @@
   color: var(--text-muted, #64748b);
 }
 
+.exam-setup-stat--warn {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.exam-setup-stat--warn .exam-setup-stat__value {
+  color: #b91c1c;
+}
+
+.exam-setup-form-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+}
+
 .exam-setup-hero-main {
   display: flex;
   gap: 20px;

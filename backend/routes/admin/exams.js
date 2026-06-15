@@ -7,6 +7,71 @@ import { authenticate, requireSuperAdmin } from '../../middleware/auth.js';
 
 const router = express.Router();
 
+function parseSubjectWeight(weightage) {
+  if (weightage == null || weightage === '') return 0;
+  const n = parseFloat(weightage);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+async function validateExamSubjectChange(examId, { weightage, excludeSubjectId, isCreate }) {
+  const { data: exam, error: examError } = await supabase
+    .from('Exams')
+    .select('ExamID, NoOfSubjects')
+    .eq('ExamID', examId)
+    .single();
+
+  if (examError || !exam) {
+    return { valid: false, status: 404, error: 'Exam not found' };
+  }
+
+  const { data: subjects } = await supabase
+    .from('Subjects')
+    .select('SubjectID, Weightage')
+    .eq('ExamID', examId);
+
+  const list = subjects || [];
+
+  if (isCreate && exam.NoOfSubjects != null && exam.NoOfSubjects !== '') {
+    const limit = Number(exam.NoOfSubjects);
+    if (Number.isFinite(limit) && list.length >= limit) {
+      return {
+        valid: false,
+        status: 400,
+        error: `This exam plan allows at most ${limit} subject${limit === 1 ? '' : 's'}. Remove a subject or update the exam plan.`,
+      };
+    }
+  }
+
+  if (weightage === undefined) {
+    return { valid: true };
+  }
+
+  const w = parseSubjectWeight(weightage);
+  if (Number.isNaN(w)) {
+    return { valid: false, status: 400, error: 'Weightage must be a valid number between 0 and 100' };
+  }
+  if (w < 0 || w > 100) {
+    return { valid: false, status: 400, error: 'Weightage must be between 0 and 100' };
+  }
+
+  const others = excludeSubjectId
+    ? list.filter((s) => s.SubjectID !== excludeSubjectId)
+    : list;
+  const otherTotal = others.reduce((sum, s) => sum + (parseSubjectWeight(s.Weightage) || 0), 0);
+  const nextTotal = otherTotal + w;
+
+  if (nextTotal > 100.001) {
+    const remaining = Math.max(0, 100 - otherTotal);
+    return {
+      valid: false,
+      status: 400,
+      error: `Total subject weightage cannot exceed 100% (would be ${nextTotal.toFixed(1)}%). Remaining available: ${remaining.toFixed(1)}%.`,
+    };
+  }
+
+  return { valid: true };
+}
+
 /**
  * ============================================
  * EXAM MANAGEMENT ROUTES (SuperAdmin only)
@@ -322,6 +387,14 @@ router.post('/exams/:examId/subjects', authenticate, requireSuperAdmin, async (r
       return res.status(400).json({ error: 'Subject name is required' });
     }
 
+    const subjectCheck = await validateExamSubjectChange(examId, {
+      weightage,
+      isCreate: true,
+    });
+    if (!subjectCheck.valid) {
+      return res.status(subjectCheck.status).json({ error: subjectCheck.error });
+    }
+
     // Create subject
     const { data: newSubject, error: subjectError } = await supabase
       .from('Subjects')
@@ -384,6 +457,16 @@ router.put('/exams/:examId/subjects/:subjectId', authenticate, requireSuperAdmin
 
     if (fetchError || !existingSubject) {
       return res.status(404).json({ error: 'Subject not found' });
+    }
+
+    if (weightage !== undefined) {
+      const subjectCheck = await validateExamSubjectChange(examId, {
+        weightage,
+        excludeSubjectId: subjectId,
+      });
+      if (!subjectCheck.valid) {
+        return res.status(subjectCheck.status).json({ error: subjectCheck.error });
+      }
     }
 
     // Build update object
