@@ -42,6 +42,10 @@ async function validateExamSubjectChange(examId, { weightage, excludeSubjectId, 
     }
   }
 
+  if (isCreate && (weightage == null || weightage === '')) {
+    return { valid: false, status: 400, error: 'Weightage is required when creating a subject' };
+  }
+
   if (weightage === undefined) {
     return { valid: true };
   }
@@ -49,6 +53,9 @@ async function validateExamSubjectChange(examId, { weightage, excludeSubjectId, 
   const w = parseSubjectWeight(weightage);
   if (Number.isNaN(w)) {
     return { valid: false, status: 400, error: 'Weightage must be a valid number between 0 and 100' };
+  }
+  if (isCreate && w <= 0) {
+    return { valid: false, status: 400, error: 'Weightage must be greater than 0' };
   }
   if (w < 0 || w > 100) {
     return { valid: false, status: 400, error: 'Weightage must be between 0 and 100' };

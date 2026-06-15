@@ -28,10 +28,13 @@ function sumSubjectWeights(subjects, excludeSubjectId) {
     .reduce((sum, s) => sum + parseSubjectWeight(s.Weightage), 0);
 }
 
-function getWeightValidationError(subjects, weightage, excludeSubjectId) {
-  if (weightage === '' || weightage == null) return null;
+function getWeightValidationError(subjects, weightage, excludeSubjectId, { required = false } = {}) {
+  if (weightage === '' || weightage == null) {
+    return required ? 'Weightage is required' : null;
+  }
   const w = parseFloat(weightage);
   if (!Number.isFinite(w)) return 'Enter a valid weight percentage';
+  if (required && w <= 0) return 'Weightage must be greater than 0%';
   if (w < 0 || w > 100) return 'Weightage must be between 0 and 100%';
   const otherTotal = sumSubjectWeights(subjects, excludeSubjectId);
   const nextTotal = otherTotal + w;
@@ -89,7 +92,7 @@ const ExamSetup = () => {
   const weightOverLimit = totalWeightage > 100.001;
 
   const handleCreateSubject = async (data) => {
-    const weightError = getWeightValidationError(subjects, data.weightage ?? '');
+    const weightError = getWeightValidationError(subjects, data.weightage ?? '', null, { required: true });
     if (weightError) {
       setError(weightError);
       return;
@@ -459,11 +462,11 @@ function SubjectSetupCard({
           </span>
         </div>
         <div className="exam-setup-subject-actions" onClick={(e) => e.stopPropagation()}>
-          <button type="button" className="icon-btn" onClick={onEdit} title="Edit subject">
-            <Edit2 size={16} />
+          <button type="button" className="exam-setup-icon-btn" onClick={onEdit} title="Edit subject" aria-label="Edit subject">
+            <Edit2 size={16} strokeWidth={2} />
           </button>
-          <button type="button" className="icon-btn danger" onClick={onDelete} title="Delete subject">
-            <Trash2 size={16} />
+          <button type="button" className="exam-setup-icon-btn exam-setup-icon-btn--danger" onClick={onDelete} title="Delete subject" aria-label="Delete subject">
+            <Trash2 size={16} strokeWidth={2} />
           </button>
         </div>
       </div>
@@ -551,11 +554,11 @@ function SubjectSetupCard({
                           {chLabel && <span className="exam-setup-list-item-meta"> — {chLabel}</span>}
                         </span>
                         <div className="exam-setup-list-item-actions">
-                          <button type="button" className="icon-btn" onClick={() => onEditTopic(topic)} title="Edit topic">
-                            <Edit2 size={14} />
+                          <button type="button" className="exam-setup-icon-btn" onClick={() => onEditTopic(topic)} title="Edit topic" aria-label="Edit topic">
+                            <Edit2 size={14} strokeWidth={2} />
                           </button>
-                          <button type="button" className="icon-btn danger" onClick={() => onDeleteTopic(topic.TopicID)} title="Delete topic">
-                            <Trash2 size={14} />
+                          <button type="button" className="exam-setup-icon-btn exam-setup-icon-btn--danger" onClick={() => onDeleteTopic(topic.TopicID)} title="Delete topic" aria-label="Delete topic">
+                            <Trash2 size={14} strokeWidth={2} />
                           </button>
                         </div>
                       </li>
@@ -582,7 +585,7 @@ function AddSubjectCard({ subjects, remainingWeight, plannedSubjects, onClose, o
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    const weightError = getWeightValidationError(subjects, weightage);
+    const weightError = getWeightValidationError(subjects, weightage, null, { required: true });
     if (weightError) {
       setFieldError(weightError);
       return;
@@ -591,16 +594,20 @@ function AddSubjectCard({ subjects, remainingWeight, plannedSubjects, onClose, o
     onSubmit({
       subjectName: name.trim(),
       description: description.trim() || null,
-      weightage: weightage === '' ? null : parseFloat(weightage),
+      weightage: parseFloat(weightage),
     });
   };
 
   return (
     <div className="exam-setup-form-card">
       <h4>New subject</h4>
-      {plannedSubjects != null && (
+      {plannedSubjects != null ? (
         <p className="exam-setup-form-hint">
           Plan: {subjects.length} / {plannedSubjects} subjects · {remainingWeight.toFixed(1)}% weight remaining
+        </p>
+      ) : (
+        <p className="exam-setup-form-hint">
+          {remainingWeight.toFixed(1)}% weight remaining (total must not exceed 100%)
         </p>
       )}
       <form onSubmit={handleSubmit}>
@@ -616,7 +623,7 @@ function AddSubjectCard({ subjects, remainingWeight, plannedSubjects, onClose, o
           />
         </div>
         <div className="exam-setup-field">
-          <label htmlFor="sub-weight">Weightage % (optional)</label>
+          <label htmlFor="sub-weight">Weightage % *</label>
           <input
             id="sub-weight"
             type="number"
@@ -625,10 +632,11 @@ function AddSubjectCard({ subjects, remainingWeight, plannedSubjects, onClose, o
               setWeightage(e.target.value);
               setFieldError('');
             }}
-            min={0}
+            min={0.01}
             max={Math.min(100, remainingWeight)}
             step={0.01}
-            placeholder={`0–${remainingWeight.toFixed(1)}`}
+            placeholder={`e.g. ${Math.min(25, remainingWeight).toFixed(0)}`}
+            required
           />
         </div>
         <div className="exam-setup-field">
@@ -720,8 +728,8 @@ function ChapterRow({ examId, subjectId, chapter, onUpdate, onDelete, onRefresh 
         <>
           <span className="exam-setup-list-item-label">{label}</span>
           <div className="exam-setup-list-item-actions">
-            <button type="button" className="icon-btn" onClick={() => setEdit(true)} title="Edit chapter"><Edit2 size={14} /></button>
-            <button type="button" className="icon-btn danger" onClick={() => onDelete(chapter.ChapterID)} title="Delete chapter"><Trash2 size={14} /></button>
+            <button type="button" className="exam-setup-icon-btn" onClick={() => setEdit(true)} title="Edit chapter" aria-label="Edit chapter"><Edit2 size={14} strokeWidth={2} /></button>
+            <button type="button" className="exam-setup-icon-btn exam-setup-icon-btn--danger" onClick={() => onDelete(chapter.ChapterID)} title="Delete chapter" aria-label="Delete chapter"><Trash2 size={14} strokeWidth={2} /></button>
           </div>
         </>
       ) : (
@@ -819,7 +827,7 @@ function EditSubjectModal({ subject, subjects, onClose, onSubmit }) {
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Edit subject</h2>
-          <button type="button" className="icon-btn" onClick={onClose}><X size={20} /></button>
+          <button type="button" className="exam-setup-icon-btn" onClick={onClose} aria-label="Close"><X size={20} strokeWidth={2} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -884,7 +892,7 @@ function EditTopicModalSetup({ topic, subject, onClose, onSubmit }) {
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Edit topic</h2>
-          <button type="button" className="icon-btn" onClick={onClose}><X size={20} /></button>
+          <button type="button" className="exam-setup-icon-btn" onClick={onClose} aria-label="Close"><X size={20} strokeWidth={2} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
