@@ -676,7 +676,27 @@
 .exam-setup-field-error {
   font-size: 12px;
   color: #ef4444;
-  margin: 0 0 8px 0;
+  margin: 6px 0 0;
+  font-weight: 500;
+}
+
+.exam-setup-input--error,
+.exam-setup-field input.exam-setup-input--error,
+.form-group input.exam-setup-input--error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.25);
+}
+
+.exam-setup-weight-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted, #64748b);
+}
+
+.exam-setup-weight-hint--error {
+  color: #dc2626;
+  font-weight: 600;
 }
 
 .exam-setup-form-actions {

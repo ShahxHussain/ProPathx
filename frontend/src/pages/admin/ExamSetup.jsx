@@ -581,6 +581,11 @@ function AddSubjectCard({ subjects, remainingWeight, plannedSubjects, onClose, o
   const [description, setDescription] = useState('');
   const [weightage, setWeightage] = useState('');
   const [fieldError, setFieldError] = useState('');
+  const otherTotal = sumSubjectWeights(subjects, null);
+  const liveWeightError =
+    weightage !== '' ? getWeightValidationError(subjects, weightage, null) : '';
+  const weightHasError = !!liveWeightError || !!fieldError;
+  const weightDisplayError = liveWeightError || fieldError;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -627,17 +632,24 @@ function AddSubjectCard({ subjects, remainingWeight, plannedSubjects, onClose, o
           <input
             id="sub-weight"
             type="number"
+            className={weightHasError ? 'exam-setup-input--error' : ''}
             value={weightage}
             onChange={(e) => {
               setWeightage(e.target.value);
               setFieldError('');
             }}
             min={0.01}
-            max={Math.min(100, remainingWeight)}
+            max={100}
             step={0.01}
             placeholder={`e.g. ${Math.min(25, remainingWeight).toFixed(0)}`}
             required
           />
+          <small className={`exam-setup-weight-hint${weightHasError ? ' exam-setup-weight-hint--error' : ''}`}>
+            Other subjects total {otherTotal.toFixed(1)}% · {remainingWeight.toFixed(1)}% available
+          </small>
+          {weightDisplayError && (
+            <p className="exam-setup-field-error">{weightDisplayError}</p>
+          )}
         </div>
         <div className="exam-setup-field">
           <label htmlFor="sub-desc">Description (optional)</label>
@@ -649,7 +661,6 @@ function AddSubjectCard({ subjects, remainingWeight, plannedSubjects, onClose, o
             placeholder="Short description"
           />
         </div>
-        {fieldError && <p className="exam-setup-field-error">{fieldError}</p>}
         <div className="exam-setup-form-actions">
           <button type="submit" className="btn btn-primary">Add subject</button>
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
@@ -800,6 +811,12 @@ function EditSubjectModal({ subject, subjects, onClose, onSubmit }) {
   const [fieldError, setFieldError] = useState('');
   const otherTotal = sumSubjectWeights(subjects, subject.SubjectID);
   const remainingWeight = Math.max(0, 100 - otherTotal);
+  const liveWeightError =
+    weightage !== '' && weightage != null
+      ? getWeightValidationError(subjects, weightage, subject.SubjectID)
+      : '';
+  const weightHasError = !!liveWeightError || !!fieldError;
+  const weightDisplayError = liveWeightError || fieldError;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -838,19 +855,24 @@ function EditSubjectModal({ subject, subjects, onClose, onSubmit }) {
             <label>Weightage %</label>
             <input
               type="number"
+              className={weightHasError ? 'exam-setup-input--error' : ''}
               value={weightage}
               onChange={(e) => {
                 setWeightage(e.target.value);
                 setFieldError('');
               }}
               min={0}
-              max={Math.min(100, remainingWeight)}
+              max={100}
               step={0.01}
               placeholder={`0–${remainingWeight.toFixed(1)}`}
             />
-            <small className="muted">Other subjects total {otherTotal.toFixed(1)}% · {remainingWeight.toFixed(1)}% available</small>
+            <small className={`exam-setup-weight-hint${weightHasError ? ' exam-setup-weight-hint--error' : ''}`}>
+              Other subjects total {otherTotal.toFixed(1)}% · {remainingWeight.toFixed(1)}% available
+            </small>
+            {weightDisplayError && (
+              <p className="exam-setup-field-error">{weightDisplayError}</p>
+            )}
           </div>
-          {fieldError && <p className="exam-setup-field-error">{fieldError}</p>}
           <div className="form-group">
             <label>Description</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
