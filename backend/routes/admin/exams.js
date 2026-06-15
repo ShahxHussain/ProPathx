@@ -37,7 +37,7 @@ async function validateExamSubjectChange(examId, { weightage, excludeSubjectId, 
       return {
         valid: false,
         status: 400,
-        error: `This exam plan allows at most ${limit} subject${limit === 1 ? '' : 's'}. Remove a subject or update the exam plan.`,
+        error: `This exam allows only ${limit} subject${limit === 1 ? '' : 's'}.`,
       };
     }
   }
@@ -68,12 +68,7 @@ async function validateExamSubjectChange(examId, { weightage, excludeSubjectId, 
   const nextTotal = otherTotal + w;
 
   if (nextTotal > 100.001) {
-    const remaining = Math.max(0, 100 - otherTotal);
-    return {
-      valid: false,
-      status: 400,
-      error: `Total subject weightage cannot exceed 100% (would be ${nextTotal.toFixed(1)}%). Remaining available: ${remaining.toFixed(1)}%.`,
-    };
+    return { valid: false, status: 400, error: 'Total weight cannot exceed 100%.' };
   }
 
   return { valid: true };
