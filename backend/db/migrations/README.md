@@ -5,7 +5,7 @@ Ordered SQL scripts for Supabase (PostgreSQL). Run **in numeric order** on each 
 ## How to run
 
 1. Open Supabase Dashboard → **SQL Editor**.
-2. Run each file below in order (001 → 006 for schema; 007 is ops-only).
+2. Run each file below in order (001 → 008 for schema; 007 is ops-only).
 3. Confirm no errors; scripts use `IF NOT EXISTS` where applicable.
 
 ## Run order

@@ -496,26 +496,22 @@ router.get('/dashboard/stats', authenticate, requireRole(['OrgAdmin']), verifyAc
       console.error('Error fetching users:', usersError);
     }
 
-    // Get total tests count for organization
+    // Get total tests count for organization (all statuses)
     const { count: totalTestsCount, error: testsError } = await supabase
       .from('Tests')
       .select('*', { count: 'exact', head: true })
-      .eq('OrgID', orgId)
-      .eq('Status', 'Active');
+      .eq('OrgID', orgId);
 
     if (testsError) {
       console.error('Error fetching tests:', testsError);
     }
 
-    // Get active tests count (tests currently running)
-    const now = new Date().toISOString();
+    // Enabled tests (Status = Active) — students can be assigned when active
     const { count: activeTestsCount, error: activeTestsError } = await supabase
       .from('Tests')
       .select('*', { count: 'exact', head: true })
       .eq('OrgID', orgId)
-      .eq('Status', 'Active')
-      .lte('StartDate', now)
-      .gte('EndDate', now);
+      .eq('Status', 'Active');
 
     if (activeTestsError) {
       console.error('Error fetching active tests:', activeTestsError);
@@ -809,8 +805,8 @@ router.get('/exams/explore', authenticate, requireRole(['OrgAdmin']), verifyActi
 
 /**
  * GET /api/org/auth/exams/subscription
- * Get exams that are included in this organization's active subscription(s) only (OrgAdmin).
- * Use this for Question Bank filter, test creation, etc. — not all platform exams.
+ * Get exams included in the organization's active subscription(s) (OrgAdmin).
+ * Optional query: subscriptionId — limit to one availed subscription's plan.
  */
 router.get('/exams/subscription', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
   try {
@@ -818,11 +814,51 @@ router.get('/exams/subscription', authenticate, requireRole(['OrgAdmin']), verif
     if (!orgId) {
       return res.status(403).json({ error: 'Organization ID not found' });
     }
-    const validation = await validateSubscriptionForQuestionCreation(orgId);
-    if (!validation.valid || !validation.availableExamIds || validation.availableExamIds.length === 0) {
+
+    const { subscriptionId: subscriptionIdParam } = req.query;
+    let examIds = [];
+
+    if (subscriptionIdParam) {
+      const today = new Date().toISOString().split('T')[0];
+      const { data: subscription, error: subError } = await supabase
+        .from('Subscriptions')
+        .select('SubscriptionID, PlanID, Status, EndDate')
+        .eq('SubscriptionID', subscriptionIdParam)
+        .eq('EntityType', 'Organization')
+        .eq('EntityID', orgId)
+        .eq('Status', 'Active')
+        .gte('EndDate', today)
+        .maybeSingle();
+
+      if (subError) {
+        return res.status(500).json({ error: 'Failed to fetch subscription', details: subError.message });
+      }
+      if (!subscription?.PlanID) {
+        return res.json({ exams: [] });
+      }
+
+      const { data: planExams, error: planExamsError } = await supabase
+        .from('SubscriptionPlanExams')
+        .select('ExamID')
+        .eq('PlanID', subscription.PlanID);
+
+      if (planExamsError) {
+        return res.status(500).json({ error: 'Failed to fetch plan exams', details: planExamsError.message });
+      }
+
+      examIds = [...new Set((planExams || []).map((pe) => pe.ExamID).filter(Boolean))];
+    } else {
+      const validation = await validateSubscriptionForQuestionCreation(orgId);
+      if (!validation.valid || !validation.availableExamIds || validation.availableExamIds.length === 0) {
+        return res.json({ exams: [] });
+      }
+      examIds = validation.availableExamIds;
+    }
+
+    if (!examIds.length) {
       return res.json({ exams: [] });
     }
-    const examIds = validation.availableExamIds;
+
     const { data: exams, error: examsError } = await supabase
       .from('Exams')
       .select('ExamID, ExamName, Description, Syllabus, NoOfSubjects, CreatedAt')

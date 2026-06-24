@@ -28,6 +28,12 @@ function sumSubjectWeights(subjects, excludeSubjectId) {
     .reduce((sum, s) => sum + parseSubjectWeight(s.Weightage), 0);
 }
 
+function weightExceedMessage(otherTotal) {
+  const max = Math.max(0, 100 - otherTotal);
+  const maxLabel = Number.isInteger(max) ? String(max) : max.toFixed(1);
+  return `Total weight cannot exceed 100%. You can only assign up to ${maxLabel}% to this subject.`;
+}
+
 function getWeightValidationError(subjects, weightage, excludeSubjectId, { required = false } = {}) {
   if (weightage === '' || weightage == null) {
     return required ? 'Enter weight %' : null;
@@ -39,7 +45,7 @@ function getWeightValidationError(subjects, weightage, excludeSubjectId, { requi
   const otherTotal = sumSubjectWeights(subjects, excludeSubjectId);
   const nextTotal = otherTotal + w;
   if (nextTotal > 100.001) {
-    return 'Total weight cannot exceed 100%.';
+    return weightExceedMessage(otherTotal);
   }
   return null;
 }

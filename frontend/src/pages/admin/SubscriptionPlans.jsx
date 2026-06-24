@@ -210,9 +210,10 @@ const SubscriptionPlans = () => {
   return (
     <div className="subscription-plans-container">
       <div className="subscription-plans-header">
-        <div>
+        <div className="subscription-plans-header-text">
+          <p className="subscription-plans-eyebrow">Super Admin · Billing</p>
           <h1>Subscription Plans</h1>
-          <p>Manage subscription plans and link exams to plans</p>
+          <p className="subscription-plans-subtitle">Manage subscription plans and link exams to plans</p>
         </div>
         <div className="header-actions">
           <div className="view-toggle">
@@ -761,7 +762,7 @@ const LinkExamsModal = ({ plan, onClose, onSuccess }) => {
                   <option value="">Choose an exam...</option>
                   {availableExams.map((exam) => (
                     <option key={exam.ExamID} value={exam.ExamID}>
-                      {exam.ExamName} (Platform-wide)
+                      {exam.ExamName}
                     </option>
                   ))}
                 </select>
@@ -872,7 +873,6 @@ const LinkExamsModal = ({ plan, onClose, onSuccess }) => {
                     <thead>
                       <tr>
                         <th>Exam Name</th>
-                        <th>Organization</th>
                         <th>Mandatory</th>
                         <th>AI Support</th>
                         {!isStudentOnlyPlan && <th>Max Students</th>}
@@ -888,7 +888,6 @@ const LinkExamsModal = ({ plan, onClose, onSuccess }) => {
                           <td>
                             <strong>{link.ExamName || 'Unknown Exam'}</strong>
                           </td>
-                          <td>Platform-wide</td>
                           <td>
                             {link.IsMandatory ? (
                               <span className="badge badge-warning">Yes</span>
@@ -1098,7 +1097,6 @@ const LinkedExamCard = ({ link, onUpdate, onUnlink }) => {
     return (
       <div className="linked-exam-card editing">
         <h4>{link.ExamName || 'Unknown Exam'}</h4>
-        <span className="exam-org">Platform-wide</span>
         <div className="form-group">
           <label>
             <input
@@ -1175,7 +1173,6 @@ const LinkedExamCard = ({ link, onUpdate, onUnlink }) => {
     <div className="linked-exam-card" data-exam-id={link.ExamID}>
       <div className="card-header">
         <h4>{link.ExamName || 'Unknown Exam'}</h4>
-        <span className="exam-org">Platform-wide</span>
       </div>
       <div className="card-content">
         <div className="exam-limits">
@@ -1207,8 +1204,14 @@ const LinkedExamCard = ({ link, onUpdate, onUnlink }) => {
   );
 };
 
-// Manage View Component
+// Manage View Component (plan cards — Overview tab)
 const ManageView = ({ plans, planExamCounts, onShowCreateModal, onEditPlan, onDeletePlan, onToggleStatus }) => {
+  const audienceKey = (audience) => {
+    if (audience === 'Student') return 'student';
+    if (audience === 'Both') return 'both';
+    return 'org';
+  };
+
   return (
     <div className="plans-grid">
       {plans.length === 0 ? (
@@ -1222,103 +1225,132 @@ const ManageView = ({ plans, planExamCounts, onShowCreateModal, onEditPlan, onDe
           </button>
         </div>
       ) : (
-        plans.map((plan) => (
-          <div key={plan.PlanID} className={`plan-card ${plan.Status === 'Inactive' ? 'plan-card-disabled' : ''}`}>
-            <div className="plan-card-header">
-              <div className="plan-title-section">
-                <div className="plan-title-row">
-                  <h3>{plan.PlanName}</h3>
-                  <span className={`plan-status-badge plan-status-${(plan.Status || 'Active').toLowerCase()}`}>
-                    {plan.Status === 'Inactive' ? 'Inactive' : 'Active'}
+        plans.map((plan) => {
+          const inactive = plan.Status === 'Inactive';
+          const audience = audienceKey(plan.Audience);
+          const examCount = planExamCounts[plan.PlanID];
+          const featureEntries = plan.Features ? Object.entries(plan.Features) : [];
+
+          return (
+            <article
+              key={plan.PlanID}
+              className={`plan-card plan-card--${audience} ${inactive ? 'plan-card--inactive' : ''}`}
+            >
+              <div className="plan-card-accent" aria-hidden />
+
+              <div className="plan-card-top">
+                <div className="plan-card-top-meta">
+                  <span
+                    className={`plan-status-pill ${inactive ? 'plan-status-pill--inactive' : 'plan-status-pill--active'}`}
+                  >
+                    <span className="plan-status-dot" />
+                    {inactive ? 'Inactive' : 'Active'}
                   </span>
-                  {planExamCounts[plan.PlanID] !== undefined && (
-                    <span className="exam-count-badge">
-                      <Link2 size={14} />
-                      {planExamCounts[plan.PlanID]} {planExamCounts[plan.PlanID] === 1 ? 'exam' : 'exams'}
+                  {examCount !== undefined && (
+                    <span className="plan-exam-pill">
+                      <Link2 size={13} aria-hidden />
+                      {examCount} {examCount === 1 ? 'exam' : 'exams'}
                     </span>
                   )}
                 </div>
-                <div className="plan-audience-row">
-                  <span
-                    className={`plan-audience-badge ${
-                      plan.Audience === 'Student'
-                        ? 'plan-audience-student'
-                        : plan.Audience === 'Both'
-                        ? 'plan-audience-both'
-                        : 'plan-audience-org'
-                    }`}
+                <div className="plan-actions" role="toolbar" aria-label={`Actions for ${plan.PlanName}`}>
+                  <button
+                    type="button"
+                    className="plan-action-btn"
+                    onClick={() => onToggleStatus(plan)}
+                    title={
+                      inactive
+                        ? 'Set Active (show to orgs for new subscriptions)'
+                        : 'Set Inactive (hide from new subscriptions)'
+                    }
+                    aria-label={inactive ? 'Set plan Active' : 'Set plan Inactive'}
                   >
-                    {plan.Audience === 'Student'
-                      ? 'For Individual Students'
-                      : plan.Audience === 'Both'
-                      ? 'For Orgs & Students'
-                      : 'For Organizations'}
-                  </span>
+                    {inactive ? (
+                      <ToggleLeft size={17} className="plan-toggle enable" />
+                    ) : (
+                      <ToggleRight size={17} className="plan-toggle disable" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="plan-action-btn"
+                    onClick={() => onEditPlan(plan)}
+                    title="Edit Plan"
+                    aria-label="Edit plan"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="plan-action-btn plan-action-btn--danger"
+                    onClick={() => onDeletePlan(plan)}
+                    title="Delete Plan"
+                    aria-label="Delete plan"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
-                <div className="plan-meta">
-                  <span className="plan-price">
-                    <DollarSign size={16} />
+              </div>
+
+              <h3 className="plan-card-name">{plan.PlanName}</h3>
+
+              <span className={`plan-audience-badge plan-audience-${audience}`}>
+                {plan.Audience === 'Student'
+                  ? 'Individual students'
+                  : plan.Audience === 'Both'
+                    ? 'Orgs & students'
+                    : 'Organizations'}
+              </span>
+
+              <div className="plan-card-pricing">
+                <div className="plan-price-block">
+                  <span className="plan-price-label">Price</span>
+                  <span className="plan-price-value">
+                    <DollarSign size={18} aria-hidden />
                     {plan.Price?.toFixed(2) || '0.00'}
                   </span>
-                  <span className="plan-duration">
-                    <Calendar size={16} />
+                </div>
+                <div className="plan-duration-block">
+                  <Calendar size={15} aria-hidden />
+                  <span>
                     {plan.DurationMonths} {plan.DurationMonths === 1 ? 'month' : 'months'}
                   </span>
                 </div>
-                <div className="plan-mode-row">
-                  {plan?.testModes?.isScheduledEnabled && <span className="mode-chip on">Scheduled</span>}
-                  {plan?.testModes?.isAdaptiveEnabled && <span className="mode-chip on">Adaptive</span>}
-                  {plan?.testModes?.isSelfTestBuilderEnabled && <span className="mode-chip on">Self-Test</span>}
-                  {!plan?.testModes?.isScheduledEnabled &&
-                    !plan?.testModes?.isAdaptiveEnabled &&
-                    !plan?.testModes?.isSelfTestBuilderEnabled && (
-                      <span className="mode-chip off">No mode enabled</span>
-                    )}
-                </div>
               </div>
-              <div className="plan-actions">
-                <button
-                  className="btn-icon"
-                  onClick={() => onToggleStatus(plan)}
-                  title={plan.Status === 'Inactive' ? 'Set Active (show to orgs for new subscriptions)' : 'Set Inactive (hide from new subscriptions; existing subs unaffected)'}
-                  aria-label={plan.Status === 'Inactive' ? 'Set plan Active' : 'Set plan Inactive'}
-                >
-                  {plan.Status === 'Inactive' ? (
-                    <ToggleLeft size={18} className="plan-toggle enable" />
-                  ) : (
-                    <ToggleRight size={18} className="plan-toggle disable" />
+
+              <div className="plan-mode-row">
+                {plan?.testModes?.isScheduledEnabled && (
+                  <span className="mode-chip mode-chip--scheduled">Scheduled</span>
+                )}
+                {plan?.testModes?.isAdaptiveEnabled && (
+                  <span className="mode-chip mode-chip--adaptive">Adaptive</span>
+                )}
+                {plan?.testModes?.isSelfTestBuilderEnabled && (
+                  <span className="mode-chip mode-chip--selftest">Self-Test</span>
+                )}
+                {!plan?.testModes?.isScheduledEnabled &&
+                  !plan?.testModes?.isAdaptiveEnabled &&
+                  !plan?.testModes?.isSelfTestBuilderEnabled && (
+                    <span className="mode-chip mode-chip--off">No delivery mode</span>
                   )}
-                </button>
-                <button
-                  className="btn-icon"
-                  onClick={() => onEditPlan(plan)}
-                  title="Edit Plan"
-                >
-                  <Edit2 size={18} />
-                </button>
-                <button
-                  className="btn-icon btn-danger"
-                  onClick={() => onDeletePlan(plan)}
-                  title="Delete Plan"
-                >
-                  <Trash2 size={18} />
-                </button>
               </div>
-            </div>
-            {plan.Features && Object.keys(plan.Features).length > 0 && (
-              <div className="plan-features">
-                <h4>Features:</h4>
-                <ul>
-                  {Object.entries(plan.Features).map(([key, value]) => (
-                    <li key={key}>
-                      <strong>{key}:</strong> {String(value)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        ))
+
+              {featureEntries.length > 0 && (
+                <div className="plan-features">
+                  <span className="plan-features-label">Plan features</span>
+                  <ul className="plan-feature-tags">
+                    {featureEntries.map(([key, value]) => (
+                      <li key={key} className="plan-feature-tag">
+                        <span className="plan-feature-tag-key">{key}</span>
+                        <span className="plan-feature-tag-val">{String(value)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </article>
+          );
+        })
       )}
     </div>
   );

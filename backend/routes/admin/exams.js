@@ -68,7 +68,13 @@ async function validateExamSubjectChange(examId, { weightage, excludeSubjectId, 
   const nextTotal = otherTotal + w;
 
   if (nextTotal > 100.001) {
-    return { valid: false, status: 400, error: 'Total weight cannot exceed 100%.' };
+    const max = Math.max(0, 100 - otherTotal);
+    const maxLabel = Number.isInteger(max) ? String(max) : max.toFixed(1);
+    return {
+      valid: false,
+      status: 400,
+      error: `Total weight cannot exceed 100%. You can only assign up to ${maxLabel}% to this subject.`,
+    };
   }
 
   return { valid: true };
@@ -105,11 +111,7 @@ router.get('/exams', authenticate, requireSuperAdmin, async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch exams', details: error.message });
     }
 
-    // Exams are now platform-wide (no OrgID)
-    const examsWithOrg = (exams || []).map((exam) => ({
-      ...exam,
-      OrgName: null, // All exams are platform-wide
-    }));
+    const examsWithOrg = exams || [];
 
     res.json({ exams: examsWithOrg });
   } catch (error) {

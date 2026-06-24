@@ -109,9 +109,9 @@ export const PLATFORM_TABS = [
     id: 'assessment',
     label: 'Assessments',
     icon: ClipboardCheck,
-    title: 'Practice, mock & final — your way',
+    title: 'Scheduled & open assessments — your way',
     desc: 'Create tests with custom, auto, or hybrid question binding. Schedule windows or keep tests open. Assign to individuals, groups, or entire cohorts.',
-    nodes: ['Practice', 'Mock', 'Final', 'Assignments', 'Attempts', 'Results'],
+    nodes: ['Open', 'Scheduled', 'Assignments', 'Attempts', 'Results'],
     highlights: [
       'Scheduled vs open-window delivery modes',
       'Test assignments with due dates & group targeting',
@@ -394,7 +394,7 @@ export const PORTALS = [
     title: 'Students',
     desc: 'Org-enrolled or independent — follow assigned practice, review explanations, track topic-level mastery, and build self-study when your plan allows.',
     features: [
-      'Practice, mock & final attempts',
+      'Scheduled & open test attempts',
       'Result details by subject & topic',
       'Notifications, feedback & certificates',
     ],

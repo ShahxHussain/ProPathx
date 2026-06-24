@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, Plus, Search, BookOpen, AlertCircle, UserPlus, ArrowLeft, List, BookOpenCheck } from 'lucide-react';
 import { testAPI, orgDashboard } from '../../../services/api';
 import AssignTestModal from '../../../components/org/AssignTestPanel';
+import { getTestScheduleBadgeColor, getTestScheduleLabel } from '../utils/testScheduleLabel.js';
 import './Tests.css';
 
 const TestAssignmentsScreen = ({ onBack }) => {
@@ -51,15 +52,6 @@ const TestAssignmentsScreen = ({ onBack }) => {
       test.TestName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       test.Exams?.ExamName?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const getTestTypeBadge = (type) => {
-    const colors = {
-      Practice: 'blue',
-      Mock: 'orange',
-      Final: 'red',
-    };
-    return colors[type] || 'gray';
-  };
 
   const renderAssignments = () => {
     if (!selectedTest) return null;
@@ -136,7 +128,7 @@ const TestAssignmentsScreen = ({ onBack }) => {
             <div>
               <h2>{selectedTest.TestName}</h2>
               <p className="page-subtitle">
-                {selectedTest.Exams?.ExamName || 'N/A'} â€¢ {selectedTest.TestType} â€¢ {selectedTest.DurationMinutes || 0} min
+                {selectedTest.Exams?.ExamName || 'N/A'} · {getTestScheduleLabel(selectedTest)} · {selectedTest.DurationMinutes || 0} min
               </p>
             </div>
             <div className="header-actions">
@@ -188,7 +180,7 @@ const TestAssignmentsScreen = ({ onBack }) => {
                     <tr>
                       <th>Test Name</th>
                       <th>Exam</th>
-                      <th>Type</th>
+                      <th>Schedule</th>
                       <th>Questions</th>
                       <th>Duration</th>
                       <th>Test Date</th>
@@ -207,8 +199,8 @@ const TestAssignmentsScreen = ({ onBack }) => {
                         </td>
                         <td>{test.Exams?.ExamName || 'N/A'}</td>
                         <td>
-                          <span className={`badge badge-${getTestTypeBadge(test.TestType)}`}>
-                            {test.TestType}
+                          <span className={`badge badge-${getTestScheduleBadgeColor(test)}`}>
+                            {getTestScheduleLabel(test)}
                           </span>
                         </td>
                         <td>{test.TotalQuestions || 0}</td>
@@ -328,15 +320,6 @@ const Tests = () => {
       test.Exams?.ExamName?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const getTestTypeBadge = (type) => {
-    const colors = {
-      Practice: 'blue',
-      Mock: 'orange',
-      Final: 'red',
-    };
-    return colors[type] || 'gray';
-  };
-
   const toggleStatus = async (test) => {
     try {
       const nextStatus = test.Status === 'Active' ? 'Inactive' : 'Active';
@@ -435,7 +418,7 @@ const Tests = () => {
                 <tr>
                   <th>Test Name</th>
                   <th>Exam</th>
-                  <th>Type</th>
+                  <th>Schedule</th>
                   <th>Questions</th>
                   <th>Duration</th>
                   <th>Test Date</th>
@@ -454,8 +437,8 @@ const Tests = () => {
                     </td>
                     <td>{test.Exams?.ExamName || 'N/A'}</td>
                     <td>
-                      <span className={`badge badge-${getTestTypeBadge(test.TestType)}`}>
-                        {test.TestType}
+                      <span className={`badge badge-${getTestScheduleBadgeColor(test)}`}>
+                        {getTestScheduleLabel(test)}
                       </span>
                     </td>
                     <td>{test.TotalQuestions || 0}</td>

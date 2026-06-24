@@ -2,8 +2,8 @@ import { Route, Navigate } from 'react-router-dom';
 import ReviewerLayout from '../../components/layouts/ReviewerLayout';
 import ReviewerDashboard from '../../pages/reviewer/Dashboard';
 import ReviewerQuestions from '../../pages/reviewer/Questions';
-import ReviewerApproved from '../../pages/reviewer/Approved';
 import ReviewerExperts from '../../pages/reviewer/Experts';
+import ReviewFocus from '../../pages/reviewer/ReviewFocus';
 import Notifications from '../../pages/Notifications';
 import Profile from '../profile/pages/Profile';
 import { ProtectedRoute } from '../auth/routes/guards';
@@ -21,7 +21,8 @@ export function ReviewerFeatureRoutes() {
     >
       <Route path="dashboard" element={<ReviewerDashboard />} />
       <Route path="questions" element={<ReviewerQuestions />} />
-      <Route path="approved" element={<ReviewerApproved />} />
+      <Route path="focus" element={<ReviewFocus />} />
+      <Route path="approved" element={<Navigate to="/reviewer/questions?status=approved" replace />} />
       <Route path="experts" element={<ReviewerExperts />} />
       <Route path="notifications" element={<Notifications />} />
       <Route path="profile" element={<Profile />} />

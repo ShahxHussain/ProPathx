@@ -2,6 +2,7 @@ import { BrowserRouter } from 'react-router-dom';
 import AppRoutes from './app/AppRoutes';
 import ScrollToTop from './app/ScrollToTop';
 import './App.css';
+import './styles/icon-controls.css';
 
 function App() {
   return (

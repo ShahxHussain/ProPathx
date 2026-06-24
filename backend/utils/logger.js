@@ -6,7 +6,7 @@ import { supabase } from '../config/database.js';
  * @param {string} logData.actorType - 'Organization' | 'OrgUser'
  * @param {string} logData.actorID - UUID of the actor
  * @param {string} logData.actionType - Action type (e.g., 'Signup', 'Login', 'Create')
- * @param {string} logData.entityType - Entity type (e.g., 'Organization', 'OrgUser')
+ * @param {string} logData.entityType - Entity type (e.g. 'Organization', 'User'; OrgUser is stored as User)
  * @param {string} logData.entityID - UUID of the entity
  * @param {string} logData.description - Description of the action
  * @param {string} logData.ipAddress - IP address
@@ -14,13 +14,19 @@ import { supabase } from '../config/database.js';
  * @param {Object} logData.previousData - Previous state (optional)
  * @param {Object} logData.newData - New state (optional)
  */
+/** Maps app entity labels to Postgres entity_type_enum values. */
+const ENTITY_TYPE_ALIASES = {
+  OrgUser: 'User',
+};
+
 export const createLog = async (logData) => {
   try {
+    const entityType = ENTITY_TYPE_ALIASES[logData.entityType] ?? logData.entityType;
     const { error } = await supabase.from('Logs').insert({
       ActorType: logData.actorType,
       ActorID: logData.actorID,
       ActionType: logData.actionType,
-      EntityType: logData.entityType,
+      EntityType: entityType,
       EntityID: logData.entityID,
       Description: logData.description || null,
       IPAddress: logData.ipAddress || null,

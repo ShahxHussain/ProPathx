@@ -1,23 +1,64 @@
-import { useEffect, useState } from 'react';
-import { CheckCircle, XCircle, Eye, Clock, FileCheck, MessageSquare } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  CheckCircle,
+  XCircle,
+  Eye,
+  Clock,
+  FileCheck,
+  MessageSquare,
+  Search,
+  Filter,
+  X,
+  Loader2,
+  Zap,
+} from 'lucide-react';
 import { reviewerAPI } from '../../services/api';
+import LaTeXRenderer from '../../components/LaTeXRenderer';
+import QuestionViewModal from './QuestionViewModal';
 import './Questions.css';
 
+const STATUS_TABS = [
+  { id: 'pending', label: 'Pending', icon: Clock },
+  { id: 'approved', label: 'Approved', icon: CheckCircle },
+  { id: 'rejected', label: 'Rejected', icon: XCircle },
+];
+
+const VALID_STATUS_FILTERS = ['pending', 'approved', 'rejected'];
+
 const Questions = () => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statusFromUrl = searchParams.get('status');
+  const initialFilter = VALID_STATUS_FILTERS.includes(statusFromUrl) ? statusFromUrl : 'pending';
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('pending'); // pending, approved, rejected
+  const [filter, setFilter] = useState(initialFilter);
   const [error, setError] = useState('');
   const [selectedQuestion, setSelectedQuestion] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectComments, setRejectComments] = useState('');
   const [success, setSuccess] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [difficultyFilter, setDifficultyFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [examFilter, setExamFilter] = useState('all');
+  const [subjectFilter, setSubjectFilter] = useState('all');
+  const detailCache = useRef(new Map());
+
+  useEffect(() => {
+    const status = searchParams.get('status');
+    if (status && VALID_STATUS_FILTERS.includes(status) && status !== filter) {
+      setFilter(status);
+    }
+  }, [searchParams, filter]);
 
   useEffect(() => {
     loadQuestions();
   }, [filter]);
 
-  // Auto-dismiss messages
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(''), 5000);
@@ -49,14 +90,52 @@ const Questions = () => {
     }
   };
 
-  const handleViewDetails = async (questionId) => {
+  const enrichQuestionDetails = async (question, baseData) => {
+    const cached = detailCache.current.get(question.QuestionID);
+    if (cached) {
+      setSelectedQuestion({ ...baseData, ...cached });
+      return;
+    }
+
+    if (baseData.options?.length > 0 && baseData.creator) {
+      detailCache.current.set(question.QuestionID, {
+        options: baseData.options,
+        creator: baseData.creator,
+      });
+      return;
+    }
+
+    setDetailLoading(true);
     try {
-      const response = await reviewerAPI.getQuestionDetails(questionId);
-      setSelectedQuestion(response);
+      const response = await reviewerAPI.getQuestionDetails(question.QuestionID);
+      const enriched = {
+        question: { ...question, ...response.question },
+        options: response.options || baseData.options || [],
+        creator: response.creator || null,
+      };
+      detailCache.current.set(question.QuestionID, {
+        options: enriched.options,
+        creator: enriched.creator,
+      });
+      setSelectedQuestion(enriched);
     } catch (err) {
       console.error('Failed to load question details:', err);
-      setError(err.message || 'Failed to load question details');
+      if (!baseData.options?.length) {
+        setError(err.message || 'Failed to load question details');
+      }
+    } finally {
+      setDetailLoading(false);
     }
+  };
+
+  const handleViewDetails = (question) => {
+    const baseData = {
+      question,
+      options: question.options || [],
+      creator: null,
+    };
+    setSelectedQuestion(baseData);
+    enrichQuestionDetails(question, baseData);
   };
 
   const handleApprove = async (questionId) => {
@@ -65,6 +144,7 @@ const Questions = () => {
       await reviewerAPI.approveQuestion(questionId);
       setSuccess('Question approved successfully!');
       setSelectedQuestion(null);
+      detailCache.current.delete(questionId);
       loadQuestions();
     } catch (err) {
       console.error('Failed to approve question:', err);
@@ -80,11 +160,13 @@ const Questions = () => {
 
     try {
       setError('');
-      await reviewerAPI.rejectQuestion(selectedQuestion.question.QuestionID, rejectComments);
+      const questionId = selectedQuestion.question.QuestionID;
+      await reviewerAPI.rejectQuestion(questionId, rejectComments);
       setSuccess('Question rejected successfully!');
       setShowRejectModal(false);
       setRejectComments('');
       setSelectedQuestion(null);
+      detailCache.current.delete(questionId);
       loadQuestions();
     } catch (err) {
       console.error('Failed to reject question:', err);
@@ -92,63 +174,191 @@ const Questions = () => {
     }
   };
 
-  const filteredQuestions = questions.filter((q) => {
-    if (filter === 'pending') return !q.IsVerified && !q.ReviewerComments;
-    if (filter === 'approved') return q.IsVerified;
-    if (filter === 'rejected') return q.ReviewerComments && !q.IsVerified;
-    return true;
-  });
+  const filterOptions = useMemo(() => {
+    const exams = new Set();
+    const subjects = new Set();
+    const types = new Set();
+
+    questions.forEach((q) => {
+      if (q.ExamName) exams.add(q.ExamName);
+      if (q.SubjectName) subjects.add(q.SubjectName);
+      if (q.QuestionType) types.add(q.QuestionType);
+    });
+
+    return {
+      exams: [...exams].sort(),
+      subjects: [...subjects].sort(),
+      types: [...types].sort(),
+    };
+  }, [questions]);
+
+  const filteredQuestions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return questions.filter((q) => {
+      if (difficultyFilter !== 'all' && q.DifficultyLevel !== difficultyFilter) return false;
+      if (typeFilter !== 'all' && q.QuestionType !== typeFilter) return false;
+      if (examFilter !== 'all' && q.ExamName !== examFilter) return false;
+      if (subjectFilter !== 'all' && q.SubjectName !== subjectFilter) return false;
+      if (!query) return true;
+
+      const haystack = [
+        q.QuestionText,
+        q.Explanation,
+        q.ExamName,
+        q.SubjectName,
+        q.TopicName,
+        q.ChapterName,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [questions, searchQuery, difficultyFilter, typeFilter, examFilter, subjectFilter]);
+
+  const hasActiveFilters =
+    searchQuery.trim() ||
+    difficultyFilter !== 'all' ||
+    typeFilter !== 'all' ||
+    examFilter !== 'all' ||
+    subjectFilter !== 'all';
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setDifficultyFilter('all');
+    setTypeFilter('all');
+    setExamFilter('all');
+    setSubjectFilter('all');
+  };
+
+  const handleStatusChange = (status) => {
+    setFilter(status);
+    setSearchParams(status === 'pending' ? {} : { status }, { replace: true });
+  };
+
+  const statusCounts = useMemo(
+    () => ({
+      showing: filteredQuestions.length,
+      total: questions.length,
+    }),
+    [questions, filteredQuestions]
+  );
 
   return (
-    <div className="questions-page">
-      <div className="page-header">
-        <h1>Question Review</h1>
-        <p className="page-subtitle">Review and approve questions submitted by Subject Experts</p>
+    <div className="questions-page reviewer-questions-page">
+      <div className="review-hero">
+        <div>
+          <p className="review-hero__kicker">Reviewer workspace</p>
+          <h1>Question Review</h1>
+          <p className="review-hero__subtitle">
+            Browse and review questions — filter by pending, approved, or rejected status.
+          </p>
+        </div>
+        <div className="review-hero__stats">
+          <button
+            type="button"
+            className="review-focus-launch"
+            onClick={() => navigate('/reviewer/focus')}
+          >
+            <Zap size={18} />
+            Focus Review
+          </button>
+          <div className="review-stat">
+            <span className="review-stat__value">{statusCounts.showing}</span>
+            <span className="review-stat__label">Showing</span>
+          </div>
+          <div className="review-stat">
+            <span className="review-stat__value">{statusCounts.total}</span>
+            <span className="review-stat__label">In tab</span>
+          </div>
+        </div>
       </div>
 
-      {error && (
-        <div className="notice error" style={{ marginBottom: '24px' }}>
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="notice success" style={{ marginBottom: '24px' }}>
-          {success}
-        </div>
-      )}
+      {error && <div className="notice error">{error}</div>}
+      {success && <div className="notice success">{success}</div>}
 
       <div className="filter-tabs">
-        <button
-          className={`filter-tab ${filter === 'pending' ? 'active' : ''}`}
-          onClick={() => setFilter('pending')}
-        >
-          <Clock size={18} />
-          <span>Pending</span>
-        </button>
-        <button
-          className={`filter-tab ${filter === 'approved' ? 'active' : ''}`}
-          onClick={() => setFilter('approved')}
-        >
-          <CheckCircle size={18} />
-          <span>Approved</span>
-        </button>
-        <button
-          className={`filter-tab ${filter === 'rejected' ? 'active' : ''}`}
-          onClick={() => setFilter('rejected')}
-        >
-          <XCircle size={18} />
-          <span>Rejected</span>
-        </button>
+        {STATUS_TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className={`filter-tab filter-tab--${id} ${filter === id ? 'active' : ''}`}
+            onClick={() => handleStatusChange(id)}
+          >
+            <Icon size={18} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="review-toolbar">
+        <div className="review-search">
+          <Search size={18} />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search…"
+            aria-label="Search questions"
+          />
+        </div>
+
+        <div className="review-filters">
+          <Filter size={16} />
+          <select value={difficultyFilter} onChange={(e) => setDifficultyFilter(e.target.value)} aria-label="Filter by difficulty">
+            <option value="all">Difficulty</option>
+            <option value="Easy">Easy</option>
+            <option value="Medium">Medium</option>
+            <option value="Hard">Hard</option>
+          </select>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} aria-label="Filter by type">
+            <option value="all">Type</option>
+            {filterOptions.types.map((type) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+          <select value={examFilter} onChange={(e) => setExamFilter(e.target.value)} aria-label="Filter by exam">
+            <option value="all">Exam</option>
+            {filterOptions.exams.map((exam) => (
+              <option key={exam} value={exam}>{exam}</option>
+            ))}
+          </select>
+          <select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)} aria-label="Filter by subject">
+            <option value="all">Subject</option>
+            {filterOptions.subjects.map((subject) => (
+              <option key={subject} value={subject}>{subject}</option>
+            ))}
+          </select>
+          {hasActiveFilters && (
+            <button type="button" className="review-clear-filters" onClick={clearFilters}>
+              <X size={14} />
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
-        <div className="loading-state">Loading questions...</div>
+        <div className="loading-state">
+          <Loader2 size={28} className="spin" />
+          <span>Loading questions…</span>
+        </div>
       ) : filteredQuestions.length === 0 ? (
         <div className="empty-state">
           <FileCheck size={48} />
-          <h3>No {filter} questions</h3>
-          <p>There are no {filter} questions to display</p>
+          <h3>No questions found</h3>
+          <p>
+            {hasActiveFilters
+              ? 'Try adjusting your filters or search terms.'
+              : `There are no ${filter} questions to display.`}
+          </p>
+          {hasActiveFilters && (
+            <button type="button" className="btn-secondary" onClick={clearFilters}>
+              Clear filters
+            </button>
+          )}
         </div>
       ) : (
         <div className="questions-list">
@@ -157,19 +367,15 @@ const Questions = () => {
               key={question.QuestionID}
               question={question}
               onViewDetails={handleViewDetails}
-              onApprove={handleApprove}
-              onReject={() => {
-                handleViewDetails(question.QuestionID);
-                setShowRejectModal(true);
-              }}
             />
           ))}
         </div>
       )}
 
       {selectedQuestion && (
-        <QuestionDetailsModal
+        <QuestionViewModal
           questionData={selectedQuestion}
+          loadingDetail={detailLoading}
           onClose={() => setSelectedQuestion(null)}
           onApprove={handleApprove}
           onReject={() => setShowRejectModal(true)}
@@ -192,185 +398,78 @@ const Questions = () => {
   );
 };
 
-const QuestionCard = ({ question, onViewDetails, onApprove, onReject }) => {
-  const getDifficultyColor = (difficulty) => {
-    const colors = {
-      Easy: '#22c55e',
-      Medium: '#f59e0b',
-      Hard: '#ef4444',
-    };
-    return colors[difficulty] || '#6b7280';
-  };
-
-  return (
-    <div className="question-card">
-      <div className="question-header">
-        <div className="question-info">
-          <h3 className="question-text">{question.QuestionText}</h3>
-          <div className="question-meta">
-            <span
-              className="badge badge-difficulty"
-              style={{ borderColor: getDifficultyColor(question.DifficultyLevel) }}
-            >
+const QuestionCard = ({ question, onViewDetails }) => (
+  <article
+    className="question-card question-card--clickable"
+    onClick={() => onViewDetails(question)}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onViewDetails(question);
+      }
+    }}
+    role="button"
+    tabIndex={0}
+  >
+    <div className="question-header">
+      <div className="question-info">
+        <h3 className="question-text question-text--preview">
+          <LaTeXRenderer text={question.QuestionText} />
+        </h3>
+        <div className="question-meta">
+          {question.DifficultyLevel && (
+            <span className={`review-badge review-badge--${question.DifficultyLevel.toLowerCase()}`}>
               {question.DifficultyLevel}
             </span>
-            {question.ExamName && (
-              <span className="badge badge-subject">{question.ExamName}</span>
-            )}
-            {question.SubjectName && (
-              <span className="badge badge-subject">{question.SubjectName}</span>
-            )}
-            {question.TopicName && (
-              <span className="badge badge-subject">{question.TopicName}</span>
-            )}
-            {(question.ChapterNumber != null || question.ChapterName) && (
-              <span className="badge badge-subject">
-                Ch. {[question.ChapterNumber, question.ChapterName].filter(Boolean).join(': ')}
-              </span>
-            )}
-            <span className="question-date">
-              {new Date(question.CreatedAt).toLocaleDateString()}
+          )}
+          {question.QuestionType && (
+            <span className="review-badge review-badge--type">{question.QuestionType}</span>
+          )}
+          {question.ExamName && <span className="review-badge">{question.ExamName}</span>}
+          {question.SubjectName && <span className="review-badge">{question.SubjectName}</span>}
+          {question.TopicName && <span className="review-badge">{question.TopicName}</span>}
+          {(question.ChapterNumber != null || question.ChapterName) && (
+            <span className="review-badge">
+              Ch. {[question.ChapterNumber, question.ChapterName].filter(Boolean).join(': ')}
             </span>
-          </div>
-          {question.ReviewerComments && (
-            <div className="reviewer-comments-preview">
-              <MessageSquare size={14} />
-              <span>{question.ReviewerComments.substring(0, 60)}...</span>
-            </div>
           )}
+          <span className="question-date">
+            {new Date(question.CreatedAt).toLocaleDateString()}
+          </span>
         </div>
-        <div className="question-actions">
-          <button className="btn-icon" onClick={() => onViewDetails(question.QuestionID)}>
-            <Eye size={18} />
-          </button>
-        </div>
+        {question.ReviewerComments && (
+          <div className="reviewer-comments-preview">
+            <MessageSquare size={14} />
+            <span>{question.ReviewerComments.substring(0, 80)}…</span>
+          </div>
+        )}
+      </div>
+      <div className="question-actions">
+        <button
+          type="button"
+          className="btn-icon btn-icon--view"
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewDetails(question);
+          }}
+          title="Open full preview"
+          aria-label="Open full preview"
+        >
+          <Eye size={18} />
+        </button>
       </div>
     </div>
-  );
-};
+  </article>
+);
 
-const QuestionDetailsModal = ({ questionData, onClose, onApprove, onReject, showRejectButton }) => {
-  const { question, options, creator } = questionData;
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content question-details-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Question Details</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-
-        <div className="modal-body">
-          <div className="detail-section">
-            <h4>Question</h4>
-            <p>{question.QuestionText}</p>
-          </div>
-
-          {question.Explanation && (
-            <div className="detail-section">
-              <h4>Explanation</h4>
-              <p>{question.Explanation}</p>
-            </div>
-          )}
-
-          <div className="detail-section">
-            <h4>Question Details</h4>
-            <div className="detail-grid">
-              <div>
-                <strong>Type:</strong> {question.QuestionType}
-              </div>
-              <div>
-                <strong>Difficulty:</strong> {question.DifficultyLevel}
-              </div>
-              {question.ExamName && (
-                <div>
-                  <strong>Exam:</strong> {question.ExamName}
-                </div>
-              )}
-              {question.SubjectName && (
-                <div>
-                  <strong>Subject:</strong> {question.SubjectName}
-                </div>
-              )}
-              {question.TopicName && (
-                <div>
-                  <strong>Topic:</strong> {question.TopicName}
-                </div>
-              )}
-              {(question.ChapterNumber != null || question.ChapterName) && (
-                <div>
-                  <strong>Chapter:</strong> {[question.ChapterNumber, question.ChapterName].filter(Boolean).join(' — ')}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {creator && (
-            <div className="detail-section">
-              <h4>Created By</h4>
-              <p>
-                {creator.name} ({creator.email}) - {creator.type}
-              </p>
-            </div>
-          )}
-
-          <div className="detail-section">
-            <h4>Answer Options</h4>
-            <div className="options-list">
-              {options.map((option, index) => (
-                <div
-                  key={option.OptionID}
-                  className={`option-item ${option.IsCorrect ? 'correct' : ''}`}
-                >
-                  <span className="option-number">{index + 1}.</span>
-                  <span className="option-text">{option.OptionText}</span>
-                  {option.IsCorrect && (
-                    <span className="option-badge">Correct</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {question.ReviewerComments && (
-            <div className="detail-section">
-              <h4>Rejection Comments</h4>
-              <div className="rejection-comments">{question.ReviewerComments}</div>
-            </div>
-          )}
-        </div>
-
-        <div className="modal-footer">
-          {showRejectButton && (
-            <>
-              <button className="btn-approve" onClick={() => onApprove(question.QuestionID)}>
-                <CheckCircle size={18} />
-                <span>Approve</span>
-              </button>
-              <button className="btn-reject" onClick={onReject}>
-                <XCircle size={18} />
-                <span>Reject</span>
-              </button>
-            </>
-          )}
-          <button className="btn-secondary" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const RejectModal = ({ onClose, onConfirm, comments, onCommentsChange }) => {
-  return (
-    <div className="modal-overlay" onClick={onClose}>
+const RejectModal = ({ onClose, onConfirm, comments, onCommentsChange }) =>
+  createPortal(
+    <div className="modal-overlay reject-modal-overlay" onClick={onClose}>
       <div className="modal-content reject-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Reject Question</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <button type="button" className="modal-close" onClick={onClose}>×</button>
         </div>
-
         <div className="modal-body">
           <p>Please provide comments explaining why this question is being rejected:</p>
           <textarea
@@ -379,21 +478,21 @@ const RejectModal = ({ onClose, onConfirm, comments, onCommentsChange }) => {
             onChange={(e) => onCommentsChange(e.target.value)}
             placeholder="Enter rejection comments..."
             rows={5}
+            autoFocus
           />
         </div>
-
         <div className="modal-footer">
-          <button className="btn-reject" onClick={onConfirm} disabled={!comments.trim()}>
+          <button type="button" className="btn-reject" onClick={onConfirm} disabled={!comments.trim()}>
             <XCircle size={18} />
             <span>Confirm Rejection</span>
           </button>
-          <button className="btn-secondary" onClick={onClose}>
+          <button type="button" className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
-};
 
 export default Questions;

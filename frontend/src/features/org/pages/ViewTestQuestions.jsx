@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Download } from 'lucide-react';
 import { testAPI } from '../../../services/api';
+import { getTestScheduleLabel } from '../utils/testScheduleLabel.js';
 import LaTeXRenderer from '../../../components/LaTeXRenderer';
 import './ViewTestQuestions.css';
 
@@ -99,7 +100,7 @@ const ViewTestQuestions = () => {
         </button>
         <h1 className="vtq-title">Questions in this test</h1>
         <p className="vtq-subtitle">
-          {test.TestName} · {test.Exams?.ExamName} · {test.TestType} · {questions.length} question{questions.length !== 1 ? 's' : ''}
+          {test.TestName} · {test.Exams?.ExamName} · {getTestScheduleLabel(test)} · {questions.length} question{questions.length !== 1 ? 's' : ''}
         </p>
         <div className="vtq-actions">
           <button type="button" className="vtq-btn vtq-btn-primary" onClick={handlePrintOrPdf}>
@@ -113,7 +114,7 @@ const ViewTestQuestions = () => {
         <div className="vtq-print-header">
           <h1>{test.TestName}</h1>
           <p className="vtq-print-meta">
-            {test.Exams?.ExamName} · {test.TestType} · {test.TestDate ? new Date(test.TestDate).toLocaleDateString() : ''} · {questions.length} questions
+            {test.Exams?.ExamName} · {getTestScheduleLabel(test)} · {test.TestDate ? new Date(test.TestDate).toLocaleDateString() : ''} · {questions.length} questions
           </p>
         </div>
         {questions.length === 0 ? (

@@ -9,6 +9,7 @@ import {
   X,
   ClipboardCheck,
   Bell,
+  Zap,
 } from 'lucide-react';
 import { orgAuth } from '../../services/api';
 import NotificationBell from '../NotificationBell';
@@ -42,15 +43,25 @@ const ReviewerLayout = () => {
     navigate('/');
   };
 
+  const isFocusMode = location.pathname.startsWith('/reviewer/focus');
+
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/reviewer/dashboard' },
-    { icon: FileCheck, label: 'Pending Questions', path: '/reviewer/questions' },
-    { icon: ClipboardCheck, label: 'Approved Questions', path: '/reviewer/approved' },
+    { icon: Zap, label: 'Focus Review', path: '/reviewer/focus' },
+    { icon: FileCheck, label: 'Question Review', path: '/reviewer/questions' },
     { icon: Users, label: 'Expert Performance', path: '/reviewer/experts' },
     { icon: Bell, label: 'Notifications', path: '/reviewer/notifications' },
   ];
 
   const isActive = (path) => location.pathname === path;
+
+  if (isFocusMode) {
+    return (
+      <div className="reviewer-focus-shell">
+        <Outlet />
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-layout reviewer-layout reviewer-portal">

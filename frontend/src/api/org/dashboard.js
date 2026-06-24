@@ -23,11 +23,15 @@ export const orgDashboard = {
 
   /**
    * Get exams included in this organization's active subscription(s) only (OrgAdmin).
-   * Use for Question Bank filter, test creation, etc.
+   * Pass subscriptionId to limit to one availed subscription's plan (test wizard).
+   * @param {{ subscriptionId?: string }} [params]
    * @returns {Promise<Object>} { exams: Array }
    */
-  getSubscriptionExams: async () => {
-    return request('/api/org/auth/exams/subscription', {
+  getSubscriptionExams: async (params = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.subscriptionId) searchParams.set('subscriptionId', params.subscriptionId);
+    const queryString = searchParams.toString();
+    return request(`/api/org/auth/exams/subscription${queryString ? `?${queryString}` : ''}`, {
       method: 'GET',
     });
   },

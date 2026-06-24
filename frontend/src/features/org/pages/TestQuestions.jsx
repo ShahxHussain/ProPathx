@@ -13,6 +13,7 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { testAPI, orgDashboard } from '../../../services/api';
+import { getTestScheduleLabel } from '../utils/testScheduleLabel.js';
 import './TestQuestions.css';
 
 /** Embedded in test creation wizard — fixed test, no test picker or binding cards. */
@@ -360,7 +361,7 @@ function TestQuestionsPageInner({ embeddedTestId }) {
             <h2 className="tq-card-title">Test summary</h2>
             <div className="tq-summary-row">
               <span className="tq-summary-name">{testDetails.TestName}</span>
-              <span className="tq-summary-meta">{testDetails.Exams?.ExamName} · {testDetails.TestType}</span>
+              <span className="tq-summary-meta">{testDetails.Exams?.ExamName} · {getTestScheduleLabel(testDetails)}</span>
               <span className="tq-summary-count">
                 <strong>{linkedCount}</strong> of <strong>{targetCount}</strong> questions linked
                 {linkedCount !== targetCount && (

@@ -215,13 +215,6 @@ export default function TestResult() {
             </h2>
             <div className="test-result-kpi-grid">
               <div className="test-result-kpi">
-                <FileText className="test-result-kpi-icon" size={22} aria-hidden />
-                <div>
-                  <span className="test-result-kpi-label">Test type</span>
-                  <span className="test-result-kpi-value">{data.test?.testType ?? '—'}</span>
-                </div>
-              </div>
-              <div className="test-result-kpi">
                 <Layers className="test-result-kpi-icon" size={22} aria-hidden />
                 <div>
                   <span className="test-result-kpi-label">Delivery</span>

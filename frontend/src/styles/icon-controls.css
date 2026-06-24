@@ -1,0 +1,66 @@
+/**
+ * Icon-only controls — keeps Lucide SVGs visible app-wide.
+ * Root issue: auth/marketing button styles must not squash fixed-size icon buttons.
+ */
+
+button.icon-control,
+button.btn-icon,
+button.modal-close,
+button.sidebar-toggle,
+button.mobile-menu-toggle,
+button.announcement-modal-close,
+button.notif-icon-btn,
+button.exam-setup-icon-btn,
+button.sa-exams-icon-btn,
+button.btn-icon-small,
+button.review-focus__exit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+button.icon-control svg,
+button.btn-icon svg,
+button.modal-close svg,
+button.sidebar-toggle svg,
+button.mobile-menu-toggle svg,
+button.announcement-modal-close svg,
+button.notif-icon-btn svg,
+button.exam-setup-icon-btn svg,
+button.sa-exams-icon-btn svg,
+button.btn-icon-small svg,
+button.review-focus__exit svg {
+  display: block;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+button.modal-close {
+  min-width: 36px;
+  min-height: 36px;
+}
+
+button.review-focus__exit {
+  min-width: 40px;
+  min-height: 40px;
+}
+
+button.review-focus__exit svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+}
+
+button.btn-icon svg,
+button.icon-control svg {
+  width: 18px;
+  height: 18px;
+}
+
+button.btn-icon-small svg {
+  width: 16px;
+  height: 16px;
+}

@@ -1086,7 +1086,6 @@ router.post(
           OrgID: orgId || null,
           CreatedBy: null,
           TestName: testName,
-          TestType: 'Practice',
           DurationMinutes: parsedDuration,
           TotalQuestions: parsedTotal,
           TotalMarks: parsedTotal,
@@ -1547,7 +1546,7 @@ router.get('/tests/:testId/result-detail', authenticate, async (req, res) => {
     const { data: test, error: testError } = await supabase
       .from('Tests')
       .select(
-        'TestID, OrgID, ExamID, TestName, TestType, DurationMinutes, TotalQuestions, TotalMarks, TestDate, StartTime, EndTime, Status, ScheduleMode, QuestionBindingMode'
+        'TestID, OrgID, ExamID, TestName, DurationMinutes, TotalQuestions, TotalMarks, TestDate, StartTime, EndTime, Status, ScheduleMode, QuestionBindingMode'
       )
       .eq('TestID', testId)
       .maybeSingle();
@@ -1868,7 +1867,6 @@ router.get('/tests/:testId/result-detail', authenticate, async (req, res) => {
       test: {
         testId: testIdFromRow(test),
         testName: testNameFromRow(test),
-        testType: test.TestType ?? test.testType,
         durationMinutes: allowedMinutes,
         totalQuestions: test.TotalQuestions ?? test.totalQuestions ?? totalQ,
         totalMarks: testTotalMarksFinal,
@@ -1983,7 +1981,7 @@ router.post('/tests/:testId/attempts', authenticate, async (req, res) => {
     const { data: test, error: testError } = await supabase
       .from('Tests')
       .select(
-        'TestID, OrgID, ExamID, TestName, TestType, DurationMinutes, TotalQuestions, TotalMarks, StartTime, EndTime, Status, ScheduleMode, SubscriptionID'
+        'TestID, OrgID, ExamID, TestName, DurationMinutes, TotalQuestions, TotalMarks, StartTime, EndTime, Status, ScheduleMode, SubscriptionID'
       )
       .eq('TestID', testId)
       .single();
@@ -2174,7 +2172,6 @@ router.post('/tests/:testId/attempts', authenticate, async (req, res) => {
         testId: testIdFromRow(test),
         testName: testNameFromRow(test),
         description: null,
-        testType: test.TestType ?? test.testType,
         durationMinutes: test.DurationMinutes ?? test.durationMinutes,
         totalQuestions: test.TotalQuestions ?? test.totalQuestions,
         totalMarks: totalMarksConfiguredOnTest(test),
@@ -2505,7 +2502,7 @@ router.get('/tests', authenticate, async (req, res) => {
         const { data: test } = await supabase
           .from('Tests')
           .select(
-            'TestID, OrgID, ExamID, TestName, TestType, DurationMinutes, StartTime, EndTime, Status, TotalQuestions, TotalMarks, SubscriptionID'
+            'TestID, OrgID, ExamID, TestName, DurationMinutes, StartTime, EndTime, Status, TotalQuestions, TotalMarks, SubscriptionID'
           )
           .eq('TestID', assignment.TestID)
           .single();

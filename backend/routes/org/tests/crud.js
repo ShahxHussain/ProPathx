@@ -9,6 +9,7 @@ import {
   orgHasQualifyingSubscription,
   checkMinQuestionsForActivateOrAssign,
 } from './shared.js';
+import { isPlanModeEnabled } from '../../../utils/subscriptionPlanCatalog.js';
 
 const router = express.Router();
 
@@ -21,14 +22,13 @@ router.post('/', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, as
     testName,
     examId,
     subscriptionId,
-    testType,
     durationMinutes,
     totalQuestions,
     totalMarks,
     testDate,
     startTime,
     endTime,
-    status = 'Active',
+    status = 'Inactive',
     questionIds = [],
   } = req.body;
 
@@ -38,8 +38,8 @@ router.post('/', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, as
 
   try {
     // Validate required fields
-    if (!testName || !examId || !subscriptionId || !testType) {
-      return res.status(400).json({ error: 'Missing required fields: testName, examId, subscriptionId, testType' });
+    if (!testName || !examId || !subscriptionId) {
+      return res.status(400).json({ error: 'Missing required fields: testName, examId, subscriptionId' });
     }
 
     if (!(await orgHasQualifyingSubscription(orgId))) {
@@ -161,7 +161,6 @@ router.post('/', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, as
         OrgID: orgId,
         CreatedBy: null, // OrgUsers don't have UserID - creator tracked in audit logs
         TestName: testName,
-        TestType: testType,
         DurationMinutes: durationMinutes,
         TotalQuestions: totalQuestions || questionIds.length,
         TotalMarks: totalMarks,
@@ -225,10 +224,10 @@ router.post('/', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, as
       actionType: 'Create',
       entityType: 'Test',
       entityID: newTest.TestID,
-      description: `Created ${testType} test: ${testName}`,
+      description: `Created scheduled test: ${testName}`,
       ipAddress,
       userAgent,
-      newData: { testName, examId, testType, totalQuestions },
+      newData: { testName, examId, totalQuestions, scheduleMode: scheduleModeVal },
     });
 
     res.status(201).json({
@@ -238,7 +237,7 @@ router.post('/', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, as
         testName: newTest.TestName,
         examId: newTest.ExamID,
         subscriptionId: newTest.SubscriptionID,
-        testType: newTest.TestType,
+        scheduleMode: newTest.ScheduleMode,
         status: newTest.Status,
         createdAt: newTest.CreatedAt,
       },
@@ -391,7 +390,6 @@ router.put('/:testId', authenticate, requireRole(['OrgAdmin']), verifyActiveStat
 
     const updates = {};
     if (b.testName != null && String(b.testName).trim()) updates.TestName = String(b.testName).trim();
-    if (b.testType != null && ['Practice', 'Mock', 'Final'].includes(b.testType)) updates.TestType = b.testType;
     if (b.durationMinutes != null && !Number.isNaN(Number(b.durationMinutes))) {
       updates.DurationMinutes = Number(b.durationMinutes);
     }

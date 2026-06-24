@@ -105,7 +105,6 @@ router.get('/subscription-plans/:planId', authenticate, requireSuperAdmin, async
         ...pe,
         ExamName: exam?.ExamName || 'Unknown Exam',
         ExamDescription: exam?.Description || null,
-        OrgName: null, // Exams are platform-wide, no organization
       };
     });
 
@@ -498,7 +497,6 @@ router.get('/subscription-plans/:planId/exams', authenticate, requireSuperAdmin,
         ExamID: pe.ExamID,
         ExamName: exam?.ExamName || `Unknown Exam (${pe.ExamID.substring(0, 8)}...)`,
         ExamDescription: exam?.Description || null,
-        OrgName: null, // Exams are platform-wide, no organization
       };
     });
 

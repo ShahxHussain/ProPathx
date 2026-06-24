@@ -9,12 +9,12 @@ import {
   ArrowRight,
   Clock,
   Users,
-  ClipboardCheck,
   Bell,
   RefreshCw,
   Activity,
   AlertCircle,
   Calendar,
+  Zap,
 } from 'lucide-react';
 import {
   BarChart,
@@ -127,27 +127,31 @@ const Dashboard = () => {
   const contextLabel =
     user?.userType === 'Platform' ? 'Platform reviewer' : user?.orgName || 'Your organization';
 
+  const goToQuestions = (status) => {
+    navigate(status ? `/reviewer/questions?status=${status}` : '/reviewer/questions');
+  };
+
   const statCards = [
     {
       icon: FileCheck,
       label: 'Pending review',
       value: stats.pending,
       hint: 'In your queue',
-      action: () => navigate('/reviewer/questions'),
+      action: () => goToQuestions('pending'),
     },
     {
       icon: CheckCircle,
       label: 'Approved',
       value: stats.approved,
       hint: null,
-      action: () => navigate('/reviewer/approved'),
+      action: () => goToQuestions('approved'),
     },
     {
       icon: XCircle,
       label: 'Rejected',
       value: stats.rejected,
       hint: null,
-      action: () => navigate('/reviewer/questions'),
+      action: () => goToQuestions('rejected'),
     },
     {
       icon: TrendingUp,
@@ -159,8 +163,8 @@ const Dashboard = () => {
   ];
 
   const quickLinks = [
-    { icon: FileCheck, label: 'Pending', path: '/reviewer/questions' },
-    { icon: ClipboardCheck, label: 'Approved', path: '/reviewer/approved' },
+    { icon: Zap, label: 'Focus Review', path: '/reviewer/focus' },
+    { icon: FileCheck, label: 'Question Review', path: '/reviewer/questions' },
     { icon: Users, label: 'Experts', path: '/reviewer/experts' },
     { icon: Bell, label: 'Notifications', path: '/reviewer/notifications' },
   ];
@@ -228,7 +232,11 @@ const Dashboard = () => {
             <RefreshCw size={18} className={refreshing ? 'od-icon-spin' : ''} />
             <span>{refreshing ? 'Refreshing…' : 'Refresh'}</span>
           </button>
-          <button type="button" className="action-btn-header" onClick={() => navigate('/reviewer/questions')}>
+          <button type="button" className="action-btn-header" onClick={() => navigate('/reviewer/focus')}>
+            <Zap size={18} />
+            <span>Focus Review</span>
+          </button>
+          <button type="button" className="action-btn-ghost" onClick={() => navigate('/reviewer/questions')}>
             <FileCheck size={18} />
             <span>Review queue</span>
           </button>

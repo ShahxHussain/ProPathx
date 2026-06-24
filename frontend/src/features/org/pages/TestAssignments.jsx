@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, FileText, Search } from 'lucide-react';
 import { testAPI } from '../../../services/api';
+import { getTestScheduleBadgeColor, getTestScheduleLabel } from '../utils/testScheduleLabel.js';
 import './Tests.css';
 
 const TestAssignments = () => {
@@ -48,15 +49,6 @@ const TestAssignments = () => {
       test.TestName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       test.Exams?.ExamName?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const getTestTypeBadge = (type) => {
-    const colors = {
-      Practice: 'blue',
-      Mock: 'orange',
-      Final: 'red',
-    };
-    return colors[type] || 'gray';
-  };
 
   const renderAssignments = () => {
     if (!selectedTest) return null;
@@ -133,7 +125,7 @@ const TestAssignments = () => {
               <div className="test-summary-main">
                 <h2>{selectedTest.TestName}</h2>
                 <p className="test-summary-subtitle">
-                  {selectedTest.Exams?.ExamName || 'N/A'} • {selectedTest.TestType} •{' '}
+                  {selectedTest.Exams?.ExamName || 'N/A'} · {getTestScheduleLabel(selectedTest)} ·{' '}
                   {selectedTest.DurationMinutes || 0} min
                 </p>
               </div>
@@ -184,7 +176,7 @@ const TestAssignments = () => {
                     <tr>
                       <th>Test Name</th>
                       <th>Exam</th>
-                      <th>Type</th>
+                      <th>Schedule</th>
                       <th>Questions</th>
                       <th>Duration</th>
                       <th>Test Date</th>
@@ -203,8 +195,8 @@ const TestAssignments = () => {
                         </td>
                         <td>{test.Exams?.ExamName || 'N/A'}</td>
                         <td>
-                          <span className={`badge badge-${getTestTypeBadge(test.TestType)}`}>
-                            {test.TestType}
+                          <span className={`badge badge-${getTestScheduleBadgeColor(test)}`}>
+                            {getTestScheduleLabel(test)}
                           </span>
                         </td>
                         <td>{test.TotalQuestions || 0}</td>

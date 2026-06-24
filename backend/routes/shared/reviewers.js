@@ -5,6 +5,83 @@ import { authenticate, requireRole, verifyActiveStatus } from '../../middleware/
 
 const router = express.Router();
 
+const sortOptions = (options = []) =>
+  [...options].sort((a, b) => (a.OptionNumber || 0) - (b.OptionNumber || 0));
+
+const formatReviewerQuestion = (q, includeOptions = false) => {
+  const ch = q.Topics?.Chapters;
+  const chapter = Array.isArray(ch) ? ch[0] : ch;
+  const formatted = {
+    QuestionID: q.QuestionID,
+    QuestionText: q.QuestionText,
+    DifficultyLevel: q.DifficultyLevel,
+    QuestionType: q.QuestionType,
+    Explanation: q.Explanation,
+    CreatedAt: q.CreatedAt,
+    IsVerified: q.IsVerified,
+    ReviewerComments: q.ReviewerComments,
+    VerifiedBy: q.VerifiedBy,
+    VerifiedAt: q.VerifiedAt,
+    ExamName: q.Topics?.Subjects?.Exams?.ExamName,
+    SubjectName: q.Topics?.Subjects?.SubjectName,
+    TopicName: q.Topics?.TopicName,
+    ChapterNumber: chapter?.ChapterNumber,
+    ChapterName: chapter?.ChapterName,
+    CreatedBy: q.CreatedBy,
+  };
+
+  if (includeOptions) {
+    formatted.options = sortOptions(q.Options || []);
+  }
+
+  return formatted;
+};
+
+const resolveCreatorInfo = async (createdBy) => {
+  if (!createdBy) return null;
+
+  const [{ data: platformUser }, { data: orgUser }] = await Promise.all([
+    supabase.from('Users').select('UserID, FullName, Email').eq('UserID', createdBy).maybeSingle(),
+    supabase.from('OrgUsers').select('OrgUserID, FullName, Email').eq('OrgUserID', createdBy).maybeSingle(),
+  ]);
+
+  if (platformUser) {
+    return { name: platformUser.FullName, email: platformUser.Email, type: 'Platform' };
+  }
+  if (orgUser) {
+    return { name: orgUser.FullName, email: orgUser.Email, type: 'Organization' };
+  }
+  return null;
+};
+
+const fetchOptionsByQuestionIds = async (questionIds = []) => {
+  const ids = [...new Set(questionIds.filter(Boolean))];
+  if (ids.length === 0) return {};
+
+  const { data: options, error } = await supabase
+    .from('Options')
+    .select('OptionID, OptionText, OptionNumber, IsCorrect, QuestionID')
+    .in('QuestionID', ids)
+    .order('OptionNumber', { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const map = {};
+  (options || []).forEach((opt) => {
+    if (!map[opt.QuestionID]) map[opt.QuestionID] = [];
+    map[opt.QuestionID].push(opt);
+  });
+  return map;
+};
+
+const attachOptions = (questions = [], optionsMap = {}) =>
+  questions.map((q) => ({
+    ...formatReviewerQuestion(q, false),
+    options: sortOptions(optionsMap[q.QuestionID] || []),
+  }));
+
 /**
  * GET /api/reviewers/dashboard/stats
  * Get dashboard statistics for Reviewer
@@ -176,29 +253,19 @@ router.get(
         return res.status(500).json({ error: 'Failed to fetch questions', details: questionsError.message });
       }
 
-      // Format questions (include chapter for reviewer)
-      const formattedQuestions = (questions || []).map((q) => {
-        const ch = q.Topics?.Chapters;
-        const chapter = Array.isArray(ch) ? ch[0] : ch;
-        return {
-          QuestionID: q.QuestionID,
-          QuestionText: q.QuestionText,
-          DifficultyLevel: q.DifficultyLevel,
-          QuestionType: q.QuestionType,
-          Explanation: q.Explanation,
-          CreatedAt: q.CreatedAt,
-          IsVerified: q.IsVerified,
-          ReviewerComments: q.ReviewerComments,
-          VerifiedBy: q.VerifiedBy,
-          VerifiedAt: q.VerifiedAt,
-          ExamName: q.Topics?.Subjects?.Exams?.ExamName,
-          SubjectName: q.Topics?.Subjects?.SubjectName,
-          TopicName: q.Topics?.TopicName,
-          ChapterNumber: chapter?.ChapterNumber,
-          ChapterName: chapter?.ChapterName,
-          CreatedBy: q.CreatedBy,
-        };
-      });
+      const questionList = questions || [];
+      let optionsMap = {};
+      try {
+        optionsMap = await fetchOptionsByQuestionIds(questionList.map((q) => q.QuestionID));
+      } catch (optionsError) {
+        console.error('Failed to fetch question options:', optionsError);
+        return res.status(500).json({
+          error: 'Failed to fetch question options',
+          details: optionsError.message,
+        });
+      }
+
+      const formattedQuestions = attachOptions(questionList, optionsMap);
 
       res.json({ questions: formattedQuestions });
     } catch (error) {
@@ -222,7 +289,6 @@ router.get(
     const { orgId, actorType } = req.user;
 
     try {
-      // Get question (include Chapter for reviewer verify view)
       const { data: question, error: questionError } = await supabase
         .from('Questions')
         .select(`
@@ -249,68 +315,31 @@ router.get(
         return res.status(404).json({ error: 'Question not found' });
       }
 
-      // Check organization access for OrgUsers
       if (actorType === 'OrgUser' && orgId && question.OrgID !== orgId) {
         return res.status(403).json({ error: 'Access denied' });
       }
 
-      // Get options
-      const { data: options, error: optionsError } = await supabase
-        .from('Options')
-        .select('*')
-        .eq('QuestionID', questionId)
-        .order('OptionNumber', { ascending: true });
+      const [{ data: options, error: optionsError }, creatorInfo] = await Promise.all([
+        supabase
+          .from('Options')
+          .select('OptionID, OptionText, OptionNumber, IsCorrect')
+          .eq('QuestionID', questionId)
+          .order('OptionNumber', { ascending: true }),
+        resolveCreatorInfo(question.CreatedBy),
+      ]);
 
       if (optionsError) {
         return res.status(500).json({ error: 'Failed to fetch options', details: optionsError.message });
       }
 
-      // Get creator info
-      let creatorInfo = null;
-      if (question.CreatedBy) {
-        // Check if it's a platform user or org user
-        const { data: platformUser } = await supabase
-          .from('Users')
-          .select('UserID, FullName, Email')
-          .eq('UserID', question.CreatedBy)
-          .single();
+      const formatted = formatReviewerQuestion(question, false);
 
-        if (platformUser) {
-          creatorInfo = {
-            name: platformUser.FullName,
-            email: platformUser.Email,
-            type: 'Platform',
-          };
-        } else {
-          const { data: orgUser } = await supabase
-            .from('OrgUsers')
-            .select('OrgUserID, FullName, Email')
-            .eq('OrgUserID', question.CreatedBy)
-            .single();
-
-          if (orgUser) {
-            creatorInfo = {
-              name: orgUser.FullName,
-              email: orgUser.Email,
-              type: 'Organization',
-            };
-          }
-        }
-      }
-
-      const ch = question.Topics?.Chapters;
-      const chapter = ch && (Array.isArray(ch) ? ch[0] : ch);
       res.json({
         question: {
-          ...question,
-          ExamName: question.Topics?.Subjects?.Exams?.ExamName,
-          SubjectName: question.Topics?.Subjects?.SubjectName,
-          TopicName: question.Topics?.TopicName,
+          ...formatted,
           ChapterID: question.Topics?.ChapterID,
-          ChapterNumber: chapter?.ChapterNumber,
-          ChapterName: chapter?.ChapterName,
         },
-        options: options || [],
+        options: sortOptions(options || []),
         creator: creatorInfo,
       });
     } catch (error) {
