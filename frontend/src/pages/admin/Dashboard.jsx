@@ -293,6 +293,58 @@ const Dashboard = () => {
             Refresh
           </button>
         </div>
+        <div className="sa-hero__visual" aria-hidden>
+          <svg className="sa-hero__mesh" viewBox="0 0 280 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="200" cy="48" r="52" stroke="url(#sa-mesh-a)" strokeWidth="1.2" opacity="0.55" />
+            <circle cx="72" cy="168" r="38" stroke="url(#sa-mesh-b)" strokeWidth="1.2" opacity="0.45" />
+            <path
+              d="M24 120 C 80 88, 140 140, 220 72"
+              stroke="url(#sa-mesh-c)"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              opacity="0.5"
+            />
+            <path
+              d="M48 48 L 120 100 L 200 36"
+              stroke="rgba(30, 58, 138, 0.18)"
+              strokeWidth="1"
+              strokeLinecap="round"
+              strokeDasharray="4 6"
+            />
+            <defs>
+              <linearGradient id="sa-mesh-a" x1="148" y1="0" x2="252" y2="96" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#0d9488" />
+                <stop offset="1" stopColor="#6366f1" stopOpacity="0.4" />
+              </linearGradient>
+              <linearGradient id="sa-mesh-b" x1="34" y1="130" x2="110" y2="206" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#1e3a8a" stopOpacity="0.5" />
+                <stop offset="1" stopColor="#0d9488" stopOpacity="0.35" />
+              </linearGradient>
+              <linearGradient id="sa-mesh-c" x1="24" y1="120" x2="220" y2="72" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#6366f1" stopOpacity="0.35" />
+                <stop offset="1" stopColor="#0d9488" stopOpacity="0.6" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <div className="sa-hero-glass sa-hero-glass--tenants">
+            <span className="sa-hero-glass__icon sa-hero-glass__icon--navy">
+              <Building2 size={18} strokeWidth={1.75} />
+            </span>
+            <span className="sa-hero-glass__label">Tenants</span>
+          </div>
+          <div className="sa-hero-glass sa-hero-glass--revenue">
+            <span className="sa-hero-glass__icon sa-hero-glass__icon--teal">
+              <DollarSign size={18} strokeWidth={1.75} />
+            </span>
+            <span className="sa-hero-glass__label">Revenue</span>
+          </div>
+          <div className="sa-hero-glass sa-hero-glass--pipeline">
+            <span className="sa-hero-glass__icon sa-hero-glass__icon--violet">
+              <BarChart3 size={18} strokeWidth={1.75} />
+            </span>
+            <span className="sa-hero-glass__label">Pipeline</span>
+          </div>
+        </div>
       </header>
 
       {error && (

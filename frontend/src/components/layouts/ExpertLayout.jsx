@@ -53,6 +53,15 @@ const ExpertLayout = () => {
 
   const isActive = (path) => location.pathname === path;
 
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth <= 768) setSidebarOpen(false);
+  };
+
+  const handleNavClick = (path) => {
+    navigate(path);
+    closeSidebarOnMobile();
+  };
+
   return (
     <div className="dashboard-layout expert-layout expert-portal">
       {/* Sidebar */}
@@ -62,13 +71,6 @@ const ExpertLayout = () => {
             <GraduationCap size={24} />
             <span className="logo-text">ProPath Expert</span>
           </div>
-          <button
-            className="sidebar-toggle"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label="Toggle sidebar"
-          >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
         </div>
 
         <div className="sidebar-content">
@@ -88,7 +90,7 @@ const ExpertLayout = () => {
                 <button
                   key={item.path}
                   className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => handleNavClick(item.path)}
                 >
                   <Icon size={20} />
                   {sidebarOpen && <span>{item.label}</span>}
@@ -108,7 +110,6 @@ const ExpertLayout = () => {
 
       {/* Main Content */}
       <main className="dashboard-main">
-        <AnnouncementBanner />
         <div className="dashboard-header">
           <div className="dashboard-header__start">
             <button
@@ -129,6 +130,8 @@ const ExpertLayout = () => {
             <ProfileMenu user={user} profilePath="/expert/profile" onLogout={handleLogout} />
           </div>
         </div>
+
+        <AnnouncementBanner />
 
         <div className="dashboard-content">
           <Outlet />

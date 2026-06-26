@@ -74,6 +74,15 @@ const StudentLayout = () => {
     return location.pathname === item.path;
   };
 
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth <= 768) setSidebarOpen(false);
+  };
+
+  const handleNavClick = (path) => {
+    navigate(path);
+    closeSidebarOnMobile();
+  };
+
   return (
     <div className="dashboard-layout student-layout">
       {/* Sidebar */}
@@ -83,13 +92,6 @@ const StudentLayout = () => {
             <GraduationCap size={24} />
             <span className="logo-text">ProPath Student</span>
           </div>
-          <button
-            className="sidebar-toggle"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label="Toggle sidebar"
-          >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
         </div>
 
         <div className="sidebar-content">
@@ -111,7 +113,7 @@ const StudentLayout = () => {
                 <button
                   key={item.path}
                   className={`nav-item ${navItemActive(item) ? 'active' : ''}`}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => handleNavClick(item.path)}
                 >
                   <Icon size={20} />
                   {sidebarOpen && <span>{item.label}</span>}
@@ -131,7 +133,6 @@ const StudentLayout = () => {
 
       {/* Main Content */}
       <main className="dashboard-main">
-        <AnnouncementBanner />
         <div className="dashboard-header">
           <div className="dashboard-header__start">
             <button
@@ -152,6 +153,9 @@ const StudentLayout = () => {
             <ProfileMenu user={user} profilePath="/student/profile" onLogout={handleLogout} />
           </div>
         </div>
+
+        <AnnouncementBanner />
+
         <div className="dashboard-content">
           <Outlet />
         </div>

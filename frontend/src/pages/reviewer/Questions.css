@@ -158,12 +158,14 @@
   color: #b45309;
 }
 
-.filter-tab--approved.active {
+.filter-tab--approved.active,
+.filter-tab--verified.active {
   background: linear-gradient(135deg, var(--accent, #14b8a6), #0d9488);
   box-shadow: 0 2px 12px color-mix(in srgb, var(--accent, #14b8a6) 35%, transparent);
 }
 
-.filter-tab--approved:hover:not(.active) {
+.filter-tab--approved:hover:not(.active),
+.filter-tab--verified:hover:not(.active) {
   background: color-mix(in srgb, var(--accent, #14b8a6) 10%, var(--background));
   color: color-mix(in srgb, var(--accent, #0d9488) 80%, var(--text));
 }

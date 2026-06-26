@@ -5,7 +5,7 @@ Ordered SQL scripts for Supabase (PostgreSQL). Run **in numeric order** on each 
 ## How to run
 
 1. Open Supabase Dashboard → **SQL Editor**.
-2. Run each file below in order (001 → 008 for schema; 007 is ops-only).
+2. Run each file below in order (001 → 010 for schema; 007 is ops-only).
 3. Confirm no errors; scripts use `IF NOT EXISTS` where applicable.
 
 ## Run order
@@ -19,6 +19,9 @@ Ordered SQL scripts for Supabase (PostgreSQL). Run **in numeric order** on each 
 | 005 | `005_add_attempt_ordinal_columns.sql` | Attempt ordinal columns |
 | 006 | `006_migrate_studentanswers_optionid_to_uuid.sql` | OptionID UUID migration |
 | 007 | `007_createSuperAdmin.sql` | **Ops only** — bootstrap SuperAdmin; edit credentials before prod |
+| 008 | `008_drop_tests_testtype.sql` | Drop legacy `Tests.TestType` |
+| 009 | `009_questions_status_draft.sql` | Add `Status` + `SubmittedAt`; backfill from `IsVerified` — **run now** |
+| 010 | `010_drop_questions_isverified.sql` | Drop `IsVerified` — **defer** until client + code fully on `Status` (not for shared dev DB yet) |
 
 ## Idempotency
 

@@ -46,15 +46,6 @@
   margin-top: 4px;
 }
 
-.student-layout .sidebar-toggle {
-  color: var(--stu-muted, #78716c);
-}
-
-.student-layout .sidebar-toggle:hover {
-  background: var(--stu-teal-soft, #ccfbf1);
-  color: var(--stu-teal-dark, #115e59);
-}
-
 .student-layout .sidebar-footer {
   border-top-color: var(--stu-border, #e7e5e4);
 }

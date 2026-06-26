@@ -189,7 +189,7 @@ const ReviewFocus = () => {
           {completedInSession > 0 && (
             <div className="review-focus__session-summary">
               <span className="review-focus__stat review-focus__stat--ok">
-                <CheckCircle size={16} /> {session.approved} approved
+                <CheckCircle size={16} /> {session.approved} verified
               </span>
               <span className="review-focus__stat review-focus__stat--bad">
                 <XCircle size={16} /> {session.rejected} rejected
@@ -239,7 +239,7 @@ const ReviewFocus = () => {
             <span className="review-focus__remaining-label">remaining</span>
           </div>
           <div className="review-focus__mini-stats">
-            <span title="Approved this session"><CheckCircle size={14} /> {session.approved}</span>
+            <span title="Verified this session"><CheckCircle size={14} /> {session.approved}</span>
             <span title="Rejected this session"><XCircle size={14} /> {session.rejected}</span>
           </div>
           <button

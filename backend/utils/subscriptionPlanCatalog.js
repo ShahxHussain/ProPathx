@@ -58,7 +58,7 @@ export async function getVerifiedPlatformQuestionCountsByExamIds(supabase, examI
   const { data: questions, error: qErr } = await supabase
     .from('Questions')
     .select('QuestionID, TopicID')
-    .eq('IsVerified', true)
+    .eq('Status', 'Verified')
     .is('OrgID', null)
     .in('TopicID', topicIds);
   if (qErr) {

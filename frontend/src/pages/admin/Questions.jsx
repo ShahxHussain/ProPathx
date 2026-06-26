@@ -86,12 +86,15 @@ const AdminQuestions = () => {
   };
 
   const getStatusBadge = (status) => {
+    const normalized = status === 'approved' ? 'verified' : status;
     const config = {
-      approved: { icon: CheckCircle, label: 'Approved', className: 'status-approved' },
+      draft: { icon: FileText, label: 'Draft', className: 'status-draft' },
+      verified: { icon: CheckCircle, label: 'Verified', className: 'status-approved' },
+      approved: { icon: CheckCircle, label: 'Verified', className: 'status-approved' },
       pending: { icon: Clock, label: 'Pending', className: 'status-pending' },
       rejected: { icon: XCircle, label: 'Rejected', className: 'status-rejected' },
     };
-    const { icon: Icon, label, className } = config[status] || config.pending;
+    const { icon: Icon, label, className } = config[normalized] || config.pending;
     return (
       <span className={`status-badge ${className}`}>
         <Icon size={14} />
@@ -193,8 +196,9 @@ const AdminQuestions = () => {
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             <option value="all">All statuses</option>
-            <option value="approved">Approved</option>
+            <option value="draft">Draft</option>
             <option value="pending">Pending</option>
+            <option value="verified">Verified</option>
             <option value="rejected">Rejected</option>
           </select>
         </div>

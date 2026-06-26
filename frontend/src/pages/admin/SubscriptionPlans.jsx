@@ -221,18 +221,18 @@ const SubscriptionPlans = () => {
               className={`view-toggle-btn ${viewMode === 'manage' ? 'active' : ''}`}
               onClick={() => setViewMode('manage')}
             >
-              <Settings size={18} />
-              Manage Plans
+              <Eye size={18} />
+              Overview
             </button>
             <button
               className={`view-toggle-btn ${viewMode === 'overview' ? 'active' : ''}`}
               onClick={() => setViewMode('overview')}
             >
-              <Eye size={18} />
-              Overview
+              <Settings size={18} />
+              Manage Plans
             </button>
           </div>
-          {viewMode === 'manage' && (
+          {viewMode === 'overview' && (
             <button className="btn-primary" onClick={() => setShowCreateModal(true)}>
               <Plus size={20} />
               Create Plan
@@ -1236,8 +1236,6 @@ const ManageView = ({ plans, planExamCounts, onShowCreateModal, onEditPlan, onDe
               key={plan.PlanID}
               className={`plan-card plan-card--${audience} ${inactive ? 'plan-card--inactive' : ''}`}
             >
-              <div className="plan-card-accent" aria-hidden />
-
               <div className="plan-card-top">
                 <div className="plan-card-top-meta">
                   <span

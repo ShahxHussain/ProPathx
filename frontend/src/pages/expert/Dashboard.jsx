@@ -34,6 +34,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { questionAPI, orgAuth } from '../../services/api';
+import { statusLabel, statusToApiSlug } from '../../utils/questionStatus';
 import './Dashboard.css';
 
 const CHART_GRID = { stroke: '#e2e8f0', strokeDasharray: '4 4' };
@@ -80,7 +81,9 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
     total: 0,
+    verified: 0,
     approved: 0,
+    draft: 0,
     pending: 0,
     rejected: 0,
     qualityScore: 0,
@@ -103,7 +106,12 @@ const Dashboard = () => {
       else setLoading(true);
 
       const response = await questionAPI.getDashboardStats();
-      setStats(response.stats || {});
+      const nextStats = response.stats || {};
+      setStats({
+        ...nextStats,
+        verified: nextStats.verified ?? nextStats.approved ?? 0,
+        approved: nextStats.verified ?? nextStats.approved ?? 0,
+      });
       setRecentQuestions(response.recentQuestions || []);
 
       const transformedStatusData = (response.statusData || []).map((item) => ({
@@ -146,15 +154,21 @@ const Dashboard = () => {
     },
     {
       icon: CheckCircle,
-      label: 'Approved',
-      value: stats.approved,
-      trend: stats.total > 0 ? `${((stats.approved / stats.total) * 100).toFixed(1)}% of yours` : '—',
+      label: 'Verified',
+      value: stats.verified ?? stats.approved ?? 0,
+      trend: stats.total > 0 ? `${(((stats.verified ?? stats.approved ?? 0) / stats.total) * 100).toFixed(1)}% of yours` : '—',
     },
     {
       icon: Clock,
       label: 'Pending review',
       value: stats.pending,
       trend: stats.total > 0 ? `${((stats.pending / stats.total) * 100).toFixed(1)}% of yours` : '—',
+    },
+    {
+      icon: FileText,
+      label: 'Drafts',
+      value: stats.draft || 0,
+      trend: stats.total > 0 ? `${(((stats.draft || 0) / stats.total) * 100).toFixed(1)}% of yours` : '—',
     },
     {
       icon: XCircle,
@@ -184,11 +198,10 @@ const Dashboard = () => {
     { icon: Bell, label: 'Notifications', path: '/expert/notifications' },
   ];
 
-  const getStatusBadge = (question) => {
-    if (question.IsVerified) return { text: 'Approved', className: 'ex-badge ex-badge--muted' };
-    if (question.ReviewerComments) return { text: 'Rejected', className: 'ex-badge ex-badge--muted' };
-    return { text: 'Pending', className: 'ex-badge ex-badge--muted' };
-  };
+  const getStatusBadge = (question) => ({
+    text: statusLabel(question),
+    className: 'ex-badge ex-badge--muted',
+  });
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);

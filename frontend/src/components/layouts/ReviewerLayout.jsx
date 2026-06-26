@@ -55,6 +55,15 @@ const ReviewerLayout = () => {
 
   const isActive = (path) => location.pathname === path;
 
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth <= 768) setSidebarOpen(false);
+  };
+
+  const handleNavClick = (path) => {
+    navigate(path);
+    closeSidebarOnMobile();
+  };
+
   if (isFocusMode) {
     return (
       <div className="reviewer-focus-shell">
@@ -72,13 +81,6 @@ const ReviewerLayout = () => {
             <ClipboardCheck size={24} />
             <span className="logo-text">ProPath Reviewer</span>
           </div>
-          <button
-            className="sidebar-toggle"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label="Toggle sidebar"
-          >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
         </div>
 
         <div className="sidebar-content">
@@ -98,7 +100,7 @@ const ReviewerLayout = () => {
                 <button
                   key={item.path}
                   className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => handleNavClick(item.path)}
                 >
                   <Icon size={20} />
                   {sidebarOpen && <span>{item.label}</span>}
@@ -118,7 +120,6 @@ const ReviewerLayout = () => {
 
       {/* Main Content */}
       <main className="dashboard-main">
-        <AnnouncementBanner />
         <div className="dashboard-header">
           <div className="dashboard-header__start">
             <button
@@ -139,6 +140,8 @@ const ReviewerLayout = () => {
             <ProfileMenu user={user} profilePath="/reviewer/profile" onLogout={handleLogout} />
           </div>
         </div>
+
+        <AnnouncementBanner />
 
         <div className="dashboard-content">
           <Outlet />

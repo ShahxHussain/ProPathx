@@ -21,12 +21,18 @@ import {
 import { questionAPI } from '../../services/api';
 import LaTeXEditor from '../../components/LaTeXEditor';
 import LaTeXRenderer from '../../components/LaTeXRenderer';
+import {
+  statusToApiSlug,
+  statusLabel,
+  isVerifiedStatus,
+  isDraftStatus,
+} from '../../utils/questionStatus';
 import './Questions.css';
 
 const Questions = () => {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // all, pending, approved, rejected
+  const [filter, setFilter] = useState('all'); // all, draft, pending, verified, rejected
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedQuestions, setExpandedQuestions] = useState(new Set());
   const [selectedQuestion, setSelectedQuestion] = useState(null);
@@ -112,11 +118,8 @@ const Questions = () => {
   };
 
   const filteredQuestions = questions.filter((q) => {
-    const matchesFilter =
-      filter === 'all' ||
-      (filter === 'pending' && !q.IsVerified && !q.ReviewerComments) ||
-      (filter === 'approved' && q.IsVerified) ||
-      (filter === 'rejected' && q.ReviewerComments);
+    const slug = statusToApiSlug(q);
+    const matchesFilter = filter === 'all' || slug === filter;
 
     const matchesSearch =
       !searchQuery ||
@@ -129,22 +132,25 @@ const Questions = () => {
   });
 
   const getStatusIcon = (question) => {
-    if (question.IsVerified) return CheckCircle;
-    if (question.ReviewerComments) return XCircle;
+    const slug = statusToApiSlug(question);
+    if (slug === 'verified') return CheckCircle;
+    if (slug === 'rejected') return XCircle;
+    if (slug === 'draft') return FileText;
     return Clock;
   };
 
   const getStatusColor = (question) => {
-    if (question.IsVerified) return 'green';
-    if (question.ReviewerComments) return 'red';
+    const slug = statusToApiSlug(question);
+    if (slug === 'verified') return 'green';
+    if (slug === 'rejected') return 'red';
+    if (slug === 'draft') return 'slate';
     return 'orange';
   };
 
-  const getStatusText = (question) => {
-    if (question.IsVerified) return 'Approved';
-    if (question.ReviewerComments) return 'Rejected';
-    return 'Pending';
-  };
+  const getStatusText = (question) => statusLabel(question);
+
+  const countByStatus = (slug) =>
+    questions.filter((q) => statusToApiSlug(q) === slug).length;
 
   return (
     <div className="my-questions-page">
@@ -173,27 +179,32 @@ const Questions = () => {
             <span>All ({questions.length})</span>
           </button>
           <button
+            className={`filter-tab ${filter === 'draft' ? 'active' : ''}`}
+            onClick={() => setFilter('draft')}
+          >
+            <FileText size={18} />
+            <span>Draft ({countByStatus('draft')})</span>
+          </button>
+          <button
             className={`filter-tab ${filter === 'pending' ? 'active' : ''}`}
             onClick={() => setFilter('pending')}
           >
             <Clock size={18} />
-            <span>
-              Pending ({questions.filter((q) => !q.IsVerified && !q.ReviewerComments).length})
-            </span>
+            <span>Pending ({countByStatus('pending')})</span>
           </button>
           <button
-            className={`filter-tab ${filter === 'approved' ? 'active' : ''}`}
-            onClick={() => setFilter('approved')}
+            className={`filter-tab ${filter === 'verified' ? 'active' : ''}`}
+            onClick={() => setFilter('verified')}
           >
             <CheckCircle size={18} />
-            <span>Approved ({questions.filter((q) => q.IsVerified).length})</span>
+            <span>Verified ({countByStatus('verified')})</span>
           </button>
           <button
             className={`filter-tab ${filter === 'rejected' ? 'active' : ''}`}
             onClick={() => setFilter('rejected')}
           >
             <XCircle size={18} />
-            <span>Rejected ({questions.filter((q) => q.ReviewerComments).length})</span>
+            <span>Rejected ({countByStatus('rejected')})</span>
           </button>
         </div>
       </div>
@@ -229,8 +240,8 @@ const Questions = () => {
             const isExpanded = expandedQuestions.has(question.QuestionID);
             // Allow edit if not verified (backend will check if user is creator)
             // Allow delete only if not verified and not used in tests (backend will check)
-            const canEdit = !question.IsVerified;
-            const canDelete = !question.IsVerified;
+            const canEdit = !isVerifiedStatus(question);
+            const canDelete = !isVerifiedStatus(question);
 
             return (
               <div key={question.QuestionID} className="question-card">
@@ -242,7 +253,9 @@ const Questions = () => {
                       </h3>
                       <div className="question-meta">
                         <span className="question-context">
-                          {question.ExamName} → {question.SubjectName} → {question.TopicName}
+                          {[question.ExamName, question.SubjectName, question.TopicName]
+                            .filter(Boolean)
+                            .join(' → ') || 'No topic assigned'}
                         </span>
                       </div>
                     </div>
@@ -648,8 +661,14 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
     setError('');
     setSuccess('');
 
-    if (!validateForm()) {
+    const editingDraft = isDraftStatus(question);
+    if (!editingDraft && !validateForm()) {
       setError('Please fix the validation errors before submitting');
+      return;
+    }
+
+    if (editingDraft && !formData.questionText.trim() && !formData.options.some((opt) => opt.text.trim())) {
+      setError('Add question text or at least one option to save a draft');
       return;
     }
 
@@ -660,11 +679,12 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
 
       const questionData = {
         topicId: formData.topicId,
-        questionText: formData.questionText.trim(),
+        questionText: formData.questionText.trim() || 'Untitled draft',
         difficultyLevel: formData.difficulty,
         explanation: formData.explanation.trim() || null,
         questionType: formData.questionType,
         source: formData.source,
+        status: editingDraft ? 'Draft' : 'Pending',
         options: validOptions.map((opt) => ({
           optionText: opt.text.trim(),
           isCorrect: opt.isCorrect,

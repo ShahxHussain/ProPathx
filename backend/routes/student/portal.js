@@ -766,7 +766,7 @@ router.get(
           supabase
             .from('Questions')
             .select('QuestionID, TopicID')
-            .eq('IsVerified', true)
+            .eq('Status', 'Verified')
             .in('TopicID', topicIds),
           orgId
         );
@@ -901,7 +901,7 @@ router.post(
         supabase
           .from('Questions')
           .select('QuestionID, TopicID')
-          .eq('IsVerified', true)
+          .eq('Status', 'Verified')
           .in('TopicID', topicIds),
         orgId
       );
@@ -1021,7 +1021,7 @@ router.post(
         supabase
           .from('Questions')
           .select('QuestionID, TopicID, DifficultyLevel, CreatedAt')
-          .eq('IsVerified', true)
+          .eq('Status', 'Verified')
           .in('TopicID', topicIds)
           .order('CreatedAt', { ascending: false }),
         orgId

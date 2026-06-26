@@ -2,6 +2,14 @@ import express from 'express';
 import { supabase } from '../../config/database.js';
 import { createLog, getClientIP, getUserAgent } from '../../utils/logger.js';
 import { authenticate, requireRole, verifyActiveStatus } from '../../middleware/auth.js';
+import {
+  QUESTION_STATUS,
+  resolveQuestionStatus,
+  buildStatusFields,
+  countQuestionsByStatus,
+  applyStatusFilterToQuery,
+  statusToApiSlug,
+} from '../../utils/questionStatus.js';
 
 const router = express.Router();
 
@@ -19,6 +27,7 @@ const formatReviewerQuestion = (q, includeOptions = false) => {
     Explanation: q.Explanation,
     CreatedAt: q.CreatedAt,
     IsVerified: q.IsVerified,
+    Status: resolveQuestionStatus(q),
     ReviewerComments: q.ReviewerComments,
     VerifiedBy: q.VerifiedBy,
     VerifiedAt: q.VerifiedAt,
@@ -98,7 +107,7 @@ router.get(
       // Build base query for questions
       let questionsQuery = supabase
         .from('Questions')
-        .select('QuestionID, IsVerified, ReviewerComments, CreatedAt, VerifiedBy, VerifiedAt');
+        .select('QuestionID, Status, IsVerified, ReviewerComments, CreatedAt, VerifiedBy, VerifiedAt');
 
       // Filter by organization if user is OrgUser
       if (actorType === 'OrgUser' && orgId) {
@@ -113,12 +122,9 @@ router.get(
       }
 
       const questionsList = questions || [];
-
-      // Calculate statistics
-      const pending = questionsList.filter((q) => !q.IsVerified && !q.ReviewerComments).length;
-      const approved = questionsList.filter((q) => q.IsVerified === true).length;
-      const rejected = questionsList.filter((q) => q.ReviewerComments && !q.IsVerified).length;
-      const totalReviewed = approved + rejected;
+      const statusCounts = countQuestionsByStatus(questionsList);
+      const { pending, verified, rejected } = statusCounts;
+      const totalReviewed = verified + rejected;
 
       // Get questions reviewed by this reviewer
       const reviewedByMe = questionsList.filter((q) => q.VerifiedBy === userId).length;
@@ -130,15 +136,15 @@ router.get(
         .slice(0, 5)
         .map((q) => ({
           QuestionID: q.QuestionID,
+          Status: resolveQuestionStatus(q),
           IsVerified: q.IsVerified,
           ReviewerComments: q.ReviewerComments,
           VerifiedAt: q.VerifiedAt,
         }));
 
-      // Get questions by status for chart
       const statusData = [
         { status: 'Pending', count: pending },
-        { status: 'Approved', count: approved },
+        { status: 'Verified', count: verified },
         { status: 'Rejected', count: rejected },
       ];
 
@@ -170,7 +176,8 @@ router.get(
       res.json({
         stats: {
           pending,
-          approved,
+          verified,
+          approved: verified,
           rejected,
           totalReviewed,
           reviewedByMe,
@@ -210,6 +217,7 @@ router.get(
           Explanation,
           CreatedAt,
           IsVerified,
+          Status,
           ReviewerComments,
           VerifiedBy,
           VerifiedAt,
@@ -238,13 +246,10 @@ router.get(
         questionsQuery = questionsQuery.eq('OrgID', orgId);
       }
 
-      // Filter by status
-      if (status === 'pending') {
-        questionsQuery = questionsQuery.eq('IsVerified', false).is('ReviewerComments', null);
-      } else if (status === 'approved') {
-        questionsQuery = questionsQuery.eq('IsVerified', true);
-      } else if (status === 'rejected') {
-        questionsQuery = questionsQuery.eq('IsVerified', false).not('ReviewerComments', 'is', null);
+      if (status) {
+        questionsQuery = applyStatusFilterToQuery(questionsQuery, status);
+      } else {
+        questionsQuery = questionsQuery.neq('Status', QUESTION_STATUS.DRAFT);
       }
 
       const { data: questions, error: questionsError } = await questionsQuery;
@@ -385,10 +390,7 @@ router.post(
       const { data: updatedQuestion, error: updateError } = await supabase
         .from('Questions')
         .update({
-          IsVerified: true,
-          VerifiedBy: userId,
-          VerifiedAt: new Date().toISOString(),
-          ReviewerComments: null,
+          ...buildStatusFields(QUESTION_STATUS.VERIFIED, { verifiedBy: userId }),
           UpdatedBy: userId,
           UpdatedAt: new Date().toISOString(),
         })
@@ -410,8 +412,8 @@ router.post(
         description: `Approved question: ${question.QuestionText?.substring(0, 50)}...`,
         ipAddress,
         userAgent,
-        previousData: { IsVerified: false },
-        newData: { IsVerified: true, VerifiedBy: userId },
+        previousData: { Status: resolveQuestionStatus(question), IsVerified: question.IsVerified },
+        newData: { Status: QUESTION_STATUS.VERIFIED, IsVerified: true, VerifiedBy: userId },
       });
 
       res.json({
@@ -467,10 +469,10 @@ router.post(
       const { data: updatedQuestion, error: updateError } = await supabase
         .from('Questions')
         .update({
-          IsVerified: false,
-          VerifiedBy: userId,
-          VerifiedAt: new Date().toISOString(),
-          ReviewerComments: comments.trim(),
+          ...buildStatusFields(QUESTION_STATUS.REJECTED, {
+            reviewerComments: comments.trim(),
+            verifiedBy: userId,
+          }),
           UpdatedBy: userId,
           UpdatedAt: new Date().toISOString(),
         })
@@ -492,8 +494,17 @@ router.post(
         description: `Rejected question: ${question.QuestionText?.substring(0, 50)}...`,
         ipAddress,
         userAgent,
-        previousData: { IsVerified: question.IsVerified, ReviewerComments: question.ReviewerComments },
-        newData: { IsVerified: false, ReviewerComments: comments.trim(), VerifiedBy: userId },
+        previousData: {
+          Status: resolveQuestionStatus(question),
+          IsVerified: question.IsVerified,
+          ReviewerComments: question.ReviewerComments,
+        },
+        newData: {
+          Status: QUESTION_STATUS.REJECTED,
+          IsVerified: false,
+          ReviewerComments: comments.trim(),
+          VerifiedBy: userId,
+        },
       });
 
       res.json({
@@ -523,7 +534,7 @@ router.get(
       // Build query for questions
       let questionsQuery = supabase
         .from('Questions')
-        .select('QuestionID, CreatedBy, IsVerified, ReviewerComments, CreatedAt, OrgID');
+        .select('QuestionID, CreatedBy, Status, IsVerified, ReviewerComments, CreatedAt, OrgID');
 
       // Filter by organization if user is OrgUser
       if (actorType === 'OrgUser' && orgId) {
@@ -547,16 +558,22 @@ router.get(
             createdBy: creatorId,
             totalQuestions: 0,
             approved: 0,
+            verified: 0,
             rejected: 0,
             pending: 0,
+            draft: 0,
           };
         }
 
         expertStats[creatorId].totalQuestions += 1;
-        if (q.IsVerified) {
+        const slug = statusToApiSlug(q);
+        if (slug === 'verified') {
+          expertStats[creatorId].verified += 1;
           expertStats[creatorId].approved += 1;
-        } else if (q.ReviewerComments) {
+        } else if (slug === 'rejected') {
           expertStats[creatorId].rejected += 1;
+        } else if (slug === 'draft') {
+          expertStats[creatorId].draft += 1;
         } else {
           expertStats[creatorId].pending += 1;
         }

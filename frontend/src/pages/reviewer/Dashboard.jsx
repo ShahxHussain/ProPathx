@@ -29,6 +29,7 @@ import {
   Area,
 } from 'recharts';
 import { reviewerAPI, orgAuth } from '../../services/api';
+import { statusLabel } from '../../utils/questionStatus';
 import './Dashboard.css';
 
 const CHART_GRID = { stroke: '#e2e8f0', strokeDasharray: '4 4' };
@@ -77,6 +78,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
     pending: 0,
+    verified: 0,
     approved: 0,
     rejected: 0,
     totalReviewed: 0,
@@ -98,7 +100,12 @@ const Dashboard = () => {
       else setLoading(true);
 
       const response = await reviewerAPI.getDashboardStats();
-      setStats(response.stats || {});
+      const nextStats = response.stats || {};
+      setStats({
+        ...nextStats,
+        verified: nextStats.verified ?? nextStats.approved ?? 0,
+        approved: nextStats.verified ?? nextStats.approved ?? 0,
+      });
       setRecentReviews(response.recentReviews || []);
       setStatusData(response.statusData || []);
       setTrendData(response.trendData || []);
@@ -141,10 +148,10 @@ const Dashboard = () => {
     },
     {
       icon: CheckCircle,
-      label: 'Approved',
-      value: stats.approved,
+      label: 'Verified',
+      value: stats.verified ?? stats.approved ?? 0,
       hint: null,
-      action: () => goToQuestions('approved'),
+      action: () => goToQuestions('verified'),
     },
     {
       icon: XCircle,
@@ -179,11 +186,10 @@ const Dashboard = () => {
     count: item.count ?? item.value ?? 0,
   }));
 
-  const getStatusBadge = (review) => {
-    if (review.IsVerified) return { text: 'Approved', className: 'rev-badge rev-badge--muted' };
-    if (review.ReviewerComments) return { text: 'Rejected', className: 'rev-badge rev-badge--muted' };
-    return { text: 'Pending', className: 'rev-badge rev-badge--muted' };
-  };
+  const getStatusBadge = (review) => ({
+    text: statusLabel(review),
+    className: 'rev-badge rev-badge--muted',
+  });
 
   const formatUpdated = (d) =>
     d?.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) ?? '';

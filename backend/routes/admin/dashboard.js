@@ -4,6 +4,7 @@ import { hashPassword, verifyPassword } from '../../utils/password.js';
 import { generateToken } from '../../utils/jwt.js';
 import { createLog, getClientIP, getUserAgent } from '../../utils/logger.js';
 import { authenticate, requireSuperAdmin } from '../../middleware/auth.js';
+import { countQuestionsByStatus } from '../../utils/questionStatus.js';
 
 const router = express.Router();
 
@@ -231,13 +232,15 @@ router.get('/dashboard/stats', authenticate, requireSuperAdmin, async (req, res)
     // Get questions statistics
     const { data: questionsStats } = await supabase
       .from('Questions')
-      .select('IsVerified, ReviewerComments, CreatedAt');
+      .select('Status, IsVerified, ReviewerComments, CreatedAt');
 
     const questionsList = questionsStats || [];
-    const totalQuestions = questionsList.length;
-    const approvedQuestions = questionsList.filter((q) => q.IsVerified).length;
-    const pendingQuestions = questionsList.filter((q) => !q.IsVerified && !q.ReviewerComments).length;
-    const rejectedQuestions = questionsList.filter((q) => q.ReviewerComments && !q.IsVerified).length;
+    const questionStatusCounts = countQuestionsByStatus(questionsList);
+    const totalQuestions = questionStatusCounts.total;
+    const approvedQuestions = questionStatusCounts.verified;
+    const pendingQuestions = questionStatusCounts.pending;
+    const rejectedQuestions = questionStatusCounts.rejected;
+    const draftQuestions = questionStatusCounts.draft;
 
     // Get questions created trend (last 30 days)
     const { data: questionsGrowth } = await supabase
@@ -295,8 +298,10 @@ router.get('/dashboard/stats', authenticate, requireSuperAdmin, async (req, res)
         totalTests: totalTestsCount || 0,
         totalQuestions: totalQuestions,
         approvedQuestions: approvedQuestions,
+        verifiedQuestions: approvedQuestions,
         pendingQuestions: pendingQuestions,
         rejectedQuestions: rejectedQuestions,
+        draftQuestions: draftQuestions,
       },
       revenueData,
       userGrowthData,
@@ -304,8 +309,9 @@ router.get('/dashboard/stats', authenticate, requireSuperAdmin, async (req, res)
       orgStatusData: Object.entries(orgStatusData).map(([name, value]) => ({ name, value })),
       roleDistribution: Object.entries(roleDistribution).map(([name, value]) => ({ name, value })),
       questionsStatusData: [
-        { name: 'Approved', value: approvedQuestions },
+        { name: 'Draft', value: draftQuestions },
         { name: 'Pending', value: pendingQuestions },
+        { name: 'Verified', value: approvedQuestions },
         { name: 'Rejected', value: rejectedQuestions },
       ],
       topOrganizations: topOrgs,

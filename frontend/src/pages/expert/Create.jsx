@@ -33,6 +33,8 @@ const Create = () => {
   const [success, setSuccess] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
   const [draftSaved, setDraftSaved] = useState(false);
+  const [draftQuestionId, setDraftQuestionId] = useState(null);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [loadingSubscription, setLoadingSubscription] = useState(false);
   const [latexEnabled, setLatexEnabled] = useState(() => {
@@ -132,6 +134,45 @@ const Create = () => {
     } catch (err) {
       console.error('Failed to load draft:', err);
     }
+  };
+
+  const resolveTopicId = async () => {
+    if (formData.topicMode === 'new' && formData.newTopicName.trim()) {
+      const topicResponse = await questionAPI.createTopic(
+        formData.examId,
+        formData.subjectId,
+        {
+          topicName: formData.newTopicName.trim(),
+          description: formData.newTopicDescription.trim() || null,
+          chapterId: formData.chapterId || null,
+        }
+      );
+      return topicResponse.topic.TopicID;
+    }
+    if (formData.topicMode === 'existing') {
+      return formData.topicId || null;
+    }
+    return null;
+  };
+
+  const buildQuestionPayload = async (status) => {
+    const validOptions = formData.options.filter((opt) => opt.text.trim());
+    const finalTopicId = await resolveTopicId();
+
+    return {
+      topicId: finalTopicId,
+      questionText: formData.questionText.trim() || 'Untitled draft',
+      difficultyLevel: formData.difficulty,
+      explanation: formData.explanation.trim() || null,
+      questionType: formData.questionType,
+      source: formData.source,
+      examId: formData.examId || undefined,
+      status,
+      options: validOptions.map((opt) => ({
+        optionText: opt.text.trim(),
+        isCorrect: opt.isCorrect,
+      })),
+    };
   };
 
   const saveDraft = () => {
@@ -304,20 +345,9 @@ const Create = () => {
       
       let finalTopicId = null;
       
-      // Handle topic creation if needed
       if (formData.topicMode === 'new' && formData.newTopicName.trim()) {
-        // Create new topic first using questionAPI (Subject Expert endpoint)
         try {
-          const topicResponse = await questionAPI.createTopic(
-            formData.examId,
-            formData.subjectId,
-            {
-              topicName: formData.newTopicName.trim(),
-              description: formData.newTopicDescription.trim() || null,
-              chapterId: formData.chapterId || null,
-            }
-          );
-          finalTopicId = topicResponse.topic.TopicID;
+          finalTopicId = await resolveTopicId();
         } catch (topicErr) {
           setError(topicErr.message || 'Failed to create topic');
           setLoading(false);
@@ -326,22 +356,27 @@ const Create = () => {
       } else if (formData.topicMode === 'existing') {
         finalTopicId = formData.topicId;
       }
-      // If topicMode is 'null', finalTopicId remains null
-      
+
       const questionData = {
-        topicId: finalTopicId, // Can be null
+        topicId: finalTopicId,
         questionText: formData.questionText.trim(),
         difficultyLevel: formData.difficulty,
         explanation: formData.explanation.trim() || null,
         questionType: formData.questionType,
         source: formData.source,
+        examId: formData.examId,
+        status: 'Pending',
         options: validOptions.map(opt => ({
           optionText: opt.text.trim(),
           isCorrect: opt.isCorrect,
         })),
       };
 
-      await questionAPI.createQuestion(questionData);
+      if (draftQuestionId) {
+        await questionAPI.updateQuestion(draftQuestionId, questionData);
+      } else {
+        await questionAPI.createQuestion(questionData);
+      }
       
       setSuccess('Question created successfully! It will be reviewed by a Reviewer.');
       
@@ -366,6 +401,7 @@ const Create = () => {
       };
       setFormData(resetForm);
       clearDraft();
+      setDraftQuestionId(null);
       setSelectedExam(null);
       setSelectedSubject(null);
       setValidationErrors({});
@@ -376,10 +412,29 @@ const Create = () => {
     }
   };
 
-  const handleSaveDraft = () => {
-    saveDraft();
-    setSuccess('Draft saved locally');
-    // Auto-dismiss is handled by useEffect
+  const handleSaveDraft = async () => {
+    setError('');
+    if (!formData.questionText.trim() && !formData.options.some((opt) => opt.text.trim())) {
+      setError('Add question text or at least one option to save a draft');
+      return;
+    }
+
+    try {
+      setSavingDraft(true);
+      const questionData = await buildQuestionPayload('Draft');
+      if (draftQuestionId) {
+        await questionAPI.updateQuestion(draftQuestionId, questionData);
+      } else {
+        const response = await questionAPI.createQuestion(questionData);
+        setDraftQuestionId(response.question?.QuestionID || null);
+      }
+      saveDraft();
+      setSuccess('Draft saved');
+    } catch (err) {
+      setError(err.message || 'Failed to save draft');
+    } finally {
+      setSavingDraft(false);
+    }
   };
 
   const selectedExamData = examsList.find((e) => e.ExamID === formData.examId);
@@ -815,10 +870,10 @@ const Create = () => {
             type="button"
             className="btn-secondary"
             onClick={handleSaveDraft}
-            disabled={loading}
+            disabled={loading || savingDraft}
           >
-            <Save size={16} />
-            <span>Save Draft</span>
+            {savingDraft ? <Loader2 size={16} className="spinner" /> : <Save size={16} />}
+            <span>{savingDraft ? 'Saving...' : 'Save Draft'}</span>
           </button>
           <button type="submit" className="btn-primary" disabled={loading}>
             {loading ? (

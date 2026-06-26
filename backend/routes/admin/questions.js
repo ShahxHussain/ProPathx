@@ -4,13 +4,18 @@ import { hashPassword, verifyPassword } from '../../utils/password.js';
 import { generateToken } from '../../utils/jwt.js';
 import { createLog, getClientIP, getUserAgent } from '../../utils/logger.js';
 import { authenticate, requireSuperAdmin } from '../../middleware/auth.js';
+import {
+  applyStatusFilterToQuery,
+  resolveQuestionStatus,
+  statusToApiSlug,
+} from '../../utils/questionStatus.js';
 
 const router = express.Router();
 
 /**
  * GET /api/admin/questions
  * Get all questions (platform + org) with details for SuperAdmin
- * Query: source (all|platform|organization), status (all|approved|pending|rejected), page, limit, search
+ * Query: source (all|platform|organization), status (all|draft|pending|verified|approved|rejected), page, limit, search
  */
 router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
   try {
@@ -32,6 +37,8 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
         CreatedByOrgUserID,
         CreatedAt,
         IsVerified,
+        Status,
+        SubmittedAt,
         VerifiedBy,
         VerifiedAt,
         ReviewerComments,
@@ -63,12 +70,8 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
       query = query.ilike('QuestionText', `%${search.trim()}%`);
     }
 
-    if (status === 'approved') {
-      query = query.eq('IsVerified', true);
-    } else if (status === 'rejected') {
-      query = query.eq('IsVerified', false).not('ReviewerComments', 'is', null);
-    } else if (status === 'pending') {
-      query = query.eq('IsVerified', false).is('ReviewerComments', null);
+    if (status && status !== 'all') {
+      query = applyStatusFilterToQuery(query, status);
     }
 
     query = query.range(offset, offset + limitNum - 1);
@@ -154,9 +157,7 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
         createdByOrgName = orgsMap.get(String(qOrgId)).OrgName;
       }
 
-      let statusValue = 'pending';
-      if (q.IsVerified === true) statusValue = 'approved';
-      else if (q.ReviewerComments) statusValue = 'rejected';
+      const statusValue = statusToApiSlug(q);
 
       const qVerifiedBy = getQ(q, 'VerifiedBy');
       const verifier = qVerifiedBy && verifierMap.has(String(qVerifiedBy))

@@ -13,15 +13,11 @@
   --sp-accent-soft: var(--sp-crimson-soft);
   --sp-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
   --sp-shadow-hover: 0 4px 8px rgba(15, 23, 42, 0.06), 0 16px 40px rgba(15, 23, 42, 0.1);
-  padding: 1.75rem 2rem 2.5rem;
+  padding: 0;
   max-width: 1440px;
   margin: 0 auto;
-  min-height: 100%;
-  background-color: #f2f6fd;
-  background-image:
-    linear-gradient(125deg, #e8edf8 0%, transparent 46%),
-    linear-gradient(300deg, #ecf8f6 0%, transparent 48%),
-    linear-gradient(195deg, transparent 40%, #fef2f2 95%);
+  min-height: auto;
+  background: transparent;
 }
 
 .subscription-plans-header {
@@ -89,28 +85,7 @@
 .plan-card:hover {
   transform: translateY(-3px);
   box-shadow: var(--sp-shadow-hover);
-  border-color: rgba(220, 38, 38, 0.18);
-}
-
-.plan-card-accent {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #ef4444, #dc2626);
-}
-
-.plan-card--org .plan-card-accent {
-  background: linear-gradient(90deg, #dc2626, #b91c1c);
-}
-
-.plan-card--student .plan-card-accent {
-  background: linear-gradient(90deg, #f59e0b, #f97316);
-}
-
-.plan-card--both .plan-card-accent {
-  background: linear-gradient(90deg, #dc2626, #1e3a8a);
+  border-color: rgba(15, 23, 42, 0.12);
 }
 
 .plan-card--inactive {
@@ -175,9 +150,9 @@
   border-radius: 999px;
   font-size: 0.72rem;
   font-weight: 600;
-  color: var(--sp-crimson-dark);
-  background: var(--sp-accent-soft);
-  border: 1px solid rgba(220, 38, 38, 0.18);
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
 }
 
 .plan-card-name {
@@ -201,8 +176,8 @@
   min-width: 7rem;
   padding: 0.65rem 0.85rem;
   border-radius: 12px;
-  background: linear-gradient(135deg, #fef2f2 0%, #fff1f2 100%);
-  border: 1px solid rgba(220, 38, 38, 0.12);
+  background: #f8fafc;
+  border: 1px solid var(--sp-border);
 }
 
 .plan-price-label {
@@ -211,7 +186,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--sp-crimson);
+  color: var(--sp-muted);
   margin-bottom: 0.2rem;
 }
 
@@ -221,7 +196,7 @@
   gap: 0.15rem;
   font-size: 1.35rem;
   font-weight: 800;
-  color: #7f1d1d;
+  color: var(--sp-text);
   letter-spacing: -0.03em;
   line-height: 1;
 }
@@ -340,12 +315,12 @@
   align-items: center;
   gap: 0.375rem;
   padding: 0.25rem 0.625rem;
-  background: var(--sp-crimson-soft);
-  color: var(--sp-crimson-dark);
+  background: #f1f5f9;
+  color: #475569;
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 600;
-  border: 1px solid rgba(220, 38, 38, 0.18);
+  border: 1px solid #e2e8f0;
 }
 
 .plan-status-badge {
@@ -412,9 +387,9 @@
 }
 
 .plan-audience-org {
-  background: var(--sp-crimson-soft);
-  color: var(--sp-crimson-dark);
-  border-color: rgba(220, 38, 38, 0.2);
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
 }
 
 .plan-audience-student {
@@ -424,9 +399,9 @@
 }
 
 .plan-audience-both {
-  background: linear-gradient(135deg, rgba(220, 38, 38, 0.1), var(--sp-navy-soft));
-  color: #991b1b;
-  border-color: rgba(220, 38, 38, 0.18);
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
 }
 
 .plan-mode-row {
@@ -461,9 +436,9 @@
 }
 
 .mode-chip--selftest {
-  background: #fef2f2;
-  color: var(--sp-crimson-dark);
-  border-color: #fecaca;
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
 }
 
 .mode-chip--off,
@@ -513,9 +488,9 @@
 }
 
 .plan-price {
-  color: var(--sp-crimson-dark);
+  color: #475569;
   font-weight: 600;
-  background: var(--sp-crimson-soft);
+  background: #f1f5f9;
 }
 
 .plan-actions {
@@ -523,10 +498,6 @@
   gap: 0.35rem;
   flex-shrink: 0;
   align-items: flex-start;
-  padding: 0.15rem;
-  border-radius: 12px;
-  background: rgba(248, 250, 252, 0.9);
-  border: 1px solid var(--sp-border);
 }
 
 .btn-link-exams {
@@ -1261,12 +1232,12 @@
 .exam-count-badge-table {
   display: inline-block;
   padding: 0.25rem 0.625rem;
-  background: var(--sp-crimson-soft);
-  color: var(--sp-crimson-dark);
+  background: #f1f5f9;
+  color: #475569;
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 600;
-  border: 1px solid rgba(220, 38, 38, 0.15);
+  border: 1px solid #e2e8f0;
 }
 
 .exam-details-cell {

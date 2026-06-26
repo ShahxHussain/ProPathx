@@ -21,17 +21,21 @@ import './Questions.css';
 
 const STATUS_TABS = [
   { id: 'pending', label: 'Pending', icon: Clock },
-  { id: 'approved', label: 'Approved', icon: CheckCircle },
+  { id: 'verified', label: 'Verified', icon: CheckCircle },
   { id: 'rejected', label: 'Rejected', icon: XCircle },
 ];
 
-const VALID_STATUS_FILTERS = ['pending', 'approved', 'rejected'];
+const VALID_STATUS_FILTERS = ['pending', 'verified', 'approved', 'rejected'];
+
+const normalizeStatusFilter = (status) => (status === 'approved' ? 'verified' : status);
 
 const Questions = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const statusFromUrl = searchParams.get('status');
-  const initialFilter = VALID_STATUS_FILTERS.includes(statusFromUrl) ? statusFromUrl : 'pending';
+  const initialFilter = VALID_STATUS_FILTERS.includes(statusFromUrl)
+    ? normalizeStatusFilter(statusFromUrl)
+    : 'pending';
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState(initialFilter);
@@ -50,8 +54,9 @@ const Questions = () => {
 
   useEffect(() => {
     const status = searchParams.get('status');
-    if (status && VALID_STATUS_FILTERS.includes(status) && status !== filter) {
-      setFilter(status);
+    const normalized = normalizeStatusFilter(status);
+    if (status && VALID_STATUS_FILTERS.includes(status) && normalized !== filter) {
+      setFilter(normalized);
     }
   }, [searchParams, filter]);
 
@@ -142,7 +147,7 @@ const Questions = () => {
     try {
       setError('');
       await reviewerAPI.approveQuestion(questionId);
-      setSuccess('Question approved successfully!');
+      setSuccess('Question verified successfully!');
       setSelectedQuestion(null);
       detailCache.current.delete(questionId);
       loadQuestions();
@@ -253,7 +258,7 @@ const Questions = () => {
           <p className="review-hero__kicker">Reviewer workspace</p>
           <h1>Question Review</h1>
           <p className="review-hero__subtitle">
-            Browse and review questions — filter by pending, approved, or rejected status.
+            Browse and review questions — filter by pending, verified, or rejected status.
           </p>
         </div>
         <div className="review-hero__stats">

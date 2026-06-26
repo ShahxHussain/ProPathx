@@ -84,8 +84,8 @@ const Experts = () => {
                     <CheckCircle size={18} />
                   </div>
                   <div>
-                    <div className="stat-value">{expert.approved}</div>
-                    <div className="stat-label">Approved</div>
+                    <div className="stat-value">{expert.verified ?? expert.approved}</div>
+                    <div className="stat-label">Verified</div>
                   </div>
                 </div>
 

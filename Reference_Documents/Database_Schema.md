@@ -37,6 +37,10 @@ CREATE TYPE difficulty_level_enum AS ENUM ('Easy','Medium','Hard');
 CREATE TYPE question_type_enum AS ENUM ('Single Correct','Multiple Correct');
 CREATE TYPE question_source_enum AS ENUM ('Self','AI','PastExam');
 
+-- Question workflow (migration 009): Draft → Pending → Verified | Rejected
+-- During transition (shared dev/client DB): KEEP IsVerified; sync with Status (see comments below).
+CREATE TYPE status_questions_enum AS ENUM ('Draft','Pending','Verified','Rejected');
+
 CREATE TYPE media_context_enum AS ENUM ('Question','Option','Explanation');
 CREATE TYPE media_type_enum AS ENUM ('Image','Diagram','Chart');
 
@@ -300,12 +304,14 @@ CREATE TABLE "Questions" (
   "QuestionType" question_type_enum,
   "CreatedBy" uuid REFERENCES "Users"("UserID"),
   "CreatedAt" timestamptz DEFAULT now(),
-  "IsVerified" boolean DEFAULT false,
+  "Status" status_questions_enum NOT NULL DEFAULT 'Pending',
+  "SubmittedAt" timestamptz NULL,
+  "IsVerified" boolean DEFAULT false,  -- KEEP until migration 010 (optional drop after full rollout)
   "VerifiedBy" uuid REFERENCES "Users"("UserID"),
   "ReviewerComments" text,
+  "VerifiedAt" timestamptz,
   "UpdatedBy" uuid REFERENCES "Users"("UserID"),
   "UpdatedAt" timestamptz,
-  "VerifiedAt" timestamptz,
   "Source" question_source_enum,
   "TimesUsed" int DEFAULT 0,
   "TimesCorrect" int DEFAULT 0,
@@ -332,6 +338,35 @@ ON "Questions"("OrgID");
 
 CREATE INDEX IF NOT EXISTS idx_questions_createdby_orguser
 ON "Questions"("CreatedByOrgUserID");
+
+-- Question status + ReviewerComments (see § below). Indexes: migration 009.
+CREATE INDEX IF NOT EXISTS idx_questions_status ON "Questions"("Status");
+CREATE INDEX IF NOT EXISTS idx_questions_org_status ON "Questions"("OrgID", "Status") WHERE "OrgID" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_questions_created_by_status ON "Questions"("CreatedBy", "Status") WHERE "CreatedBy" IS NOT NULL;
+
+-- ### Questions — Status & ReviewerComments (workflow)
+--
+-- | Status     | ReviewerComments | VerifiedBy / VerifiedAt | Who sets it |
+-- |------------|------------------|-------------------------|-------------|
+-- | Draft      | NULL             | NULL                    | Subject Expert — Save Draft |
+-- | Pending    | NULL             | NULL                    | Subject Expert — Submit |
+-- | Verified   | NULL             | set on verify           | Reviewer — Approve |
+-- | Rejected   | **text required**| NULL                    | Reviewer — Reject |
+--
+-- IsVerified: kept during transition (shared dev + client on one DB). Do NOT run 010 yet.
+-- Sync rule when writing from app:
+--   Status = 'Verified'  → IsVerified = true
+--   Status = anything else → IsVerified = false
+-- Read: prefer Status; fall back to IsVerified only in old code paths until refactor done.
+--
+-- Migration 010 (DROP IsVerified): only after client + your app both use Status everywhere.
+-- ReviewerComments = rejection feedback only (not a status column).
+--
+-- On resubmit: Status → Pending, ReviewerComments → NULL, SubmittedAt → now().
+-- On verify: Status → Verified, ReviewerComments → NULL, VerifiedBy/VerifiedAt set.
+--
+-- Migrations: 009 (add Status) → deploy code → 010 (drop IsVerified)
+-- App behaviour: Reference_Documents/Question_Draft_Status.md
 
 -- Natural key (QuestionID, OptionNumber); OptionID uuid is the stable id for FKs (StudentAnswers, QuestionMedia).
 CREATE TABLE "Options" (
@@ -748,6 +783,63 @@ END $$;
 
 ALTER TABLE public."SubscriptionPlans"
 ADD COLUMN IF NOT EXISTS "Status" public.status_subscriptionplans_enum NOT NULL DEFAULT 'Active';
+
+-- ---------------------------------------------------------------------------
+-- Questions.Status + SubmittedAt (migration 009)
+-- Script: backend/db/migrations/009_questions_status_draft.sql
+-- ReviewerComments: unchanged column — stores rejection text when Status = 'Rejected'; NULL otherwise.
+-- ---------------------------------------------------------------------------
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_questions_enum') THEN
+    CREATE TYPE public.status_questions_enum AS ENUM ('Draft','Pending','Verified','Rejected');
+  END IF;
+END $$;
+
+-- If enum was created earlier with 'Approved', run once:
+-- ALTER TYPE public.status_questions_enum RENAME VALUE 'Approved' TO 'Verified';
+
+ALTER TABLE public."Questions"
+  ADD COLUMN IF NOT EXISTS "Status" public.status_questions_enum NOT NULL DEFAULT 'Pending';
+
+ALTER TABLE public."Questions"
+  ADD COLUMN IF NOT EXISTS "SubmittedAt" timestamptz NULL;
+
+COMMENT ON COLUMN public."Questions"."Status" IS
+  'Draft | Pending | Verified | Rejected. Canonical workflow state.';
+
+COMMENT ON COLUMN public."Questions"."ReviewerComments" IS
+  'Reviewer rejection feedback. Non-null only when Status = Rejected. Cleared on verify or expert resubmit.';
+
+-- Backfill existing rows (safe to re-run)
+UPDATE public."Questions"
+SET "Status" = 'Verified'::public.status_questions_enum
+WHERE "IsVerified" = true
+  AND ("Status" IS NULL OR "Status" = 'Pending'::public.status_questions_enum);
+
+UPDATE public."Questions"
+SET "Status" = 'Rejected'::public.status_questions_enum
+WHERE "IsVerified" = false
+  AND "ReviewerComments" IS NOT NULL
+  AND ("Status" IS NULL OR "Status" = 'Pending'::public.status_questions_enum);
+
+UPDATE public."Questions"
+SET "Status" = 'Pending'::public.status_questions_enum,
+    "SubmittedAt" = COALESCE("SubmittedAt", "CreatedAt")
+WHERE "IsVerified" = false
+  AND "ReviewerComments" IS NULL
+  AND "Status" IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_questions_status ON public."Questions" ("Status");
+CREATE INDEX IF NOT EXISTS idx_questions_org_status ON public."Questions" ("OrgID", "Status") WHERE "OrgID" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_questions_created_by_status ON public."Questions" ("CreatedBy", "Status") WHERE "CreatedBy" IS NOT NULL;
+
+-- ---------------------------------------------------------------------------
+-- Questions: drop IsVerified (migration 010) — DEFER if shared dev/client DB
+-- Run only after full Status rollout. Script: 010_drop_questions_isverified.sql
+-- ---------------------------------------------------------------------------
+
+-- ALTER TABLE public."Questions" DROP COLUMN IF EXISTS "IsVerified";  -- do not run yet
 
 -- ---------------------------------------------------------------------------
 -- OrgEnrollmentSettings (OrgAdmin Settings → Exam enrollments)

@@ -120,7 +120,7 @@ router.get('/:testId/questions/available', authenticate, requireRole(['OrgAdmin'
     }
 
     if (difficulty) query = query.eq('DifficultyLevel', difficulty);
-    if (approvedOnly === 'true' || approvedOnly === '1') query = query.eq('IsVerified', true);
+    if (approvedOnly === 'true' || approvedOnly === '1') query = query.eq('Status', 'Verified');
     if (questionType && (questionType === 'Single Correct' || questionType === 'Multiple Correct')) query = query.eq('QuestionType', questionType);
     if (search && search.trim()) query = query.ilike('QuestionText', `%${search.trim()}%`);
 
@@ -388,7 +388,7 @@ router.post('/:testId/questions/bulk', authenticate, requireRole(['OrgAdmin']), 
     }
     if (existingIds.length > 0) query = query.not('QuestionID', 'in', `(${existingIds.join(',')})`);
     if (difficulty) query = query.eq('DifficultyLevel', difficulty);
-    if (approvedOnly === true || approvedOnly === 'true' || approvedOnly === '1') query = query.eq('IsVerified', true);
+    if (approvedOnly === true || approvedOnly === 'true' || approvedOnly === '1') query = query.eq('Status', 'Verified');
 
     const { data: pool } = await query.limit(500);
     const availableIds = (pool || []).map((q) => q.QuestionID);

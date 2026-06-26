@@ -24,6 +24,11 @@ import {
   getPublicMaintenanceSettings,
   enrichLogsWithActorNames,
 } from '../auth/helpers.js';
+import {
+  applyStatusFilterToQuery,
+  countQuestionsByStatus,
+  statusToApiSlug,
+} from '../../utils/questionStatus.js';
 
 const router = express.Router();
 
@@ -712,14 +717,17 @@ router.get('/dashboard/stats', authenticate, requireRole(['OrgAdmin']), verifyAc
     // Get pending and approved questions
     const { data: orgQuestions, error: orgQuestionsError } = await supabase
       .from('Questions')
-      .select('IsVerified, ReviewerComments')
+      .select('Status, IsVerified, ReviewerComments')
       .eq('OrgID', orgId);
 
     let pendingQuestions = 0;
     let approvedQuestions = 0;
+    let draftQuestions = 0;
     if (orgQuestions && !orgQuestionsError) {
-      approvedQuestions = orgQuestions.filter(q => q.IsVerified === true).length;
-      pendingQuestions = orgQuestions.filter(q => !q.IsVerified && !q.ReviewerComments).length;
+      const counts = countQuestionsByStatus(orgQuestions);
+      approvedQuestions = counts.verified;
+      pendingQuestions = counts.pending;
+      draftQuestions = counts.draft;
     }
 
     res.json({
@@ -733,6 +741,8 @@ router.get('/dashboard/stats', authenticate, requireRole(['OrgAdmin']), verifyAc
         totalQuestions: totalQuestionsCount || 0,
         pendingQuestions: pendingQuestions,
         approvedQuestions: approvedQuestions,
+        verifiedQuestions: approvedQuestions,
+        draftQuestions: draftQuestions,
       },
       userGrowthData: userGrowthData || [],
       testGrowthData: testGrowthData || [],
@@ -962,6 +972,8 @@ router.get('/questions', authenticate, requireRole(['OrgAdmin']), verifyActiveSt
         CreatedByOrgUserID,
         CreatedAt,
         IsVerified,
+        Status,
+        SubmittedAt,
         VerifiedBy,
         VerifiedAt,
         ReviewerComments,
@@ -986,12 +998,8 @@ router.get('/questions', authenticate, requireRole(['OrgAdmin']), verifyActiveSt
     if (search && search.trim()) {
       query = query.ilike('QuestionText', `%${search.trim()}%`);
     }
-    if (status === 'approved') {
-      query = query.eq('IsVerified', true);
-    } else if (status === 'rejected') {
-      query = query.eq('IsVerified', false).not('ReviewerComments', 'is', null);
-    } else if (status === 'pending') {
-      query = query.eq('IsVerified', false).is('ReviewerComments', null);
+    if (status && status !== 'all') {
+      query = applyStatusFilterToQuery(query, status);
     }
 
     if (examId && examId.trim()) {
@@ -1061,9 +1069,8 @@ router.get('/questions', authenticate, requireRole(['OrgAdmin']), verifyActiveSt
         createdByOrgUserName = ou.FullName;
         createdByOrgUserEmail = ou.Email;
       }
-      let statusValue = 'pending';
-      if (q.IsVerified === true) statusValue = 'approved';
-      else if (q.ReviewerComments) statusValue = 'rejected';
+      const statusValue = statusToApiSlug(q);
+
       const verifier = qVerifiedBy && verifierMap.has(String(qVerifiedBy))
         ? verifierMap.get(String(qVerifiedBy))
         : null;

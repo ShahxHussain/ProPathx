@@ -29,12 +29,15 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { questionAPI } from '../../services/api';
+import { statusLabel } from '../../utils/questionStatus';
 import './Performance.css';
 
 const Performance = () => {
   const [stats, setStats] = useState({
     total: 0,
+    verified: 0,
     approved: 0,
+    draft: 0,
     rejected: 0,
     pending: 0,
     qualityScore: 0,
@@ -57,7 +60,11 @@ const Performance = () => {
       setError('');
       const data = await questionAPI.getDashboardStats();
       
-      setStats(data.stats || {});
+      setStats({
+        ...(data.stats || {}),
+        verified: data.stats?.verified ?? data.stats?.approved ?? 0,
+        approved: data.stats?.verified ?? data.stats?.approved ?? 0,
+      });
       setRecentQuestions(data.recentQuestions || []);
       setStatusData(data.statusData || []);
       setTrendData(data.trendData || []);
@@ -70,13 +77,15 @@ const Performance = () => {
   };
 
   const COLORS = {
+    verified: '#10b981',
     approved: '#10b981',
+    draft: '#64748b',
     pending: '#f59e0b',
     rejected: '#ef4444',
     primary: '#8b5cf6',
   };
 
-  const pieColors = [COLORS.approved, COLORS.pending, COLORS.rejected];
+  const pieColors = [COLORS.verified, COLORS.draft, COLORS.pending, COLORS.rejected];
 
   const performanceCards = [
     {
@@ -88,10 +97,10 @@ const Performance = () => {
     },
     {
       icon: CheckCircle,
-      label: 'Approved',
-      value: stats.approved,
+      label: 'Verified',
+      value: stats.verified ?? stats.approved ?? 0,
       color: 'green',
-      trend: stats.total > 0 ? ((stats.approved / stats.total) * 100).toFixed(1) + '%' : '0%',
+      trend: stats.total > 0 ? (((stats.verified ?? stats.approved ?? 0) / stats.total) * 100).toFixed(1) + '%' : '0%',
     },
     {
       icon: Clock,
@@ -124,13 +133,15 @@ const Performance = () => {
   ];
 
   const getStatusBadge = (question) => {
-    if (question.IsVerified) {
-      return { text: 'Approved', color: COLORS.approved };
-    } else if (question.ReviewerComments) {
-      return { text: 'Rejected', color: COLORS.rejected };
-    } else {
-      return { text: 'Pending', color: COLORS.pending };
-    }
+    const text = statusLabel(question);
+    const slug = text.toLowerCase();
+    const colorMap = {
+      verified: COLORS.verified,
+      draft: COLORS.draft,
+      pending: COLORS.pending,
+      rejected: COLORS.rejected,
+    };
+    return { text, color: colorMap[slug] || COLORS.pending };
   };
 
   const formatDate = (dateString) => {

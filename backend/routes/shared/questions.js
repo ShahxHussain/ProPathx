@@ -3,6 +3,13 @@ import { supabase } from '../../config/database.js';
 import { createLog, getClientIP, getUserAgent } from '../../utils/logger.js';
 import { authenticate, requireRole, verifyActiveStatus } from '../../middleware/auth.js';
 import { validateSubscriptionForQuestionCreation, getSubscriptionStatus } from '../../utils/subscription.js';
+import {
+  QUESTION_STATUS,
+  resolveQuestionStatus,
+  buildStatusFields,
+  countQuestionsByStatus,
+  parseStatusFilterInput,
+} from '../../utils/questionStatus.js';
 
 const router = express.Router();
 
@@ -55,13 +62,13 @@ router.get(
         .from('Questions')
         .select(`
           *,
-          Topics!inner(
+          Topics(
             TopicID,
             TopicName,
-            Subjects!inner(
+            Subjects(
               SubjectID,
               SubjectName,
-              Exams!inner(
+              Exams(
                 ExamID,
                 ExamName
               )
@@ -270,7 +277,7 @@ router.get(
     try {
       let questionsQuery = supabase
         .from('Questions')
-        .select('QuestionID, QuestionText, IsVerified, ReviewerComments, CreatedAt, TimesUsed, TimesCorrect, TimesIncorrect, DifficultyLevel');
+        .select('QuestionID, QuestionText, Status, IsVerified, ReviewerComments, CreatedAt, TimesUsed, TimesCorrect, TimesIncorrect, DifficultyLevel');
 
       if (actorType === 'OrgUser' && orgId) {
         questionsQuery = questionsQuery.eq('OrgID', orgId);
@@ -285,11 +292,9 @@ router.get(
       }
 
       const questionsList = questions || [];
-      const total = questionsList.length;
-      const approved = questionsList.filter((q) => q.IsVerified === true).length;
-      const pending = questionsList.filter((q) => !q.IsVerified && !q.ReviewerComments).length;
-      const rejected = questionsList.filter((q) => q.ReviewerComments && !q.IsVerified).length;
-      const qualityScore = total > 0 ? Math.round((approved / total) * 100) : 0;
+      const statusCounts = countQuestionsByStatus(questionsList);
+      const { draft, pending, verified, rejected, total } = statusCounts;
+      const qualityScore = total > 0 ? Math.round((verified / total) * 100) : 0;
 
       const recentQuestions = questionsList
         .sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt))
@@ -298,14 +303,16 @@ router.get(
           QuestionID: q.QuestionID,
           QuestionText: q.QuestionText,
           CreatedAt: q.CreatedAt,
+          Status: resolveQuestionStatus(q),
           IsVerified: q.IsVerified,
           ReviewerComments: q.ReviewerComments,
           DifficultyLevel: q.DifficultyLevel,
         }));
 
       const statusData = [
-        { status: 'Approved', count: approved },
+        { status: 'Draft', count: draft },
         { status: 'Pending', count: pending },
+        { status: 'Verified', count: verified },
         { status: 'Rejected', count: rejected },
       ];
 
@@ -336,9 +343,11 @@ router.get(
       res.json({
         stats: {
           total,
-          approved,
+          draft,
           pending,
+          verified,
           rejected,
+          approved: verified,
           qualityScore,
           totalUsed,
           accuracyRate,
@@ -453,6 +462,7 @@ router.post(
       options,
       source,
       examId, // Added to validate exam access for Organization Subject Experts
+      status: statusInput,
     } = req.body;
     const { userId, orgId: userOrgId, actorType } = req.user;
     const orgUserId = req.user.orgUserId ?? req.user.org_user_id ?? null;
@@ -500,37 +510,46 @@ router.post(
         }
       }
 
+      const requestedStatus = parseStatusFilterInput(statusInput) || QUESTION_STATUS.PENDING;
+      const isDraft = requestedStatus === QUESTION_STATUS.DRAFT;
+
       // Validation
-      if (!questionText?.trim()) {
+      if (!isDraft && !questionText?.trim()) {
         return res.status(400).json({ error: 'Question text is required' });
       }
-      
-      // Topic ID is optional (can be null)
-      // If topicId is provided, verify it exists
 
-      if (!options || !Array.isArray(options) || options.length < 2) {
-        return res.status(400).json({ error: 'At least 2 options are required' });
+      if (isDraft && !questionText?.trim() && (!options || !options.some((opt) => opt.optionText?.trim()))) {
+        return res.status(400).json({ error: 'Add question text or at least one option to save a draft' });
       }
 
-      // Validate options have text
-      const validOptions = options.filter((opt) => opt.optionText?.trim());
-      if (validOptions.length < 2) {
-        return res.status(400).json({ error: 'At least 2 valid options are required' });
-      }
+      const optionList = Array.isArray(options) ? options : [];
+      const validOptions = optionList.filter((opt) => opt.optionText?.trim());
 
-      // Validate at least one correct answer
-      const correctOptions = validOptions.filter((opt) => opt.isCorrect === true);
-      if (correctOptions.length === 0) {
-        return res.status(400).json({ error: 'At least one correct answer must be selected' });
-      }
+      if (!isDraft) {
+        if (optionList.length < 2) {
+          return res.status(400).json({ error: 'At least 2 options are required' });
+        }
+        if (validOptions.length < 2) {
+          return res.status(400).json({ error: 'At least 2 valid options are required' });
+        }
 
-      // Validate question type matches correct answers
-      if (questionType === 'Single Correct' && correctOptions.length > 1) {
-        return res.status(400).json({ error: 'Single Correct questions must have exactly one correct answer' });
-      }
+        const correctOptions = validOptions.filter((opt) => opt.isCorrect === true);
+        if (correctOptions.length === 0) {
+          return res.status(400).json({ error: 'At least one correct answer must be selected' });
+        }
 
-      if (questionType === 'Multiple Correct' && correctOptions.length < 2) {
-        return res.status(400).json({ error: 'Multiple Correct questions must have at least 2 correct answers' });
+        if (questionType === 'Single Correct' && correctOptions.length > 1) {
+          return res.status(400).json({ error: 'Single Correct questions must have exactly one correct answer' });
+        }
+
+        if (questionType === 'Multiple Correct' && correctOptions.length < 2) {
+          return res.status(400).json({ error: 'Multiple Correct questions must have at least 2 correct answers' });
+        }
+      } else if (validOptions.length > 0) {
+        const correctOptions = validOptions.filter((opt) => opt.isCorrect === true);
+        if (questionType === 'Single Correct' && correctOptions.length > 1) {
+          return res.status(400).json({ error: 'Single Correct questions must have exactly one correct answer' });
+        }
       }
 
       // Verify topic exists and user has access (if topicId is provided)
@@ -590,15 +609,15 @@ router.post(
 
       const questionData = {
         TopicID: topicId || null,
-        QuestionText: questionText.trim(),
+        QuestionText: (questionText?.trim() || 'Untitled draft'),
         DifficultyLevel: difficultyLevel || 'Medium',
         Explanation: explanation?.trim() || null,
         QuestionType: questionType || 'Single Correct',
         CreatedBy: finalCreatedBy,
         OrgID: finalOrgID,
         Source: source || 'Self',
-        IsVerified: false,
         CreatedAt: new Date().toISOString(),
+        ...buildStatusFields(requestedStatus),
       };
       if (actorType === 'OrgUser') {
         questionData.CreatedByOrgUserID = finalCreatedByOrgUserID;
@@ -614,22 +633,23 @@ router.post(
         return res.status(500).json({ error: 'Failed to create question', details: questionError.message });
       }
 
-      // Create options
-      const optionsToInsert = validOptions.map((opt, index) => ({
-        QuestionID: newQuestion.QuestionID,
-        OptionNumber: index + 1,
-        OptionText: opt.optionText.trim(),
-        IsCorrect: opt.isCorrect === true,
-      }));
+      // Create options (skip for empty drafts)
+      if (validOptions.length > 0) {
+        const optionsToInsert = validOptions.map((opt, index) => ({
+          QuestionID: newQuestion.QuestionID,
+          OptionNumber: index + 1,
+          OptionText: opt.optionText.trim(),
+          IsCorrect: opt.isCorrect === true,
+        }));
 
-      const { error: optionsError } = await supabase
-        .from('Options')
-        .insert(optionsToInsert);
+        const { error: optionsError } = await supabase
+          .from('Options')
+          .insert(optionsToInsert);
 
-      if (optionsError) {
-        // Rollback question creation
-        await supabase.from('Questions').delete().eq('QuestionID', newQuestion.QuestionID);
-        return res.status(500).json({ error: 'Failed to create options', details: optionsError.message });
+        if (optionsError) {
+          await supabase.from('Questions').delete().eq('QuestionID', newQuestion.QuestionID);
+          return res.status(500).json({ error: 'Failed to create options', details: optionsError.message });
+        }
       }
 
       // Create log
@@ -640,14 +660,14 @@ router.post(
         actionType: 'Create',
         entityType: 'Question',
         entityID: newQuestion.QuestionID,
-        description: `Created question: ${questionText.substring(0, 50)}...`,
+        description: `${isDraft ? 'Saved draft' : 'Created question'}: ${(questionText || '').substring(0, 50)}...`,
         ipAddress,
         userAgent,
         newData: { questionText, difficultyLevel, questionType, topicId },
       });
 
       res.status(201).json({
-        message: 'Question created successfully',
+        message: isDraft ? 'Draft saved successfully' : 'Question created successfully',
         question: newQuestion,
       });
     } catch (error) {
@@ -676,6 +696,7 @@ router.put(
       questionType,
       options,
       source,
+      status: statusInput,
     } = req.body;
     const { userId, orgId, actorType } = req.user;
     const ipAddress = getClientIP(req);
@@ -685,7 +706,7 @@ router.put(
       // Check if question exists (include OrgID, ReviewerComments for access check and status reset)
       const { data: existingQuestion, error: checkError } = await supabase
         .from('Questions')
-        .select('QuestionID, TopicID, CreatedBy, OrgID, IsVerified, ReviewerComments, VerifiedBy, VerifiedAt, QuestionText, DifficultyLevel, Explanation, QuestionType, Source, CreatedAt, UpdatedAt')
+        .select('QuestionID, TopicID, CreatedBy, OrgID, Status, SubmittedAt, IsVerified, ReviewerComments, VerifiedBy, VerifiedAt, QuestionText, DifficultyLevel, Explanation, QuestionType, Source, CreatedAt, UpdatedAt')
         .eq('QuestionID', questionId)
         .single();
 
@@ -700,30 +721,35 @@ router.put(
         return res.status(403).json({ error: accessCheck.reason || 'Access denied' });
       }
 
+      const existingStatus = resolveQuestionStatus(existingQuestion);
+
       // Additional check: Cannot update verified questions (unless it's the creator)
-      // For OrgUser with CreatedBy=null, we allow updates if exam is in subscription
-      if (existingQuestion.IsVerified && existingQuestion.CreatedBy !== userId) {
+      if (existingStatus === QUESTION_STATUS.VERIFIED && existingQuestion.CreatedBy !== userId) {
         return res.status(403).json({ error: 'Cannot update verified question created by another user' });
       }
 
-      // Validation
-      if (questionText && !questionText.trim()) {
+      const requestedStatus = parseStatusFilterInput(statusInput);
+      const isDraftSave = requestedStatus === QUESTION_STATUS.DRAFT;
+
+      if (!isDraftSave && questionText && !questionText.trim()) {
         return res.status(400).json({ error: 'Question text cannot be empty' });
       }
 
       if (options && Array.isArray(options)) {
         const validOptions = options.filter((opt) => opt.optionText?.trim());
-        if (validOptions.length < 2) {
+        if (!isDraftSave && validOptions.length < 2) {
           return res.status(400).json({ error: 'At least 2 valid options are required' });
         }
 
-        const correctOptions = validOptions.filter((opt) => opt.isCorrect === true);
-        if (correctOptions.length === 0) {
-          return res.status(400).json({ error: 'At least one correct answer must be selected' });
-        }
+        if (!isDraftSave && validOptions.length >= 2) {
+          const correctOptions = validOptions.filter((opt) => opt.isCorrect === true);
+          if (correctOptions.length === 0) {
+            return res.status(400).json({ error: 'At least one correct answer must be selected' });
+          }
 
-        if (questionType === 'Single Correct' && correctOptions.length > 1) {
-          return res.status(400).json({ error: 'Single Correct questions must have exactly one correct answer' });
+          if (questionType === 'Single Correct' && correctOptions.length > 1) {
+            return res.status(400).json({ error: 'Single Correct questions must have exactly one correct answer' });
+          }
         }
       }
 
@@ -739,21 +765,17 @@ router.put(
       updateData.UpdatedAt = new Date().toISOString();
       updateData.LastUpdated = new Date().toISOString();
 
-      // If question was verified, unverify it after update (needs re-review)
-      if (existingQuestion.IsVerified) {
-        updateData.IsVerified = false;
-        updateData.VerifiedBy = null;
-        updateData.VerifiedAt = null;
-        updateData.ReviewerComments = null; // Clear any previous comments
-      }
-
-      // If question was rejected (has ReviewerComments and IsVerified = false), 
-      // clear comments and reset verification fields to move it back to pending status
-      if (existingQuestion.ReviewerComments && !existingQuestion.IsVerified) {
-        updateData.ReviewerComments = null;
-        updateData.VerifiedBy = null;
-        updateData.VerifiedAt = null;
-        updateData.IsVerified = false; // Ensure it's marked as pending (not verified)
+      if (requestedStatus) {
+        Object.assign(
+          updateData,
+          buildStatusFields(requestedStatus, {
+            submittedAt: existingQuestion.SubmittedAt,
+          })
+        );
+      } else if (existingStatus === QUESTION_STATUS.VERIFIED) {
+        Object.assign(updateData, buildStatusFields(QUESTION_STATUS.PENDING));
+      } else if (existingStatus === QUESTION_STATUS.REJECTED) {
+        Object.assign(updateData, buildStatusFields(QUESTION_STATUS.PENDING));
       }
 
       const { data: updatedQuestion, error: updateError } = await supabase
@@ -834,7 +856,7 @@ router.delete(
       // Check if question exists (include OrgID for access check)
       const { data: existingQuestion, error: checkError } = await supabase
         .from('Questions')
-        .select('QuestionID, TopicID, CreatedBy, OrgID, IsVerified, QuestionText, DifficultyLevel, Explanation, QuestionType, Source, CreatedAt, UpdatedAt')
+        .select('QuestionID, TopicID, CreatedBy, OrgID, Status, IsVerified, QuestionText, DifficultyLevel, Explanation, QuestionType, Source, CreatedAt, UpdatedAt')
         .eq('QuestionID', questionId)
         .single();
 
@@ -864,6 +886,11 @@ router.delete(
         return res.status(400).json({
           error: 'Cannot delete question that is used in tests. Please remove it from tests first.',
         });
+      }
+
+      const questionStatus = resolveQuestionStatus(existingQuestion);
+      if (questionStatus === QUESTION_STATUS.VERIFIED) {
+        return res.status(400).json({ error: 'Cannot delete a verified question' });
       }
 
       // Delete question (cascade will delete options)
