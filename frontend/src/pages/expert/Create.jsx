@@ -1,28 +1,30 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, Save, AlertCircle, CheckCircle2, Loader2, Info, AlertTriangle, Code } from 'lucide-react';
+import { Plus, X, Save, AlertCircle, CheckCircle2, Loader2, Info, AlertTriangle, Code, RotateCcw } from 'lucide-react';
 import { questionAPI, examAPI, orgAuth } from '../../services/api';
 import LaTeXEditor from '../../components/LaTeXEditor';
 import './Create.css';
 
+const EMPTY_FORM = {
+  examId: '',
+  subjectId: '',
+  chapterId: '',
+  topicMode: 'existing',
+  topicId: '',
+  newTopicName: '',
+  newTopicDescription: '',
+  questionText: '',
+  difficulty: 'Medium',
+  explanation: '',
+  questionType: 'Single Correct',
+  source: 'Self',
+  options: [
+    { text: '', isCorrect: false },
+    { text: '', isCorrect: false },
+  ],
+};
+
 const Create = () => {
-  const [formData, setFormData] = useState({
-    examId: '',
-    subjectId: '',
-    chapterId: '',
-    topicMode: 'existing', // 'existing', 'null', 'new'
-    topicId: '',
-    newTopicName: '',
-    newTopicDescription: '',
-    questionText: '',
-    difficulty: 'Medium',
-    explanation: '',
-    questionType: 'Single Correct',
-    source: 'Self',
-    options: [
-      { text: '', isCorrect: false },
-      { text: '', isCorrect: false },
-    ],
-  });
+  const [formData, setFormData] = useState({ ...EMPTY_FORM, options: [...EMPTY_FORM.options] });
 
   const [examsList, setExamsList] = useState([]);
   const [selectedExam, setSelectedExam] = useState(null);
@@ -32,7 +34,6 @@ const Create = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
-  const [draftSaved, setDraftSaved] = useState(false);
   const [draftQuestionId, setDraftQuestionId] = useState(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
@@ -54,22 +55,10 @@ const Create = () => {
   // Load exams list and subscription status on mount
   useEffect(() => {
     loadExamsList();
-    loadDraft();
     if (isOrganizationExpert) {
       loadSubscriptionStatus();
     }
   }, [isOrganizationExpert]);
-
-  // Auto-save draft every 30 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (formData.questionText.trim() || formData.options.some(opt => opt.text.trim())) {
-        saveDraft();
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [formData]);
 
   // Auto-dismiss success messages after 4 seconds
   useEffect(() => {
@@ -123,19 +112,6 @@ const Create = () => {
     }
   };
 
-  const loadDraft = () => {
-    try {
-      const draft = localStorage.getItem('questionDraft');
-      if (draft) {
-        const parsedDraft = JSON.parse(draft);
-        setFormData(parsedDraft);
-        setDraftSaved(true);
-      }
-    } catch (err) {
-      console.error('Failed to load draft:', err);
-    }
-  };
-
   const resolveTopicId = async () => {
     if (formData.topicMode === 'new' && formData.newTopicName.trim()) {
       const topicResponse = await questionAPI.createTopic(
@@ -167,6 +143,8 @@ const Create = () => {
       questionType: formData.questionType,
       source: formData.source,
       examId: formData.examId || undefined,
+      subjectId: formData.subjectId || undefined,
+      chapterId: formData.chapterId || undefined,
       status,
       options: validOptions.map((opt) => ({
         optionText: opt.text.trim(),
@@ -175,19 +153,27 @@ const Create = () => {
     };
   };
 
-  const saveDraft = () => {
-    try {
-      localStorage.setItem('questionDraft', JSON.stringify(formData));
-      setDraftSaved(true);
-      setTimeout(() => setDraftSaved(false), 2000);
-    } catch (err) {
-      console.error('Failed to save draft:', err);
-    }
-  };
+  const handleClearAll = () => {
+    const hasContent =
+      formData.examId ||
+      formData.questionText.trim() ||
+      formData.explanation.trim() ||
+      formData.options.some((opt) => opt.text.trim());
 
-  const clearDraft = () => {
-    localStorage.removeItem('questionDraft');
-    setDraftSaved(false);
+    if (hasContent && !window.confirm('Clear all fields? Unsaved changes will be lost.')) {
+      return;
+    }
+
+    setFormData({
+      ...EMPTY_FORM,
+      options: EMPTY_FORM.options.map((opt) => ({ ...opt })),
+    });
+    setDraftQuestionId(null);
+    setSelectedExam(null);
+    setSelectedSubject(null);
+    setError('');
+    setSuccess('');
+    setValidationErrors({});
   };
 
   const handleToggleLaTeX = (enabled) => {
@@ -365,6 +351,8 @@ const Create = () => {
         questionType: formData.questionType,
         source: formData.source,
         examId: formData.examId,
+        subjectId: formData.subjectId || undefined,
+        chapterId: formData.chapterId || undefined,
         status: 'Pending',
         options: validOptions.map(opt => ({
           optionText: opt.text.trim(),
@@ -382,31 +370,19 @@ const Create = () => {
       
       // Clear form and draft
       const resetForm = {
-        examId: '',
-        subjectId: '',
-        chapterId: '',
-        topicMode: 'existing',
-        topicId: '',
-        newTopicName: '',
-        newTopicDescription: '',
-        questionText: '',
-        difficulty: 'Medium',
-        explanation: '',
-        questionType: 'Single Correct',
-        source: 'Self',
-        options: [
-          { text: '', isCorrect: false },
-          { text: '', isCorrect: false },
-        ],
+        ...EMPTY_FORM,
+        options: EMPTY_FORM.options.map((opt) => ({ ...opt })),
       };
       setFormData(resetForm);
-      clearDraft();
       setDraftQuestionId(null);
       setSelectedExam(null);
       setSelectedSubject(null);
       setValidationErrors({});
     } catch (err) {
       setError(err.message || 'Failed to create question');
+      if (err.code === 'DUPLICATE_QUESTION') {
+        setValidationErrors({ questionText: 'This question already exists in the selected context' });
+      }
     } finally {
       setLoading(false);
     }
@@ -428,7 +404,6 @@ const Create = () => {
         const response = await questionAPI.createQuestion(questionData);
         setDraftQuestionId(response.question?.QuestionID || null);
       }
-      saveDraft();
       setSuccess('Draft saved');
     } catch (err) {
       setError(err.message || 'Failed to save draft');
@@ -451,12 +426,23 @@ const Create = () => {
   return (
     <div className="create-page">
       <div className="page-header">
-        <h1>Create MCQ</h1>
-        <p className="page-subtitle">
-          {isOrganizationExpert 
-            ? "Create a new multiple choice question for your organization's question bank"
-            : "Create a new multiple choice question for the platform question bank"}
-        </p>
+        <div className="page-header__text">
+          <h1>Create MCQ</h1>
+          <p className="page-subtitle">
+            {isOrganizationExpert 
+              ? "Create a new multiple choice question for your organization's question bank"
+              : "Create a new multiple choice question for the platform question bank"}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn-secondary btn-clear"
+          onClick={handleClearAll}
+          disabled={loading || savingDraft}
+        >
+          <RotateCcw size={16} />
+          <span>Clear all</span>
+        </button>
       </div>
 
       {/* Subscription Status Banner for Organization Subject Experts */}
@@ -502,21 +488,14 @@ const Create = () => {
         </>
       )}
 
-      {draftSaved && (
-        <div className="draft-indicator">
-          <CheckCircle2 size={16} />
-          <span>Draft auto-saved</span>
-        </div>
-      )}
-
-      <form className="question-form" onSubmit={handleSubmit} style={{ 
+      <form className="question-form" onSubmit={handleSubmit} style={{
         opacity: isOrganizationExpert && !hasActiveSubscription ? 0.6 : 1,
         pointerEvents: isOrganizationExpert && !hasActiveSubscription ? 'none' : 'auto'
       }}>
-        <div className="form-section">
+        <div className="form-section form-section--context">
           <h2>Question Context</h2>
 
-          <div className="form-row">
+          <div className="form-row form-row--three">
             <label>
               <span>Exam *</span>
               <select
@@ -524,7 +503,7 @@ const Create = () => {
                 onChange={(e) => handleChange('examId', e.target.value)}
                 required
                 disabled={loadingExams}
-                className={validationErrors.examId ? 'error' : ''}
+                className={`select-field--tall ${validationErrors.examId ? 'error' : ''}`}
               >
                 <option value="">Select an exam</option>
                 {examsList.map((exam) => (
@@ -545,7 +524,7 @@ const Create = () => {
                 onChange={(e) => handleChange('subjectId', e.target.value)}
                 required
                 disabled={!formData.examId || loadingExams}
-                className={validationErrors.subjectId ? 'error' : ''}
+                className={`select-field--tall ${validationErrors.subjectId ? 'error' : ''}`}
               >
                 <option value="">Select a subject</option>
                 {selectedExamData?.subjects?.map((subject) => (
@@ -565,6 +544,7 @@ const Create = () => {
                 value={formData.chapterId}
                 onChange={(e) => handleChange('chapterId', e.target.value)}
                 disabled={!formData.subjectId || loadingExams}
+                className="select-field--tall"
               >
                 <option value="">No chapter / Any</option>
                 {selectedSubjectData?.chapters?.map((ch) => (
@@ -576,58 +556,58 @@ const Create = () => {
             </label>
           </div>
 
-          <label>
-            <span>Topic</span>
-            <select
-              value={formData.topicMode}
-              onChange={(e) => handleChange('topicMode', e.target.value)}
-              disabled={!formData.subjectId || loadingExams}
-              className={validationErrors.topicMode ? 'error' : ''}
-            >
-              <option value="existing">Select from existing</option>
-              <option value="null">No Topic (NULL)</option>
-              <option value="new">Create New Topic</option>
-            </select>
-            {validationErrors.topicMode && (
-              <span className="field-error">{validationErrors.topicMode}</span>
-            )}
-          </label>
-
-          {formData.topicMode === 'existing' && (
+          <div className="form-row form-row--two">
             <label>
-              <span>Select Topic *</span>
+              <span>Topic</span>
               <select
-                value={formData.topicId}
-                onChange={(e) => handleChange('topicId', e.target.value)}
-                required={formData.topicMode === 'existing'}
+                value={formData.topicMode}
+                onChange={(e) => handleChange('topicMode', e.target.value)}
                 disabled={!formData.subjectId || loadingExams}
-                className={validationErrors.topicId ? 'error' : ''}
+                className={`select-field--tall ${validationErrors.topicMode ? 'error' : ''}`}
               >
-                <option value="">Select a topic</option>
-                {(formData.chapterId
-                  ? selectedSubjectData?.topics?.filter((t) => (t.ChapterID || t.Chapters?.ChapterID) === formData.chapterId)
-                  : selectedSubjectData?.topics
-                )?.map((topic) => {
-                  const ch = topic.Chapters;
-                  const chapter = ch && (Array.isArray(ch) ? ch[0] : ch);
-                  const chapterLabel = chapter
-                    ? [chapter.ChapterNumber != null ? `Ch. ${chapter.ChapterNumber}` : '', chapter.ChapterName].filter(Boolean).join(': ') || ''
-                    : '';
-                  return (
-                    <option key={topic.TopicID} value={topic.TopicID}>
-                      {topic.TopicName}{chapterLabel ? ` (${chapterLabel})` : ''}
-                    </option>
-                  );
-                })}
+                <option value="existing">Select from existing</option>
+                <option value="null">No Topic (NULL)</option>
+                <option value="new">Create New Topic</option>
               </select>
-              {validationErrors.topicId && (
-                <span className="field-error">{validationErrors.topicId}</span>
+              {validationErrors.topicMode && (
+                <span className="field-error">{validationErrors.topicMode}</span>
               )}
             </label>
-          )}
 
-          {formData.topicMode === 'new' && (
-            <>
+            {formData.topicMode === 'existing' && (
+              <label>
+                <span>Select Topic *</span>
+                <select
+                  value={formData.topicId}
+                  onChange={(e) => handleChange('topicId', e.target.value)}
+                  required={formData.topicMode === 'existing'}
+                  disabled={!formData.subjectId || loadingExams}
+                  className={`select-field--tall ${validationErrors.topicId ? 'error' : ''}`}
+                >
+                  <option value="">Select a topic</option>
+                  {(formData.chapterId
+                    ? selectedSubjectData?.topics?.filter((t) => (t.ChapterID || t.Chapters?.ChapterID) === formData.chapterId)
+                    : selectedSubjectData?.topics
+                  )?.map((topic) => {
+                    const ch = topic.Chapters;
+                    const chapter = ch && (Array.isArray(ch) ? ch[0] : ch);
+                    const chapterLabel = chapter
+                      ? [chapter.ChapterNumber != null ? `Ch. ${chapter.ChapterNumber}` : '', chapter.ChapterName].filter(Boolean).join(': ') || ''
+                      : '';
+                    return (
+                      <option key={topic.TopicID} value={topic.TopicID}>
+                        {topic.TopicName}{chapterLabel ? ` (${chapterLabel})` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+                {validationErrors.topicId && (
+                  <span className="field-error">{validationErrors.topicId}</span>
+                )}
+              </label>
+            )}
+
+            {formData.topicMode === 'new' && (
               <label>
                 <span>New Topic Name *</span>
                 <input
@@ -642,22 +622,25 @@ const Create = () => {
                   <span className="field-error">{validationErrors.newTopicName}</span>
                 )}
               </label>
-              <label>
-                <span>Topic Description (Optional)</span>
-                <textarea
-                  value={formData.newTopicDescription}
-                  onChange={(e) => handleChange('newTopicDescription', e.target.value)}
-                  placeholder="Enter topic description..."
-                  rows={2}
-                />
-              </label>
-            </>
-          )}
+            )}
 
-          {formData.topicMode === 'null' && (
-            <div className="field-hint">
-              <span className="warning">No topic will be assigned to this question</span>
-            </div>
+            {formData.topicMode === 'null' && (
+              <div className="form-row__hint">
+                <span className="warning">No topic will be assigned to this question</span>
+              </div>
+            )}
+          </div>
+
+          {formData.topicMode === 'new' && (
+            <label className="form-field--full">
+              <span>Topic Description (Optional)</span>
+              <textarea
+                value={formData.newTopicDescription}
+                onChange={(e) => handleChange('newTopicDescription', e.target.value)}
+                placeholder="Enter topic description..."
+                rows={2}
+              />
+            </label>
           )}
         </div>
 
@@ -677,7 +660,7 @@ const Create = () => {
               onChange={(value) => handleChange('questionText', value)}
               placeholder={latexEnabled ? "Enter your question here... Use the Math button to insert mathematical expressions" : "Enter your question here... (Minimum 10 characters)"}
               label="Question Text *"
-              rows={4}
+              rows={3}
               showPreview={latexEnabled}
               enableLaTeX={latexEnabled}
               onToggleLaTeX={handleToggleLaTeX}
@@ -695,7 +678,7 @@ const Create = () => {
             )}
           </div>
 
-          <div className="form-row">
+          <div className="form-row form-row--three">
             <label>
               <span>Difficulty Level *</span>
               <select
@@ -731,9 +714,7 @@ const Create = () => {
                 <option value="Multiple Correct">Multiple Correct</option>
               </select>
             </label>
-          </div>
 
-          <div className="form-row">
             <label>
               <span>Source</span>
               <select
@@ -765,18 +746,7 @@ const Create = () => {
         </div>
 
         <div className="form-section">
-          <div className="section-header">
-            <h2>Answer Options</h2>
-            <button
-              type="button"
-              className="btn-add-option"
-              onClick={addOption}
-              disabled={formData.options.length >= 6}
-            >
-              <Plus size={18} />
-              <span>Add Option</span>
-            </button>
-          </div>
+          <h2>Answer Options</h2>
 
           {validationErrors.options && (
             <div className="notice error">
@@ -841,6 +811,18 @@ const Create = () => {
                 </div>
               );
             })}
+            <button
+              type="button"
+              className="btn-add-option btn-add-option--inline"
+              onClick={addOption}
+              disabled={formData.options.length >= 6}
+            >
+              <Plus size={18} />
+              <span>Add Option</span>
+              {formData.options.length >= 6 && (
+                <span className="btn-add-option__hint">(maximum 6)</span>
+              )}
+            </button>
           </div>
 
           <div className="options-summary">

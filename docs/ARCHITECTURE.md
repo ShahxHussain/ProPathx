@@ -142,6 +142,7 @@ Client handoff phases **A–G are complete**. Optional follow-ups:
 | ---------------------------------------------------- | ---------------------------------------------- |
 | [API_OVERVIEW.md](./API_OVERVIEW.md)                 | API prefixes, auth, admin sub-routes           |
 | [DEPLOYMENT.md](./DEPLOYMENT.md)                     | Local dev, env vars, SQL order, prod checklist |
+| [QUERY_OPTIMIZATION.md](./QUERY_OPTIMIZATION.md)     | Bulk queries, list+modal data-loading pattern  |
 | [IMPROVEMENTS_TRACKER.md](./IMPROVEMENTS_TRACKER.md) | Refactor status and phases                     |
 | [../tech.md](../tech.md)                             | Stack summary                                  |
 | [../backend/README.md](../backend/README.md)         | Backend setup and sample endpoints             |

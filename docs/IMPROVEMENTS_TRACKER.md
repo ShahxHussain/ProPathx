@@ -114,6 +114,8 @@ Update this file when you finish or start work — do not refactor the whole rep
 | Org subscription plans UI refresh | **Done** | `pages/org/SubscriptionPlans.jsx` | Stats, filters, cards |
 | Org enrollment settings | **Done** | `orgSettings` + Settings page | |
 | SuperAdmin Create Organization / Platform User forms | **Done** | Admin pages | |
+| Subject Expert My Questions — query optimization (view/edit) | **Done** | `questions.js` + `expert/Questions.jsx` | See `docs/QUERY_OPTIMIZATION.md` |
+| Query optimization rollout (Admin, Org, Reviewer, Student) | **Planned** | Backend + frontend | Apply pattern from `QUERY_OPTIMIZATION.md` |
 
 ---
 
@@ -129,6 +131,7 @@ Update this file when you finish or start work — do not refactor the whole rep
 | **`docs/ARCHITECTURE.md`** | **Done** | Phase E — 2026-05-21 |
 | **`docs/API_OVERVIEW.md`** | **Done** | Phase E — endpoint map + admin sub-routes |
 | **`docs/DEPLOYMENT.md`** | **Done** | Phase E — local + prod checklist |
+| **`docs/QUERY_OPTIMIZATION.md`** | **Done** | Bulk queries, embed children, prefetch — expert Questions reference |
 | Profile feature doc (user-facing) | **Planned** | Low |
 | Architecture diagram (React → Express → DB) | **Done** | In `ARCHITECTURE.md` (mermaid) |
 

@@ -10,6 +10,10 @@ import {
   countQuestionsByStatus,
   parseStatusFilterInput,
 } from '../../utils/questionStatus.js';
+import {
+  findDuplicateQuestion,
+  duplicateQuestionErrorMessage,
+} from '../../utils/questionDuplicate.js';
 
 const router = express.Router();
 
@@ -44,6 +48,88 @@ async function checkQuestionAccess(question, userId, orgId, actorType) {
   return { hasAccess: false, reason: 'Invalid user type' };
 }
 
+function formatQuestionRow(q) {
+  const ch = q.Topics?.Chapters;
+  const chapter = ch && (Array.isArray(ch) ? ch[0] : ch);
+  const options = (q.Options || [])
+    .slice()
+    .sort((a, b) => (a.OptionNumber ?? 0) - (b.OptionNumber ?? 0));
+  const { Options, ...rest } = q;
+
+  return {
+    ...rest,
+    options,
+    ExamName: q.Topics?.Subjects?.Exams?.ExamName,
+    SubjectName: q.Topics?.Subjects?.SubjectName,
+    TopicName: q.Topics?.TopicName,
+    ChapterID: q.Topics?.ChapterID ?? rest.ChapterID,
+    ChapterNumber: chapter?.ChapterNumber,
+    ChapterName: chapter?.ChapterName,
+  };
+}
+
+async function buildExamsTree(exams) {
+  if (!exams?.length) return [];
+
+  const examIds = exams.map((e) => e.ExamID);
+  const { data: subjects, error: subjectsError } = await supabase
+    .from('Subjects')
+    .select('SubjectID, SubjectName, Description, Weightage, ExamID')
+    .in('ExamID', examIds)
+    .order('SubjectName', { ascending: true });
+
+  if (subjectsError) {
+    return exams.map((exam) => ({ ...exam, subjects: [] }));
+  }
+
+  const subjectIds = (subjects || []).map((s) => s.SubjectID);
+  if (!subjectIds.length) {
+    return exams.map((exam) => ({ ...exam, subjects: [] }));
+  }
+
+  const [{ data: chapters }, { data: topics }] = await Promise.all([
+    supabase
+      .from('Chapters')
+      .select('ChapterID, ChapterNumber, ChapterName, SubjectID')
+      .in('SubjectID', subjectIds)
+      .order('ChapterNumber', { ascending: true }),
+    supabase
+      .from('Topics')
+      .select(
+        'TopicID, TopicName, Description, SubjectID, ChapterID, Chapters(ChapterID, ChapterNumber, ChapterName)'
+      )
+      .in('SubjectID', subjectIds)
+      .order('TopicName', { ascending: true }),
+  ]);
+
+  const subjectsByExam = new Map();
+  for (const subject of subjects || []) {
+    if (!subjectsByExam.has(subject.ExamID)) subjectsByExam.set(subject.ExamID, []);
+    subjectsByExam.get(subject.ExamID).push(subject);
+  }
+
+  const chaptersBySubject = new Map();
+  for (const chapter of chapters || []) {
+    if (!chaptersBySubject.has(chapter.SubjectID)) chaptersBySubject.set(chapter.SubjectID, []);
+    chaptersBySubject.get(chapter.SubjectID).push(chapter);
+  }
+
+  const topicsBySubject = new Map();
+  for (const topic of topics || []) {
+    if (!topicsBySubject.has(topic.SubjectID)) topicsBySubject.set(topic.SubjectID, []);
+    topicsBySubject.get(topic.SubjectID).push(topic);
+  }
+
+  return exams.map((exam) => ({
+    ...exam,
+    subjects: (subjectsByExam.get(exam.ExamID) || []).map((subject) => ({
+      ...subject,
+      chapters: chaptersBySubject.get(subject.SubjectID) || [],
+      topics: topicsBySubject.get(subject.SubjectID) || [],
+    })),
+  }));
+}
+
 /**
  * GET /api/questions
  * Get all questions for the logged-in Subject Expert
@@ -65,6 +151,8 @@ router.get(
           Topics(
             TopicID,
             TopicName,
+            ChapterID,
+            Chapters(ChapterID, ChapterNumber, ChapterName),
             Subjects(
               SubjectID,
               SubjectName,
@@ -73,7 +161,8 @@ router.get(
                 ExamName
               )
             )
-          )
+          ),
+          Options(OptionID, OptionText, IsCorrect, OptionNumber)
         `)
         .order('CreatedAt', { ascending: false });
 
@@ -92,13 +181,7 @@ router.get(
         return res.status(500).json({ error: 'Failed to fetch questions', details: error.message });
       }
 
-      // Format the response to include exam/subject/topic info
-      let formattedQuestions = (questions || []).map((q) => ({
-        ...q,
-        ExamName: q.Topics?.Subjects?.Exams?.ExamName,
-        SubjectName: q.Topics?.Subjects?.SubjectName,
-        TopicName: q.Topics?.TopicName,
-      }));
+      const formattedQuestions = (questions || []).map(formatQuestionRow);
 
       res.json({ questions: formattedQuestions });
     } catch (error) {
@@ -125,11 +208,11 @@ router.get(
     try {
       let examsQuery;
       let availableExamIds = null;
+      let subscriptionValidation = null;
 
       // For Organization Subject Expert: Filter by subscription
       if (actorType === 'OrgUser' && orgId) {
-        // Validate subscription and get available exam IDs
-        const subscriptionValidation = await validateSubscriptionForQuestionCreation(orgId);
+        subscriptionValidation = await validateSubscriptionForQuestionCreation(orgId);
 
         if (!subscriptionValidation.valid) {
           return res.json({
@@ -174,54 +257,14 @@ router.get(
         return res.status(500).json({ error: 'Failed to fetch exams', details: examsError.message });
       }
 
-      const examsWithDetails = await Promise.all(
-        (exams || []).map(async (exam) => {
-          const { data: subjects, error: subjectsError } = await supabase
-            .from('Subjects')
-            .select('SubjectID, SubjectName, Description, Weightage, ExamID')
-            .eq('ExamID', exam.ExamID)
-            .order('SubjectName', { ascending: true });
-
-          if (subjectsError) {
-            return { ...exam, subjects: [] };
-          }
-
-          const subjectsWithTopics = await Promise.all(
-            (subjects || []).map(async (subject) => {
-              const { data: chapters } = await supabase
-                .from('Chapters')
-                .select('ChapterID, ChapterNumber, ChapterName, SubjectID')
-                .eq('SubjectID', subject.SubjectID)
-                .order('ChapterNumber', { ascending: true });
-
-              const { data: topics, error: topicsError } = await supabase
-                .from('Topics')
-                .select('TopicID, TopicName, Description, SubjectID, ChapterID, Chapters(ChapterID, ChapterNumber, ChapterName)')
-                .eq('SubjectID', subject.SubjectID)
-                .order('TopicName', { ascending: true });
-
-              return {
-                ...subject,
-                chapters: chapters || [],
-                topics: topics || [],
-              };
-            })
-          );
-
-          return {
-            ...exam,
-            subjects: subjectsWithTopics,
-          };
-        })
-      );
+      const examsWithDetails = await buildExamsTree(exams || []);
 
       const response = { exams: examsWithDetails };
 
       if (actorType === 'OrgUser' && orgId) {
-        const subscriptionValidation = await validateSubscriptionForQuestionCreation(orgId);
         response.subscriptionStatus = {
-          hasActiveSubscription: subscriptionValidation.valid,
-          message: subscriptionValidation.valid ? null : subscriptionValidation.message
+          hasActiveSubscription: subscriptionValidation?.valid ?? true,
+          message: subscriptionValidation?.valid ? null : subscriptionValidation?.message
         };
       }
 
@@ -382,20 +425,21 @@ router.get(
         .from('Questions')
         .select(`
           *,
-          Topics!inner(
+          Topics(
             TopicID,
             TopicName,
             ChapterID,
             Chapters(ChapterID, ChapterNumber, ChapterName),
-            Subjects!inner(
+            Subjects(
               SubjectID,
               SubjectName,
-              Exams!inner(
+              Exams(
                 ExamID,
                 ExamName
               )
             )
-          )
+          ),
+          Options(OptionID, OptionText, IsCorrect, OptionNumber)
         `)
         .eq('QuestionID', questionId)
         .single();
@@ -411,30 +455,11 @@ router.get(
         return res.status(403).json({ error: accessCheck.reason || 'Access denied' });
       }
 
-      // Get options
-      const { data: options, error: optionsError } = await supabase
-        .from('Options')
-        .select('*')
-        .eq('QuestionID', questionId)
-        .order('OptionNumber', { ascending: true });
+      const formattedQuestion = formatQuestionRow(question);
 
-      if (optionsError) {
-        return res.status(500).json({ error: 'Failed to fetch options', details: optionsError.message });
-      }
-
-      const ch = question.Topics?.Chapters;
-      const chapter = ch && (Array.isArray(ch) ? ch[0] : ch);
       res.json({
-        question: {
-          ...question,
-          ExamName: question.Topics?.Subjects?.Exams?.ExamName,
-          SubjectName: question.Topics?.Subjects?.SubjectName,
-          TopicName: question.Topics?.TopicName,
-          ChapterID: question.Topics?.ChapterID,
-          ChapterNumber: chapter?.ChapterNumber,
-          ChapterName: chapter?.ChapterName,
-        },
-        options: options || [],
+        question: formattedQuestion,
+        options: formattedQuestion.options || [],
       });
     } catch (error) {
       console.error('Get question details error:', error);
@@ -462,6 +487,8 @@ router.post(
       options,
       source,
       examId, // Added to validate exam access for Organization Subject Experts
+      subjectId,
+      chapterId,
       status: statusInput,
     } = req.body;
     const { userId, orgId: userOrgId, actorType } = req.user;
@@ -593,6 +620,32 @@ router.post(
       }
       // If topicId is null, question will be created without a topic
 
+      if (!isDraft) {
+        try {
+          const duplicate = await findDuplicateQuestion(supabase, {
+            questionText: questionText?.trim(),
+            topicId: topicId || null,
+            examId: examId || null,
+            subjectId: subjectId || null,
+            chapterId: chapterId || null,
+            orgId: actorType === 'OrgUser' ? userOrgId : null,
+          });
+          if (duplicate) {
+            return res.status(409).json({
+              error: duplicateQuestionErrorMessage(duplicate),
+              code: 'DUPLICATE_QUESTION',
+              duplicate,
+            });
+          }
+        } catch (dupError) {
+          console.error('Duplicate question check failed:', dupError);
+          return res.status(500).json({
+            error: 'Failed to verify question uniqueness',
+            details: dupError.message,
+          });
+        }
+      }
+
       // Determine question ownership based on expert type
       let finalCreatedBy = null;
       let finalOrgID = null;
@@ -697,6 +750,9 @@ router.put(
       options,
       source,
       status: statusInput,
+      examId,
+      subjectId,
+      chapterId,
     } = req.body;
     const { userId, orgId, actorType } = req.user;
     const ipAddress = getClientIP(req);
@@ -750,6 +806,40 @@ router.put(
           if (questionType === 'Single Correct' && correctOptions.length > 1) {
             return res.status(400).json({ error: 'Single Correct questions must have exactly one correct answer' });
           }
+        }
+      }
+
+      const nextTopicId = topicId !== undefined ? topicId : existingQuestion.TopicID;
+      const nextQuestionText =
+        questionText !== undefined ? questionText.trim() : existingQuestion.QuestionText;
+      const willBeDraft =
+        requestedStatus === QUESTION_STATUS.DRAFT ||
+        (existingStatus === QUESTION_STATUS.DRAFT && !requestedStatus);
+
+      if (!willBeDraft && !isDraftSave) {
+        try {
+          const duplicate = await findDuplicateQuestion(supabase, {
+            questionText: nextQuestionText,
+            topicId: nextTopicId || null,
+            examId: examId || null,
+            subjectId: subjectId || null,
+            chapterId: chapterId || null,
+            excludeQuestionId: questionId,
+            orgId: actorType === 'OrgUser' ? orgId : null,
+          });
+          if (duplicate) {
+            return res.status(409).json({
+              error: duplicateQuestionErrorMessage(duplicate),
+              code: 'DUPLICATE_QUESTION',
+              duplicate,
+            });
+          }
+        } catch (dupError) {
+          console.error('Duplicate question check failed:', dupError);
+          return res.status(500).json({
+            error: 'Failed to verify question uniqueness',
+            details: dupError.message,
+          });
         }
       }
 

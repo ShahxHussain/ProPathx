@@ -1,11 +1,21 @@
 .create-page {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 0 16px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
 .page-header {
-  margin-bottom: 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.page-header__text {
+  flex: 1;
+  min-width: 0;
 }
 
 .page-header h1 {
@@ -26,13 +36,87 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 32px;
+  padding: 24px 28px;
   width: 100%;
   box-sizing: border-box;
 }
 
 .form-section {
-  margin-bottom: 32px;
+  margin-bottom: 20px;
+}
+
+.form-section--context {
+  padding: 18px 22px;
+  margin-left: 0;
+  margin-right: 0;
+  background: color-mix(in srgb, var(--background) 65%, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.form-section--context h2 {
+  margin-bottom: 14px;
+}
+
+.form-row--three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.form-row--two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.form-row--three:last-child,
+.form-row--two:last-child {
+  margin-bottom: 0;
+}
+
+.form-field--full {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.form-row__hint {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 4px;
+  font-size: 13px;
+}
+
+.form-row__hint .warning {
+  color: #f59e0b;
+}
+
+@media (max-width: 900px) {
+  .form-row--three,
+  .form-row--two {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .form-section--context {
+    padding: 16px;
+  }
+}
+
+.select-field--tall {
+  min-height: 2.75rem;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.form-section--context label {
+  gap: 10px;
 }
 
 .form-section:last-of-type {
@@ -40,10 +124,10 @@
 }
 
 .form-section h2 {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text);
-  margin: 0 0 20px 0;
+  margin: 0 0 14px 0;
 }
 
 .form-row {
@@ -134,10 +218,34 @@ textarea {
   transition: all 0.2s ease;
 }
 
-.btn-add-option:hover {
+.btn-add-option:hover:not(:disabled) {
   background: #8b5cf6;
   color: var(--surface);
   border-color: #8b5cf6;
+}
+
+.btn-add-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-add-option--inline {
+  width: 100%;
+  justify-content: center;
+  min-height: 48px;
+  margin-top: 4px;
+  border-style: dashed;
+  background: color-mix(in srgb, var(--background) 80%, var(--surface));
+}
+
+.btn-add-option--inline:hover:not(:disabled) {
+  border-style: solid;
+}
+
+.btn-add-option__hint {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.85;
 }
 
 .option-item {
@@ -224,11 +332,16 @@ textarea {
 .form-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 12px;
-  margin-top: 32px;
-  padding-top: 24px;
+  margin-top: 20px;
+  padding-top: 18px;
   border-top: 1px solid var(--border);
   flex-wrap: wrap;
+}
+
+.page-header .btn-clear {
+  flex-shrink: 0;
 }
 
 @media (max-width: 768px) {
@@ -237,6 +350,15 @@ textarea {
     gap: 10px;
     margin-top: 24px;
     padding-top: 20px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-header .btn-clear {
+    width: 100%;
   }
 }
 
@@ -286,18 +408,6 @@ textarea {
 
 .btn-secondary:hover {
   background: var(--background);
-}
-
-.draft-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: rgba(20, 184, 166, 0.1);
-  color: var(--accent);
-  border-radius: 8px;
-  font-size: 13px;
-  margin-bottom: 16px;
 }
 
 .subscription-banner {
@@ -600,11 +710,6 @@ textarea.error {
     align-self: flex-start;
   }
 
-  .draft-indicator {
-    padding: 10px 12px;
-    font-size: 12px;
-  }
-
   label span {
     font-size: 14px;
   }
@@ -673,29 +778,22 @@ textarea.error {
   }
 }
 
-/* Desktop Enhancements */
-@media (min-width: 1024px) {
-  .create-page {
-    max-width: 1000px;
-  }
+.dashboard-layout.expert-portal .dashboard-content:has(.create-page) {
+  padding-left: 20px;
+  padding-right: 16px;
+}
 
+@media (min-width: 1024px) {
   .question-form {
-    padding: 40px;
+    padding: 22px 26px;
   }
 
   .form-row {
-    gap: 20px;
+    gap: 16px;
   }
 
   .option-content {
     gap: 16px;
-  }
-}
-
-/* Large Desktop */
-@media (min-width: 1440px) {
-  .create-page {
-    max-width: 1100px;
   }
 }
 

@@ -41,9 +41,12 @@ const Questions = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [error, setError] = useState('');
+  const [examsList, setExamsList] = useState([]);
+  const [examsListLoading, setExamsListLoading] = useState(true);
 
   useEffect(() => {
     loadQuestions();
+    loadExamsList();
   }, []);
 
   // Auto-dismiss error messages after 5 seconds
@@ -97,24 +100,26 @@ const Questions = () => {
     }
   };
 
-  const handleView = async (question) => {
+  const loadExamsList = async () => {
     try {
-      const response = await questionAPI.getQuestionDetails(question.QuestionID);
-      setSelectedQuestion({ ...question, options: response.options || [] });
-      setShowViewModal(true);
+      setExamsListLoading(true);
+      const response = await questionAPI.getExamsList();
+      setExamsList(response.exams || []);
     } catch (err) {
-      setError(err.message || 'Failed to load question details');
+      console.error('Failed to preload exams list:', err);
+    } finally {
+      setExamsListLoading(false);
     }
   };
 
-  const handleEdit = async (question) => {
-    try {
-      const response = await questionAPI.getQuestionDetails(question.QuestionID);
-      setSelectedQuestion({ ...question, options: response.options || [] });
-      setShowEditModal(true);
-    } catch (err) {
-      setError(err.message || 'Failed to load question details');
-    }
+  const handleView = (question) => {
+    setSelectedQuestion(question);
+    setShowViewModal(true);
+  };
+
+  const handleEdit = (question) => {
+    setSelectedQuestion(question);
+    setShowEditModal(true);
   };
 
   const filteredQuestions = questions.filter((q) => {
@@ -368,6 +373,8 @@ const Questions = () => {
       {showEditModal && selectedQuestion && (
         <EditQuestionModal
           question={selectedQuestion}
+          examsList={examsList}
+          examsListLoading={examsListLoading}
           onClose={() => {
             setShowEditModal(false);
             setSelectedQuestion(null);
@@ -482,9 +489,11 @@ const ViewQuestionModal = ({ question, onClose }) => {
 };
 
 // Edit Question Modal Component
-const EditQuestionModal = ({ question, onClose, onSuccess }) => {
-  const [formData, setFormData] = useState({
-    topicId: question.TopicID || '',
+const EditQuestionModal = ({ question, onClose, onSuccess, examsList, examsListLoading }) => {
+  const [formData, setFormData] = useState(() => ({
+    examId: question.Topics?.Subjects?.Exams?.ExamID || '',
+    subjectId: question.Topics?.Subjects?.SubjectID || '',
+    topicId: question.TopicID || question.Topics?.TopicID || '',
     questionText: question.QuestionText || '',
     difficulty: question.DifficultyLevel || 'Medium',
     explanation: question.Explanation || '',
@@ -494,11 +503,9 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
       text: opt.OptionText || '',
       isCorrect: opt.IsCorrect || false,
     })),
-  });
+  }));
 
-  const [examsList, setExamsList] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingExams, setLoadingExams] = useState(true);
+  const [savingAction, setSavingAction] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
@@ -512,21 +519,6 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
     }
   });
 
-  useEffect(() => {
-    loadExamsList();
-    // Find exam and subject from question context
-    if (question.Topics?.Subjects?.Exams?.ExamID) {
-      const examId = question.Topics.Subjects.Exams.ExamID;
-      const subjectId = question.Topics.Subjects.SubjectID;
-      setFormData((prev) => ({
-        ...prev,
-        examId,
-        subjectId,
-      }));
-    }
-  }, []);
-
-  // Auto-dismiss success messages after 4 seconds
   useEffect(() => {
     if (success) {
       const timer = setTimeout(() => {
@@ -546,18 +538,7 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
     }
   }, [error]);
 
-  const loadExamsList = async () => {
-    try {
-      setLoadingExams(true);
-      const response = await questionAPI.getExamsList();
-      setExamsList(response.exams || []);
-    } catch (err) {
-      console.error('Failed to load exams:', err);
-      setError('Failed to load exams list');
-    } finally {
-      setLoadingExams(false);
-    }
-  };
+  const loadingExams = examsListLoading;
 
   const handleToggleLaTeX = (enabled) => {
     setLatexEnabled(enabled);
@@ -656,23 +637,23 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const saveQuestion = async (status, { requireFullValidation = false, action = 'update' } = {}) => {
     setError('');
     setSuccess('');
 
-    const editingDraft = isDraftStatus(question);
-    if (!editingDraft && !validateForm()) {
+    if (requireFullValidation && !validateForm()) {
       setError('Please fix the validation errors before submitting');
       return;
     }
 
-    if (editingDraft && !formData.questionText.trim() && !formData.options.some((opt) => opt.text.trim())) {
-      setError('Add question text or at least one option to save a draft');
-      return;
+    if (status === 'Draft') {
+      if (!formData.questionText.trim() && !formData.options.some((opt) => opt.text.trim())) {
+        setError('Add question text or at least one option to save a draft');
+        return;
+      }
     }
 
-    setLoading(true);
+    setSavingAction(action);
 
     try {
       const validOptions = formData.options.filter((opt) => opt.text.trim());
@@ -684,7 +665,10 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
         explanation: formData.explanation.trim() || null,
         questionType: formData.questionType,
         source: formData.source,
-        status: editingDraft ? 'Draft' : 'Pending',
+        examId: formData.examId || undefined,
+        subjectId: formData.subjectId || undefined,
+        chapterId: formData.chapterId || undefined,
+        status,
         options: validOptions.map((opt) => ({
           optionText: opt.text.trim(),
           isCorrect: opt.isCorrect,
@@ -692,15 +676,35 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
       };
 
       await questionAPI.updateQuestion(question.QuestionID, questionData);
-      setSuccess('Question updated successfully!');
+      setSuccess(
+        status === 'Draft'
+          ? 'Draft updated successfully'
+          : 'Question submitted for review!'
+      );
       setTimeout(() => {
         onSuccess();
       }, 1500);
     } catch (err) {
       setError(err.message || 'Failed to update question');
+      if (err.code === 'DUPLICATE_QUESTION') {
+        setValidationErrors({ questionText: 'This question already exists in the selected context' });
+      }
     } finally {
-      setLoading(false);
+      setSavingAction(null);
     }
+  };
+
+  const editingDraft = isDraftStatus(question);
+
+  const handleUpdate = () => {
+    saveQuestion(editingDraft ? 'Draft' : 'Pending', {
+      requireFullValidation: !editingDraft,
+      action: 'update',
+    });
+  };
+
+  const handleSubmitForReview = () => {
+    saveQuestion('Pending', { requireFullValidation: true, action: 'submit' });
   };
 
   const selectedExamData = examsList.find((e) => e.ExamID === formData.examId);
@@ -712,13 +716,16 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Edit Question</h2>
+          <h2>{editingDraft ? 'Edit Draft' : 'Edit Question'}</h2>
           <button className="modal-close" onClick={onClose}>
             ×
           </button>
         </div>
         <div className="modal-body">
-          <form className="edit-question-form" onSubmit={handleSubmit}>
+          <form
+            className="edit-question-form"
+            onSubmit={(e) => e.preventDefault()}
+          >
             <div className="form-section">
               <h3>Question Context</h3>
               <div className="form-row">
@@ -949,19 +956,59 @@ const EditQuestionModal = ({ question, onClose, onSuccess }) => {
             )}
 
             <div className="modal-footer">
-              <button type="button" className="btn-secondary" onClick={onClose}>
+              <button type="button" className="btn-secondary" onClick={onClose} disabled={!!savingAction}>
                 Cancel
               </button>
-              <button type="submit" className="btn-primary" disabled={loading}>
-                {loading ? (
-                  <>
-                    <Loader2 size={16} className="spinner" />
-                    <span>Updating...</span>
-                  </>
-                ) : (
-                  'Update Question'
-                )}
-              </button>
+              {editingDraft ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleUpdate}
+                    disabled={!!savingAction}
+                  >
+                    {savingAction === 'update' ? (
+                      <>
+                        <Loader2 size={16} className="spinner" />
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      'Update Question'
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleSubmitForReview}
+                    disabled={!!savingAction}
+                  >
+                    {savingAction === 'submit' ? (
+                      <>
+                        <Loader2 size={16} className="spinner" />
+                        <span>Submitting...</span>
+                      </>
+                    ) : (
+                      'Submit for Review'
+                    )}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleUpdate}
+                  disabled={!!savingAction}
+                >
+                  {savingAction === 'update' ? (
+                    <>
+                      <Loader2 size={16} className="spinner" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    'Update Question'
+                  )}
+                </button>
+              )}
             </div>
           </form>
         </div>

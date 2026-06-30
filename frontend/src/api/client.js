@@ -38,6 +38,7 @@ export async function request(endpoint, options = {}) {
       error.status = response.status;
       error.details = data.details || data;
       if (data.code) error.code = data.code;
+      if (data.duplicate) error.duplicate = data.duplicate;
       // Include all error properties for detailed error display
       if (data.errorCode) error.errorCode = data.errorCode;
       if (data.hint) error.hint = data.hint;
