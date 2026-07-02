@@ -16,6 +16,16 @@ const router = express.Router();
 const sortOptions = (options = []) =>
   [...options].sort((a, b) => (a.OptionNumber || 0) - (b.OptionNumber || 0));
 
+/** Resolve Subject Expert identity from a question row (org vs platform). */
+function getExpertCreatorFromQuestion(q) {
+  if (q.OrgID) {
+    if (!q.CreatedByOrgUserID) return null;
+    return { id: String(q.CreatedByOrgUserID), isOrgExpert: true };
+  }
+  if (!q.CreatedBy) return null;
+  return { id: String(q.CreatedBy), isOrgExpert: false };
+}
+
 const formatReviewerQuestion = (q, includeOptions = false) => {
   const ch = q.Topics?.Chapters;
   const chapter = Array.isArray(ch) ? ch[0] : ch;
@@ -531,15 +541,48 @@ router.get(
     const { orgId, actorType } = req.user;
 
     try {
-      // Build query for questions
+      // Organization reviewers: experts within their org only.
+      // Platform reviewers: not scoped to a single org — return empty (use Dashboard / Question Review).
+      if (actorType === 'User') {
+        return res.json({
+          experts: [],
+          summary: {
+            expertCount: 0,
+            totalQuestions: 0,
+            verified: 0,
+            rejected: 0,
+            pending: 0,
+            draft: 0,
+            reviewed: 0,
+            approvalRate: null,
+          },
+          scope: 'platform',
+          message:
+            'Expert Performance tracks Subject Experts in your organization. Platform reviewers can use Dashboard and Question Review for review activity.',
+        });
+      }
+
+      if (actorType !== 'OrgUser' || !orgId) {
+        return res.json({
+          experts: [],
+          summary: {
+            expertCount: 0,
+            totalQuestions: 0,
+            verified: 0,
+            rejected: 0,
+            pending: 0,
+            draft: 0,
+            reviewed: 0,
+            approvalRate: null,
+          },
+          scope: 'unknown',
+        });
+      }
+
       let questionsQuery = supabase
         .from('Questions')
-        .select('QuestionID, CreatedBy, Status, IsVerified, ReviewerComments, CreatedAt, OrgID');
-
-      // Filter by organization if user is OrgUser
-      if (actorType === 'OrgUser' && orgId) {
-        questionsQuery = questionsQuery.eq('OrgID', orgId);
-      }
+        .select('QuestionID, CreatedBy, CreatedByOrgUserID, Status, IsVerified, ReviewerComments, CreatedAt, OrgID')
+        .eq('OrgID', orgId);
 
       const { data: questions, error: questionsError } = await questionsQuery;
 
@@ -547,15 +590,18 @@ router.get(
         return res.status(500).json({ error: 'Failed to fetch questions', details: questionsError.message });
       }
 
-      // Group questions by creator
       const expertStats = {};
       (questions || []).forEach((q) => {
-        const creatorId = q.CreatedBy;
-        if (!creatorId) return;
+        const creator = getExpertCreatorFromQuestion(q);
+        if (!creator) return;
+
+        const { id: creatorId, isOrgExpert } = creator;
+        if (!isOrgExpert) return;
 
         if (!expertStats[creatorId]) {
           expertStats[creatorId] = {
             createdBy: creatorId,
+            isOrgExpert: true,
             totalQuestions: 0,
             approved: 0,
             verified: 0,
@@ -579,67 +625,76 @@ router.get(
         }
       });
 
-      // Get creator details
-      const expertIds = Object.keys(expertStats);
-      const experts = [];
-
-      for (const creatorId of expertIds) {
-        // Try platform users first
-        const { data: platformUser } = await supabase
-          .from('Users')
-          .select('UserID, FullName, Email, Role')
-          .eq('UserID', creatorId)
-          .eq('Role', 'Subject Expert')
-          .single();
-
-        if (platformUser) {
-          const stats = expertStats[creatorId];
-          const approvalRate = stats.totalQuestions > 0
-            ? Math.round((stats.approved / stats.totalQuestions) * 100)
-            : 0;
-
-          experts.push({
-            id: platformUser.UserID,
-            name: platformUser.FullName,
-            email: platformUser.Email,
-            type: 'Platform',
-            ...stats,
-            approvalRate,
-          });
-        } else {
-          // Try org users
-          const { data: orgUser } = await supabase
-            .from('OrgUsers')
-            .select('OrgUserID, FullName, Email, Role, OrgID')
-            .eq('OrgUserID', creatorId)
-            .eq('Role', 'Subject Expert')
-            .single();
-
-          if (orgUser) {
-            // Check organization access for OrgUsers
-            if (actorType === 'OrgUser' && orgId && orgUser.OrgID !== orgId) {
-              continue; // Skip experts from other organizations
-            }
-
-            const stats = expertStats[creatorId];
-            const approvalRate = stats.totalQuestions > 0
-              ? Math.round((stats.approved / stats.totalQuestions) * 100)
-              : 0;
-
-            experts.push({
-              id: orgUser.OrgUserID,
-              name: orgUser.FullName,
-              email: orgUser.Email,
-              type: 'Organization',
-              orgId: orgUser.OrgID,
-              ...stats,
-              approvalRate,
-            });
-          }
-        }
+      const creatorIds = Object.keys(expertStats);
+      if (!creatorIds.length) {
+        return res.json({
+          experts: [],
+          summary: {
+            expertCount: 0,
+            totalQuestions: 0,
+            verified: 0,
+            rejected: 0,
+            pending: 0,
+            draft: 0,
+            reviewed: 0,
+            approvalRate: null,
+          },
+          scope: 'organization',
+        });
       }
 
-      res.json({ experts });
+      const { data: orgExperts, error: orgExpertsError } = await supabase
+        .from('OrgUsers')
+        .select('OrgUserID, FullName, Email, Role, OrgID')
+        .in('OrgUserID', creatorIds)
+        .eq('OrgID', orgId)
+        .eq('Role', 'Subject Expert');
+
+      if (orgExpertsError) {
+        return res.status(500).json({ error: 'Failed to fetch experts', details: orgExpertsError.message });
+      }
+
+      const experts = [];
+
+      for (const row of orgExperts || []) {
+        const id = row.OrgUserID;
+        const stats = expertStats[id];
+        if (!stats) continue;
+
+        const reviewed = stats.verified + stats.rejected;
+        const approvalRate = reviewed > 0 ? Math.round((stats.verified / reviewed) * 100) : null;
+
+        experts.push({
+          id,
+          name: row.FullName,
+          email: row.Email,
+          type: 'Organization',
+          orgId: row.OrgID,
+          ...stats,
+          reviewed,
+          approvalRate,
+        });
+      }
+
+      experts.sort((a, b) => b.totalQuestions - a.totalQuestions);
+
+      const summary = experts.reduce(
+        (acc, e) => {
+          acc.expertCount += 1;
+          acc.totalQuestions += e.totalQuestions;
+          acc.verified += e.verified;
+          acc.rejected += e.rejected;
+          acc.pending += e.pending;
+          acc.draft += e.draft;
+          acc.reviewed += e.reviewed;
+          return acc;
+        },
+        { expertCount: 0, totalQuestions: 0, verified: 0, rejected: 0, pending: 0, draft: 0, reviewed: 0 }
+      );
+      summary.approvalRate =
+        summary.reviewed > 0 ? Math.round((summary.verified / summary.reviewed) * 100) : null;
+
+      res.json({ experts, summary, scope: 'organization' });
     } catch (error) {
       console.error('Get experts performance error:', error);
       res.status(500).json({ error: 'Internal server error', details: error.message });

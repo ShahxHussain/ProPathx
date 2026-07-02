@@ -132,6 +132,7 @@ Update this file when you finish or start work — do not refactor the whole rep
 | **`docs/API_OVERVIEW.md`** | **Done** | Phase E — endpoint map + admin sub-routes |
 | **`docs/DEPLOYMENT.md`** | **Done** | Phase E — local + prod checklist |
 | **`docs/QUERY_OPTIMIZATION.md`** | **Done** | Bulk queries, embed children, prefetch — expert Questions reference |
+| **`docs/BULK_QUESTION_UPLOAD.md`** | **Planned** | Feasibility: CSV/DOCX/LaTeX/PDF bulk MCQ import (not implemented) |
 | Profile feature doc (user-facing) | **Planned** | Low |
 | Architecture diagram (React → Express → DB) | **Done** | In `ARCHITECTURE.md` (mermaid) |
 

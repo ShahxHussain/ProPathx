@@ -37,6 +37,7 @@ const ReviewerLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const user = orgAuth.getCurrentUser();
+  const isOrgReviewer = user?.userType === 'Organization';
 
   const handleLogout = () => {
     orgAuth.logout();
@@ -49,7 +50,9 @@ const ReviewerLayout = () => {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/reviewer/dashboard' },
     { icon: Zap, label: 'Focus Review', path: '/reviewer/focus' },
     { icon: FileCheck, label: 'Question Review', path: '/reviewer/questions' },
-    { icon: Users, label: 'Expert Performance', path: '/reviewer/experts' },
+    ...(isOrgReviewer
+      ? [{ icon: Users, label: 'Expert Performance', path: '/reviewer/experts' }]
+      : []),
     { icon: Bell, label: 'Notifications', path: '/reviewer/notifications' },
   ];
 

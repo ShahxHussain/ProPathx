@@ -20,7 +20,9 @@ export function statusToApiSlug(status) {
   const resolved =
     typeof status === 'string' && Object.values(QUESTION_STATUS).includes(status)
       ? status
-      : resolveQuestionStatus({ Status: status });
+      : typeof status === 'object' && status !== null
+        ? resolveQuestionStatus(status)
+        : resolveQuestionStatus({ Status: status });
   const map = {
     [QUESTION_STATUS.DRAFT]: 'draft',
     [QUESTION_STATUS.PENDING]: 'pending',
