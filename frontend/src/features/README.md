@@ -8,7 +8,7 @@ Domain-oriented modules. Each feature can own **pages**, **routes**, and (over t
 |--------|----------|-------------------------|
 | `auth/` | Login, route guards, first-password welcome | — (migrated) |
 | `profile/` | Cross-portal profile page | re-export at `pages/Profile.jsx` |
-| `org/` | OrgAdmin route tree | org pages (migrate gradually) |
+| `org/` | OrgAdmin route tree + all org screens | `features/org/pages/*` (canonical) |
 | `student/` | Student route tree | student pages |
 | `admin/` | SuperAdmin route tree | admin pages |
 | `reviewer/` | Reviewer route tree | reviewer pages |
@@ -20,7 +20,7 @@ Domain-oriented modules. Each feature can own **pages**, **routes**, and (over t
 2. **Route trees** live in `features/<domain>/routes.jsx` and are composed in `app/AppRoutes.jsx`. Call them as `{OrgFeatureRoutes()}` — not `<OrgFeatureRoutes />` — so React Router receives `<Route>` children directly.
 3. **API calls** use `src/api/*` (not inline fetch).
 4. Keep co-located `.css` next to the page component.
-5. When moving a page, leave a one-line re-export at the old `pages/` path until imports are updated.
+5. OrgAdmin pages live under `features/org/pages/` only — do not add new files under `pages/org/`.
 
 ## Example layout
 

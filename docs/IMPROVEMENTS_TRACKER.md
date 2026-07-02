@@ -80,7 +80,7 @@ Update this file when you finish or start work — do not refactor the whole rep
 | `App.js` routes (~650 lines) | **Done** | **High** | `app/AppRoutes.jsx`, `app/routes/guards.jsx`, `app/AuthPage.jsx` |
 | Empty `hooks/` folder — use or remove | **Planned** | Low | e.g. `useProfile`, `useAuth` |
 | `features/` module layout (auth, org, student, …) | **Done** | Medium | `features/auth`, `profile`, portal `routes.jsx`; pages migrate gradually |
-| Migrate `pages/org/*` → `features/org/pages/*` | **Done** | Medium | Phase F 2026-05-21 — re-exports in `pages/org/` |
+| Migrate `pages/org/*` → `features/org/pages/*` | **Done** | Medium | Phase F 2026-05-21 — legacy `pages/org/` re-exports removed 2026-05-21 |
 | Migrate `pages/student/*`, `admin/*`, etc. | **Planned** | Low | After org pages pilot |
 | Shared UI in `shared/components/` | **Planned** | Low | Avatar, ProfileMenu, NotificationBell — optional v1 |
 | Co-located page CSS (`.jsx` + `.css`) | **Done** | — | Keep this pattern |
@@ -111,7 +111,7 @@ Update this file when you finish or start work — do not refactor the whole rep
 | Last login display + log fallback | **Done** | Profile + `utils/lastLogin.js` | |
 | Mobile header — bell + profile row | **Done** | `DashboardLayout.css` + layouts | All portals |
 | Individual student subscription UI | **Done** | `pages/student/SubscriptionPlans.jsx` | Uses org-plans layout + student theme |
-| Org subscription plans UI refresh | **Done** | `pages/org/SubscriptionPlans.jsx` | Stats, filters, cards |
+| Org subscription plans UI refresh | **Done** | `features/org/pages/SubscriptionPlans.jsx` | Stats, filters, cards |
 | Org enrollment settings | **Done** | `orgSettings` + Settings page | |
 | SuperAdmin Create Organization / Platform User forms | **Done** | Admin pages | |
 | Subject Expert My Questions — query optimization (view/edit) | **Done** | `questions.js` + `expert/Questions.jsx` | See `docs/QUERY_OPTIMIZATION.md` |
@@ -320,7 +320,7 @@ Auth: `Authorization: Bearer <JWT>` on protected routes. Frontend stores token i
 | **C** | Migrate business logic from moved routes into `services/` (tests, profile, org settings) | **Medium** | **Done** | `testsService.js`, `profileService.js` — 2026-05-21 |
 | **D** | Remove root barrels: `routes/admin.js`, `auth.js`, `students.js`, `tests.js` — `index.js` imports folders only | **Low** | **Done** | 2026-05-21 |
 | **E** | Client docs + ops: `ARCHITECTURE.md`, `API_OVERVIEW.md`, `DEPLOYMENT.md`; `db/migrations/`; `.env.example` ×2 | **High** | **Done** | 2026-05-21 |
-| **F** | Frontend: move `pages/org/*` → `features/org/pages/*`; re-export from `pages/org/` | **Medium** | **Done** | 2026-05-21 |
+| **F** | Frontend: move `pages/org/*` → `features/org/pages/*`; remove legacy re-exports | **Medium** | **Done** | 2026-05-21 |
 | **G** | CI (build + API smoke) + minimal integration tests (login, profile GET) | **Medium** | **Done** | `.github/workflows/ci.yml` + `backend/tests/smoke.mjs` — 2026-05-21 |
 
 #### Phase A — file move checklist
