@@ -9,12 +9,6 @@ import './QuestionBank.css';
 const STUDENT_PAGE_LIMIT = 100;
 const ROSTER_ROWS_PER_PAGE = 20;
 
-function truncCell(s, n = 52) {
-  if (s == null || s === '') return '—';
-  const t = String(s);
-  return t.length <= n ? t : `${t.slice(0, n)}…`;
-}
-
 function fmtTsParts(iso) {
   if (!iso) return null;
   try {

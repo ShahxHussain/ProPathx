@@ -6,7 +6,6 @@ import {
   Users,
   LogOut,
   Menu,
-  X,
   ClipboardCheck,
   Bell,
   Zap,

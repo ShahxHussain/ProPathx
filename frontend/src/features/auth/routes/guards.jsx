@@ -76,6 +76,7 @@ export const ProtectedRoute = ({ children, requireSuperAdmin = false, allowedRol
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isOrgAuth = orgAuth.isAuthenticated();

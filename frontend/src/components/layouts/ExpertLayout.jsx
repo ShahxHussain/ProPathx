@@ -7,7 +7,6 @@ import {
   BarChart3,
   LogOut,
   Menu,
-  X,
   GraduationCap,
   Bell,
 } from 'lucide-react';

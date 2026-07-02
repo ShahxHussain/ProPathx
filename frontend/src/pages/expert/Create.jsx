@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, X, Save, AlertCircle, CheckCircle2, Loader2, Info, AlertTriangle, Code, RotateCcw } from 'lucide-react';
-import { questionAPI, examAPI, orgAuth } from '../../services/api';
+import { questionAPI, orgAuth } from '../../services/api';
 import LaTeXEditor from '../../components/LaTeXEditor';
 import './Create.css';
 
@@ -27,8 +27,6 @@ const Create = () => {
   const [formData, setFormData] = useState({ ...EMPTY_FORM, options: [...EMPTY_FORM.options] });
 
   const [examsList, setExamsList] = useState([]);
-  const [selectedExam, setSelectedExam] = useState(null);
-  const [selectedSubject, setSelectedSubject] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadingExams, setLoadingExams] = useState(true);
   const [error, setError] = useState('');
@@ -58,6 +56,7 @@ const Create = () => {
     if (isOrganizationExpert) {
       loadSubscriptionStatus();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOrganizationExpert]);
 
   // Auto-dismiss success messages after 4 seconds
@@ -169,8 +168,6 @@ const Create = () => {
       options: EMPTY_FORM.options.map((opt) => ({ ...opt })),
     });
     setDraftQuestionId(null);
-    setSelectedExam(null);
-    setSelectedSubject(null);
     setError('');
     setSuccess('');
     setValidationErrors({});
@@ -193,16 +190,12 @@ const Create = () => {
         updated.topicId = '';
         updated.newTopicName = '';
         updated.newTopicDescription = '';
-        setSelectedExam(examsList.find(e => e.ExamID === value) || null);
-        setSelectedSubject(null);
       } else if (field === 'subjectId') {
         updated.chapterId = '';
         updated.topicMode = 'existing';
         updated.topicId = '';
         updated.newTopicName = '';
         updated.newTopicDescription = '';
-        const exam = examsList.find(e => e.ExamID === formData.examId);
-        setSelectedSubject(exam?.subjects?.find(s => s.SubjectID === value) || null);
       } else if (field === 'chapterId') {
         updated.topicId = '';
         updated.newTopicName = '';
@@ -375,8 +368,6 @@ const Create = () => {
       };
       setFormData(resetForm);
       setDraftQuestionId(null);
-      setSelectedExam(null);
-      setSelectedSubject(null);
       setValidationErrors({});
     } catch (err) {
       setError(err.message || 'Failed to create question');

@@ -1,5 +1,4 @@
 // Reuse the admin Logs component but with orgDashboard API
-import { useState, useEffect } from 'react';
 import LogsComponent from '../../../pages/admin/Logs';
 import { orgDashboard } from '../../../services/api';
 import '../../../pages/admin/Logs.css';

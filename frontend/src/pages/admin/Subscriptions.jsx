@@ -14,7 +14,6 @@ import {
   FileText,
   Zap,
   TrendingUp,
-  Filter,
 } from 'lucide-react';
 import { adminAPI } from '../../services/api';
 import './Subscriptions.css';
@@ -36,6 +35,7 @@ const Subscriptions = () => {
 
   useEffect(() => {
     loadSubscriptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, entityTypeFilter, pagination.page]);
 
   // Auto-dismiss error messages after 5 seconds

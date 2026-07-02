@@ -11,11 +11,8 @@ import {
   AlertCircle,
   FileText,
   Calendar,
-  Zap
 } from 'lucide-react';
 import { 
-  BarChart, 
-  Bar, 
   LineChart, 
   Line, 
   PieChart, 

@@ -21,7 +21,6 @@ import {
   Settings,
   BookOpen,
   ScrollText,
-  List,
   RefreshCw,
   Search,
   Building2,

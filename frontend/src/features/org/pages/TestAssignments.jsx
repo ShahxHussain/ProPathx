@@ -16,6 +16,7 @@ const TestAssignments = () => {
 
   useEffect(() => {
     loadTests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
   const loadTests = async () => {

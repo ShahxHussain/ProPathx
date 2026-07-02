@@ -50,6 +50,7 @@ const AdminQuestions = () => {
 
   useEffect(() => {
     loadQuestions(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceFilter, statusFilter, searchTerm]);
 
   useEffect(() => {

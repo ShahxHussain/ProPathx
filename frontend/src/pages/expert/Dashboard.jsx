@@ -19,8 +19,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import {
-  BarChart,
-  Bar,
   LineChart,
   Line,
   PieChart,
@@ -34,7 +32,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { questionAPI, orgAuth } from '../../services/api';
-import { statusLabel, statusToApiSlug } from '../../utils/questionStatus';
+import { statusLabel } from '../../utils/questionStatus';
 import './Dashboard.css';
 
 const CHART_GRID = { stroke: '#e2e8f0', strokeDasharray: '4 4' };

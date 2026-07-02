@@ -7,7 +7,6 @@ import {
   Divide,
   X,
   Plus,
-  Minus,
   Equal,
   ChevronDown,
   ChevronUp
@@ -33,7 +32,6 @@ const LaTeXEditor = ({
 }) => {
   const textareaRef = useRef(null);
   const [showLaTeXMenu, setShowLaTeXMenu] = useState(false);
-  const [cursorPosition, setCursorPosition] = useState(0);
   const [latexEnabled, setLatexEnabled] = useState(enableLaTeX !== undefined ? enableLaTeX : false);
 
   // Sync with prop changes
@@ -165,17 +163,11 @@ const LaTeXEditor = ({
       textarea.focus();
       const newPosition = start + text.length;
       textarea.setSelectionRange(newPosition, newPosition);
-      setCursorPosition(newPosition);
     }, 0);
   };
 
   const insertLaTeX = (template) => {
     insertText(`$${template}$`);
-    setShowLaTeXMenu(false);
-  };
-
-  const insertBlockLaTeX = (template) => {
-    insertText(`\n\n$$${template}$$\n\n`);
     setShowLaTeXMenu(false);
   };
 
@@ -202,23 +194,22 @@ const LaTeXEditor = ({
     }, 0);
   };
 
-  const handleKeyDown = (e) => {
-    // Ctrl/Cmd + M to toggle LaTeX menu
-    if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
-      e.preventDefault();
-      setShowLaTeXMenu(!showLaTeXMenu);
-    }
-  };
-
   useEffect(() => {
     const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.addEventListener('keydown', handleKeyDown);
-      return () => {
-        textarea.removeEventListener('keydown', handleKeyDown);
-      };
-    }
-  }, [showLaTeXMenu]);
+    if (!textarea) return undefined;
+
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
+        e.preventDefault();
+        setShowLaTeXMenu((open) => !open);
+      }
+    };
+
+    textarea.addEventListener('keydown', handleKeyDown);
+    return () => {
+      textarea.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const handleToggleLaTeX = () => {
     const newState = !latexEnabled;
@@ -383,10 +374,7 @@ const LaTeXEditor = ({
       <textarea
         ref={textareaRef}
         value={value || ''}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setCursorPosition(e.target.selectionStart);
-        }}
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={rows}
         className={`latex-editor-textarea ${!latexEnabled ? 'simple-mode' : ''}`}

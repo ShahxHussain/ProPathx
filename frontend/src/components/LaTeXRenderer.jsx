@@ -16,7 +16,7 @@ const LaTeXRenderer = ({ text, displayMode = false, className = '' }) => {
   const blockMathRegex = /\$\$([^$]+)\$\$/g;
   const inlineMathRegex = /(?<!\$)\$(?!\$)([^$]+)\$/g;
   const blockMathBracketRegex = /\\\[([^\]]+)\\\]/g;
-  const inlineMathBracketRegex = /\\\(([^\)]+)\\\)/g;
+  const inlineMathBracketRegex = /\\\(([^)]+)\\\)/g;
 
   // Check if text contains any LaTeX
   const hasBlockMath = blockMathRegex.test(text) || blockMathBracketRegex.test(text);
@@ -35,7 +35,6 @@ const LaTeXRenderer = ({ text, displayMode = false, className = '' }) => {
 
   const parts = [];
   let lastIndex = 0;
-  let currentIndex = 0;
 
   // Process block math first (higher priority)
   let match;

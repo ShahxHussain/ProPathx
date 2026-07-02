@@ -65,6 +65,7 @@ const QuestionBank = () => {
 
   useEffect(() => {
     loadQuestions(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, searchTerm, examFilter, dateFrom, dateTo]);
 
   useEffect(() => {

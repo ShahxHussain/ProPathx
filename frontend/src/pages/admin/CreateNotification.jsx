@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Send, AlertCircle, Users, Building2, User, GraduationCap, Globe, CheckCircle2 } from 'lucide-react';
+import { Send, AlertCircle, Globe, CheckCircle2 } from 'lucide-react';
 import { adminAPI, notificationAPI } from '../../services/api';
 import './CreateNotification.css';
 
@@ -22,6 +22,7 @@ const CreateNotification = () => {
 
   useEffect(() => {
     loadOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.targetType]);
 
   const loadOptions = async () => {

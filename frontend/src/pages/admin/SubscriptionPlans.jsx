@@ -99,7 +99,7 @@ const SubscriptionPlans = () => {
   const handleCreatePlan = async (planData) => {
     try {
       setError('');
-      const response = await adminAPI.createSubscriptionPlan(planData);
+      await adminAPI.createSubscriptionPlan(planData);
       setSuccess('Subscription plan created successfully');
       setShowCreateModal(false);
       await loadPlans();
@@ -180,6 +180,7 @@ const SubscriptionPlans = () => {
     if (viewMode === 'overview' && plans.length > 0) {
       loadAllPlanDetails();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode, plans]);
 
   if (loading) {
@@ -604,11 +605,10 @@ const DeleteConfirmModal = ({ plan, onClose, onConfirm }) => {
 const LinkExamsModal = ({ plan, onClose, onSuccess }) => {
   const [exams, setExams] = useState([]);
   const [linkedExams, setLinkedExams] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showLinkForm, setShowLinkForm] = useState(false);
-  const [selectedExam, setSelectedExam] = useState(null);
   const [editingExamLink, setEditingExamLink] = useState(null);
   const [linkData, setLinkData] = useState({
     examId: '',
@@ -623,6 +623,7 @@ const LinkExamsModal = ({ plan, onClose, onSuccess }) => {
   useEffect(() => {
     loadExams();
     loadLinkedExams();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -1071,134 +1072,6 @@ const EditExamLinkModal = ({ plan, link, onClose, onSave }) => {
             </button>
           </div>
         </form>
-      </div>
-    </div>
-  );
-};
-
-// Linked Exam Card Component (kept for potential future use)
-const LinkedExamCard = ({ link, onUpdate, onUnlink }) => {
-  const [editing, setEditing] = useState(false);
-  const [updateData, setUpdateData] = useState({
-    isMandatory: link.IsMandatory || false,
-    maxStudents: link.MaxStudents || '',
-    maxTests: link.MaxTests || '',
-    maxQuestionsPerTest: link.MaxQuestionsPerTest || '',
-    maxTestsPerDay: link.MaxTestsPerDay || '',
-    aiSupport: link.AISupport || false,
-  });
-
-  const handleSave = () => {
-    onUpdate(link.ExamID, updateData);
-    setEditing(false);
-  };
-
-  if (editing) {
-    return (
-      <div className="linked-exam-card editing">
-        <h4>{link.ExamName || 'Unknown Exam'}</h4>
-        <div className="form-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={updateData.isMandatory}
-              onChange={(e) => setUpdateData({ ...updateData, isMandatory: e.target.checked })}
-            />
-            Is Mandatory
-          </label>
-        </div>
-        <div className="form-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={updateData.aiSupport}
-              onChange={(e) => setUpdateData({ ...updateData, aiSupport: e.target.checked })}
-            />
-            AI Support
-          </label>
-        </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label>Max Students</label>
-            <input
-              type="number"
-              min="0"
-              value={updateData.maxStudents}
-              onChange={(e) => setUpdateData({ ...updateData, maxStudents: e.target.value })}
-            />
-          </div>
-          <div className="form-group">
-            <label>Max Tests</label>
-            <input
-              type="number"
-              min="0"
-              value={updateData.maxTests}
-              onChange={(e) => setUpdateData({ ...updateData, maxTests: e.target.value })}
-            />
-          </div>
-        </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label>Max Questions/Test</label>
-            <input
-              type="number"
-              min="0"
-              value={updateData.maxQuestionsPerTest}
-              onChange={(e) => setUpdateData({ ...updateData, maxQuestionsPerTest: e.target.value })}
-            />
-          </div>
-          <div className="form-group">
-            <label>Max Tests/Day</label>
-            <input
-              type="number"
-              min="0"
-              value={updateData.maxTestsPerDay}
-              onChange={(e) => setUpdateData({ ...updateData, maxTestsPerDay: e.target.value })}
-            />
-          </div>
-        </div>
-        <div className="card-actions">
-          <button className="btn-secondary btn-small" onClick={() => setEditing(false)}>
-            Cancel
-          </button>
-          <button className="btn-primary btn-small" onClick={handleSave}>
-            Save
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="linked-exam-card" data-exam-id={link.ExamID}>
-      <div className="card-header">
-        <h4>{link.ExamName || 'Unknown Exam'}</h4>
-      </div>
-      <div className="card-content">
-        <div className="exam-limits">
-          {link.IsMandatory && <span className="badge badge-warning">Mandatory</span>}
-          {link.AISupport && <span className="badge badge-info">AI Support</span>}
-          <div className="limit-item">
-            <strong>Max Students:</strong> {link.MaxStudents || 'Unlimited'}
-          </div>
-          <div className="limit-item">
-            <strong>Max Tests:</strong> {link.MaxTests || 'Unlimited'}
-          </div>
-          <div className="limit-item">
-            <strong>Max Questions/Test:</strong> {link.MaxQuestionsPerTest || 'Unlimited'}
-          </div>
-          <div className="limit-item">
-            <strong>Max Tests/Day:</strong> {link.MaxTestsPerDay || 'Unlimited'}
-          </div>
-        </div>
-      </div>
-      <div className="card-actions">
-        <button className="btn-icon btn-small" onClick={() => setEditing(true)} title="Edit">
-          <Edit2 size={16} />
-        </button>
-        <button className="btn-icon btn-small btn-danger" onClick={() => onUnlink(link.ExamID)} title="Unlink">
-          <Trash2 size={16} />
-        </button>
       </div>
     </div>
   );

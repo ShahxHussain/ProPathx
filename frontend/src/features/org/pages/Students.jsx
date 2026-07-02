@@ -12,7 +12,6 @@ import {
   FileText,
   Edit,
   Trash2,
-  Loader2,
   BookOpen,
   Layers,
   ArrowLeft,
@@ -1022,12 +1021,12 @@ const Students = () => {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
-  const [deletingStudent, setDeletingStudent] = useState(null);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState(null);
 
   useEffect(() => {
     loadStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, searchTerm]);
 
   const loadStudents = async () => {

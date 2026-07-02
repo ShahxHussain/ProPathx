@@ -1,8 +1,7 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FileText,
   Calendar,
-  Filter,
   Search,
   ChevronLeft,
   ChevronRight,
@@ -38,7 +37,7 @@ const Logs = ({ apiService = adminAPI, title = 'System Logs', subtitle = 'View a
   const [dateFilter, setDateFilter] = useState('7days'); // 7days, 1month, 3months, 1year, custom
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [showCalendar, setShowCalendar] = useState(false);
+  const [, setShowCalendar] = useState(false);
   const [actorTypeFilter, setActorTypeFilter] = useState('');
   const [actionTypeFilter, setActionTypeFilter] = useState('');
   const [entityTypeFilter, setEntityTypeFilter] = useState('');
@@ -51,6 +50,7 @@ const Logs = ({ apiService = adminAPI, title = 'System Logs', subtitle = 'View a
 
   useEffect(() => {
     loadLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFilter, startDate, endDate, actorTypeFilter, actionTypeFilter, entityTypeFilter, pagination.page]);
 
   const getDateRange = (filter) => {

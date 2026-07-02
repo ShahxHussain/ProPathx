@@ -6,7 +6,6 @@ import {
   BookMarked,
   LogOut,
   Menu,
-  X,
   GraduationCap,
   Bell,
   Package,

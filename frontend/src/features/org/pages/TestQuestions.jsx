@@ -115,6 +115,7 @@ function TestQuestionsPageInner({ embeddedTestId }) {
 
   useEffect(() => {
     if (selectedTestId) loadAvailable();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTestId, availablePage, bindingType, filters.search, filters.difficulty, filters.approvedOnly, filters.subjectId, filters.topicId, filters.questionType]);
 
   useEffect(() => {

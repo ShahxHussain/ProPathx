@@ -12,8 +12,6 @@ import {
   Menu,
   X,
   Shield,
-  AlertTriangle,
-  TrendingUp,
   UserPlus,
   PlusCircle,
   Bell,

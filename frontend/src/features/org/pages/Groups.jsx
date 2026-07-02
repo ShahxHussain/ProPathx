@@ -124,6 +124,7 @@ const ManageMembersModal = ({ group, onClose, onSuccess }) => {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group?.GroupID]);
 
   const loadData = async () => {
@@ -348,6 +349,7 @@ const Groups = () => {
 
   useEffect(() => {
     loadGroups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, searchTerm]);
 
   const loadGroups = async () => {

@@ -62,6 +62,7 @@ const Questions = () => {
 
   useEffect(() => {
     loadQuestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
   useEffect(() => {
@@ -79,6 +80,7 @@ const Questions = () => {
       }, 4000);
       return () => clearTimeout(timer);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [success]);
 
   const loadQuestions = async () => {

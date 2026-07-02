@@ -142,7 +142,7 @@ const Health = () => {
 
   const snap = payload?.snapshot || {};
   const sli = payload?.sli || {};
-  const series = payload?.series || {};
+  const series = useMemo(() => payload?.series || {}, [payload?.series]);
   const latency = series.latency || [];
   const dbLatency = series.dbLatency || [];
   const resource = useMemo(() => {

@@ -9,7 +9,6 @@ import {
   Search,
   Shield,
   Building2,
-  Filter,
   Edit,
   Trash2,
 } from 'lucide-react';

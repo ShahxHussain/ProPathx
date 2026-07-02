@@ -71,6 +71,7 @@ export default function AssignTestModal({ test, onClose, onSuccess }) {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -142,6 +143,7 @@ export default function AssignTestModal({ test, onClose, onSuccess }) {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [test?.TestID, test?.testId]);
 
   const loadData = async () => {
@@ -722,6 +724,7 @@ export function AssignTestPanelEmbedded({ test, onAssigned, canonicalTestId }) {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

@@ -111,7 +111,7 @@ const TestAttempt = () => {
   const answersRef = useRef({});
   const autoSubmitTriggeredRef = useRef(false);
 
-  const questions = attemptData?.questions || [];
+  const questions = useMemo(() => attemptData?.questions || [], [attemptData?.questions]);
   const totalQuestions = questions.length;
   const currentIndex = visitOrder.length > 0 ? visitOrder[Math.min(orderPos, visitOrder.length - 1)] : 0;
   const currentQuestion = questions[currentIndex] || null;
@@ -132,6 +132,7 @@ const TestAttempt = () => {
     setVisitOrder(qs.map((_, i) => i));
     setOrderPos(0);
     setSkippedIds(new Set());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attemptData?.attempt?.attemptId, attemptData?.questions?.length, testId]);
 
   useEffect(() => {
