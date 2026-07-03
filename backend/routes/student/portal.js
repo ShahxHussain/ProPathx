@@ -10,6 +10,7 @@ import {
   getPlanTestModesMap,
   isPlanModeEnabled,
 } from '../../utils/subscriptionPlanCatalog.js';
+import { processSubscriptionPayment, PAYMENT_METHODS } from '../../utils/paymentGateway.js';
 import {
   getOrgEnrollmentSettings,
   shouldAutoApproveDirectAssign,
@@ -188,7 +189,7 @@ router.post(
   requireStudentActor,
   requireIndividualStudent,
   async (req, res) => {
-  const { planId, autoRenew = false } = req.body || {};
+  const { planId, autoRenew = false, paymentMethod, cardLast4, confirmPayment } = req.body || {};
   const { studentId } = req.user;
   const ipAddress = getClientIP(req);
   const userAgent = getUserAgent(req);
@@ -229,6 +230,22 @@ router.post(
       });
     }
 
+    const planPrice = parseFloat(plan.Price) || 0;
+    if (planPrice > 0) {
+      if (!confirmPayment) {
+        return res.status(400).json({
+          error: 'Payment confirmation required',
+          code: 'PAYMENT_REQUIRED',
+          amount: planPrice,
+          currency: 'PKR',
+          allowedMethods: PAYMENT_METHODS,
+        });
+      }
+      if (!paymentMethod || !PAYMENT_METHODS.includes(paymentMethod)) {
+        return res.status(400).json({ error: 'A valid payment method is required for paid plans' });
+      }
+    }
+
     const startDate = new Date();
     const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + (plan.DurationMonths || 1));
@@ -252,6 +269,27 @@ router.post(
     if (subscriptionError) {
       console.error('Error creating student subscription:', subscriptionError);
       return res.status(500).json({ error: 'Failed to create subscription', details: subscriptionError.message });
+    }
+
+    let paymentResult = null;
+    if (planPrice > 0) {
+      try {
+        paymentResult = await processSubscriptionPayment(supabase, {
+          subscriptionId: newSubscription.SubscriptionID,
+          entityType: 'Student',
+          entityId: studentId,
+          amount: planPrice,
+          paymentMethod,
+          cardLast4: cardLast4 || null,
+        });
+      } catch (payErr) {
+        await supabase.from('Subscriptions').delete().eq('SubscriptionID', newSubscription.SubscriptionID);
+        return res.status(402).json({
+          error: 'Payment processing failed',
+          code: payErr.code || 'PAYMENT_FAILED',
+          details: payErr.message,
+        });
+      }
     }
 
     const { data: planExams, error: planExamsError } = await supabase
@@ -309,6 +347,13 @@ router.post(
         status: newSubscription.Status,
         autoRenew: newSubscription.AutoRenew,
       },
+      payment: paymentResult?.payment
+        ? {
+            paymentId: paymentResult.payment.PaymentID,
+            transactionId: paymentResult.transactionId,
+            amount: planPrice,
+          }
+        : null,
     });
   } catch (error) {
     console.error('Create student subscription error:', error);

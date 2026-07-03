@@ -50,6 +50,7 @@ jobs:
       - name: API smoke (health + auth guard)
         run: npm run test:smoke
         env:
+          # Intentional placeholders — smoke tests auth guards without a live Supabase project.
           JWT_SECRET: ci-jwt-secret-for-github-actions-smoke-tests
           SUPABASE_URL: https://placeholder.supabase.co
           SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ci-placeholder-key

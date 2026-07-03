@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, Save, AlertCircle, CheckCircle2, Loader2, Info, AlertTriangle, Code, RotateCcw } from 'lucide-react';
+import { Plus, X, Save, AlertCircle, CheckCircle2, Loader2, Info, AlertTriangle, Code, RotateCcw, Upload, PenLine } from 'lucide-react';
 import { questionAPI, orgAuth } from '../../services/api';
 import LaTeXEditor from '../../components/LaTeXEditor';
+import BulkQuestionUpload from '../../components/BulkQuestionUpload';
 import './Create.css';
 
 const EMPTY_FORM = {
@@ -36,8 +37,8 @@ const Create = () => {
   const [savingDraft, setSavingDraft] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [loadingSubscription, setLoadingSubscription] = useState(false);
+  const [entryMode, setEntryMode] = useState('single');
   const [latexEnabled, setLatexEnabled] = useState(() => {
-    // Load LaTeX preference from localStorage, default to false
     try {
       const saved = localStorage.getItem('latexEditorEnabled');
       return saved === 'true';
@@ -424,7 +425,26 @@ const Create = () => {
               ? "Create a new multiple choice question for your organization's question bank"
               : "Create a new multiple choice question for the platform question bank"}
           </p>
+          <div className="create-mode-toggle">
+            <button
+              type="button"
+              className={`create-mode-btn ${entryMode === 'single' ? 'active' : ''}`}
+              onClick={() => setEntryMode('single')}
+            >
+              <PenLine size={16} />
+              Single question
+            </button>
+            <button
+              type="button"
+              className={`create-mode-btn ${entryMode === 'bulk' ? 'active' : ''}`}
+              onClick={() => setEntryMode('bulk')}
+            >
+              <Upload size={16} />
+              Bulk CSV
+            </button>
+          </div>
         </div>
+        {entryMode === 'single' && (
         <button
           type="button"
           className="btn-secondary btn-clear"
@@ -434,6 +454,7 @@ const Create = () => {
           <RotateCcw size={16} />
           <span>Clear all</span>
         </button>
+        )}
       </div>
 
       {/* Subscription Status Banner for Organization Subject Experts */}
@@ -479,6 +500,9 @@ const Create = () => {
         </>
       )}
 
+      {entryMode === 'bulk' ? (
+        <BulkQuestionUpload disabled={isOrganizationExpert && !hasActiveSubscription} />
+      ) : (
       <form className="question-form" onSubmit={handleSubmit} style={{
         opacity: isOrganizationExpert && !hasActiveSubscription ? 0.6 : 1,
         pointerEvents: isOrganizationExpert && !hasActiveSubscription ? 'none' : 'auto'
@@ -860,6 +884,7 @@ const Create = () => {
           </button>
         </div>
       </form>
+      )}
     </div>
   );
 };

@@ -107,6 +107,33 @@ export const questionAPI = {
       }),
     });
   },
+
+  downloadBulkTemplate: async () => {
+    const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(`${API_BASE_URL}/api/questions/bulk/template`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to download template');
+    }
+    return res.blob();
+  },
+
+  parseBulkCsv: async ({ csv, context }) => {
+    return request('/api/questions/bulk/parse', {
+      method: 'POST',
+      body: JSON.stringify({ csv, context }),
+    });
+  },
+
+  commitBulkQuestions: async ({ rows, status, context }) => {
+    return request('/api/questions/bulk/commit', {
+      method: 'POST',
+      body: JSON.stringify({ rows, status, context }),
+    });
+  },
 };
 
 /**

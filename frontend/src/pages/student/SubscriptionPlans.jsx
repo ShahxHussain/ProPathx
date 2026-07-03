@@ -15,6 +15,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { studentDashboardAPI } from '../../services/api';
+import PaymentCheckout from '../../components/PaymentCheckout';
 import '../../features/org/pages/OrgStudentExamEnrollments.css';
 import '../../features/org/pages/SubscriptionPlans.css';
 import './SubscriptionPlans.css';
@@ -308,7 +309,7 @@ const SubscriptionPlans = () => {
       )}
 
       <p className="org-plans-footnote">
-        Online payment checkout is coming soon. Subscribing here activates the plan on your student account immediately.
+        Simulated payment checkout records a completed payment. Free plans activate without a payment step.
       </p>
 
       {selectedPlanForDetails && (
@@ -666,12 +667,18 @@ const SubscribeModal = ({ plan, onClose, onSuccess }) => {
   const [autoRenew, setAutoRenew] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [step, setStep] = useState('review');
+  const planPrice = parseFloat(plan.Price) || 0;
 
-  const handleSubscribe = async () => {
+  const handleSubscribe = async (paymentPayload = {}) => {
     setError('');
     setLoading(true);
     try {
-      await studentDashboardAPI.createSubscription({ planId: plan.PlanID, autoRenew });
+      await studentDashboardAPI.createSubscription({
+        planId: plan.PlanID,
+        autoRenew,
+        ...paymentPayload,
+      });
       if (onSuccess) onSuccess();
       onClose();
     } catch (err) {
@@ -728,14 +735,16 @@ const SubscribeModal = ({ plan, onClose, onSuccess }) => {
             <span>Enable auto-renew</span>
           </label>
 
-          <div className="org-plans-payment-note">
-            <AlertCircle size={16} />
-            <p>
-              <strong>Payment checkout coming soon.</strong> Confirming now activates this plan on your student account.
-            </p>
-          </div>
+          {step === 'payment' && (
+            <PaymentCheckout
+              amount={planPrice}
+              onPay={handleSubscribe}
+              loading={loading}
+              error={error}
+            />
+          )}
 
-          {error && (
+          {step === 'review' && error && (
             <div className="notice error org-plans-modal-error">
               <AlertCircle size={16} />
               {error}
@@ -746,9 +755,21 @@ const SubscribeModal = ({ plan, onClose, onSuccess }) => {
           <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>
             Cancel
           </button>
-          <button type="button" className="btn-primary" onClick={handleSubscribe} disabled={loading}>
-            {loading ? 'Subscribing…' : 'Confirm subscription'}
-          </button>
+          {step === 'review' && (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => (planPrice > 0 ? setStep('payment') : handleSubscribe({ confirmPayment: true }))}
+              disabled={loading}
+            >
+              {planPrice > 0 ? 'Continue to payment' : 'Activate plan'}
+            </button>
+          )}
+          {step === 'payment' && (
+            <button type="button" className="btn-secondary" onClick={() => setStep('review')} disabled={loading}>
+              Back
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -14,6 +14,12 @@ export const adminAPI = {
     });
   },
 
+  getRevenueStats: async (days = '30') => {
+    return request(`/api/admin/revenue/stats?days=${encodeURIComponent(days)}`, {
+      method: 'GET',
+    });
+  },
+
   /**
    * Get system health (status, uptime, series for charts). SuperAdmin only.
    * @returns {Promise<Object>} { status, api, apiLatency, db, dbLatency, uptime, series }

@@ -1,0 +1,334 @@
+.revenue-page {
+  --rv-crimson: #dc2626;
+  --rv-crimson-soft: rgba(220, 38, 38, 0.12);
+  --rv-text: #0b1220;
+  --rv-muted: #64748b;
+  --rv-border: rgba(15, 23, 42, 0.08);
+  --rv-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 0 2rem;
+}
+
+.revenue-header {
+  margin-bottom: 1.75rem;
+}
+
+.revenue-header--row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.revenue-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.revenue-range-select {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.revenue-error {
+  padding: 0.65rem 0.85rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.revenue-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.revenue-kpi {
+  background: #fff;
+  border: 1px solid var(--rv-border);
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: var(--rv-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--rv-crimson);
+}
+
+.revenue-kpi--warn {
+  color: #b45309;
+}
+
+.revenue-kpi-label {
+  font-size: 0.75rem;
+  color: var(--rv-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.revenue-kpi strong {
+  font-size: 1.35rem;
+  color: var(--rv-text);
+}
+
+.revenue-charts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.revenue-chart-card {
+  background: #fff;
+  border: 1px solid var(--rv-border);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  box-shadow: var(--rv-shadow);
+}
+
+.revenue-chart-card--wide {
+  grid-column: 1 / -1;
+}
+
+.revenue-chart-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: var(--rv-text);
+}
+
+.revenue-muted {
+  color: var(--rv-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.revenue-recent {
+  background: #fff;
+  border: 1px solid var(--rv-border);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  box-shadow: var(--rv-shadow);
+  margin-bottom: 1rem;
+}
+
+.revenue-recent-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.revenue-recent h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.revenue-link-inline {
+  font-size: 0.85rem;
+  color: var(--rv-crimson);
+  text-decoration: none;
+}
+
+.revenue-table-wrap {
+  overflow-x: auto;
+}
+
+.revenue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.revenue-table th,
+.revenue-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+}
+
+.revenue-table th {
+  color: var(--rv-muted);
+  font-weight: 600;
+}
+
+.revenue-status {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+}
+
+.revenue-status--completed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.revenue-status--failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.revenue-tx {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--rv-muted);
+}
+
+@media (max-width: 768px) {
+  .revenue-charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.revenue-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rv-crimson);
+}
+
+.revenue-header h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--rv-text);
+}
+
+.revenue-subtitle {
+  margin: 0;
+  color: var(--rv-muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  max-width: 52ch;
+}
+
+.revenue-placeholder {
+  background: #fff;
+  border: 1px solid var(--rv-border);
+  border-radius: 16px;
+  padding: 2rem;
+  text-align: center;
+  box-shadow: var(--rv-shadow);
+  margin-bottom: 1.5rem;
+}
+
+.revenue-placeholder-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: var(--rv-crimson-soft);
+  color: var(--rv-crimson);
+  margin-bottom: 1rem;
+}
+
+.revenue-placeholder h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  color: var(--rv-text);
+}
+
+.revenue-placeholder p {
+  margin: 0 auto;
+  max-width: 48ch;
+  color: var(--rv-muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.revenue-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.revenue-link-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: #fff;
+  border: 1px solid var(--rv-border);
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  box-shadow: var(--rv-shadow);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.revenue-link-card:not(.revenue-link-card--static):hover {
+  border-color: rgba(220, 38, 38, 0.35);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+}
+
+.revenue-link-card--static {
+  opacity: 0.85;
+}
+
+.revenue-link-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+
+.revenue-link-icon--chart {
+  background: rgba(30, 58, 138, 0.1);
+  color: #1e3a8a;
+}
+
+.revenue-link-icon--subs {
+  background: var(--rv-crimson-soft);
+  color: var(--rv-crimson);
+}
+
+.revenue-link-icon--payments {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
+.revenue-link-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.revenue-link-body strong {
+  font-size: 0.95rem;
+  color: var(--rv-text);
+}
+
+.revenue-link-body span:last-child {
+  font-size: 0.85rem;
+  color: var(--rv-muted);
+  line-height: 1.4;
+}
+
+.revenue-link-arrow {
+  flex-shrink: 0;
+  color: var(--rv-muted);
+}
+
+.revenue-link-card:not(.revenue-link-card--static):hover .revenue-link-arrow {
+  color: var(--rv-crimson);
+}

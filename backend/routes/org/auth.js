@@ -24,6 +24,7 @@ import {
   getPublicMaintenanceSettings,
   enrichLogsWithActorNames,
 } from '../auth/helpers.js';
+import { processSubscriptionPayment, PAYMENT_METHODS } from '../../utils/paymentGateway.js';
 import {
   applyStatusFilterToQuery,
   countQuestionsByStatus,
@@ -66,7 +67,7 @@ router.get('/announcements/active', async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch active announcements', details: error.message });
     }
 
-    const effectiveRole = role || null;
+    const effectiveRole = role ? String(role).replace(/\s+/g, '') : null;
 
     const filtered = (data || []).filter((a) => {
       // Time window check (in JS to avoid complex OR chaining)
@@ -79,7 +80,9 @@ router.get('/announcements/active', async (req, res) => {
         return true; // visible to everyone
       }
       if (!effectiveRole) return false;
-      return a.TargetRoles.includes(effectiveRole);
+      return a.TargetRoles.some(
+        (t) => String(t).replace(/\s+/g, '') === effectiveRole
+      );
     });
 
     res.json({ announcements: filtered });
@@ -1347,7 +1350,7 @@ router.get('/subscription-plans', authenticate, requireRole(['OrgAdmin']), verif
  * Create a new subscription for the organization (OrgAdmin only)
  */
 router.post('/subscriptions', authenticate, requireRole(['OrgAdmin']), verifyActiveStatus, async (req, res) => {
-  const { planId, autoRenew = false } = req.body;
+  const { planId, autoRenew = false, paymentMethod, cardLast4, confirmPayment } = req.body;
   const { orgId, orgUserId } = req.user;
   const ipAddress = getClientIP(req);
   const userAgent = getUserAgent(req);
@@ -1380,6 +1383,22 @@ router.post('/subscriptions', authenticate, requireRole(['OrgAdmin']), verifyAct
     }
     if (planAudience !== 'Organization' && planAudience !== 'Both') {
       return res.status(400).json({ error: 'This plan is not available for organizations' });
+    }
+
+    const planPrice = parseFloat(plan.Price) || 0;
+    if (planPrice > 0) {
+      if (!confirmPayment) {
+        return res.status(400).json({
+          error: 'Payment confirmation required',
+          code: 'PAYMENT_REQUIRED',
+          amount: planPrice,
+          currency: 'PKR',
+          allowedMethods: PAYMENT_METHODS,
+        });
+      }
+      if (!paymentMethod || !PAYMENT_METHODS.includes(paymentMethod)) {
+        return res.status(400).json({ error: 'A valid payment method is required for paid plans' });
+      }
     }
 
     // Check if organization already has an active subscription
@@ -1420,6 +1439,27 @@ router.post('/subscriptions', authenticate, requireRole(['OrgAdmin']), verifyAct
     if (subscriptionError) {
       console.error('Error creating subscription:', subscriptionError);
       return res.status(500).json({ error: 'Failed to create subscription', details: subscriptionError.message });
+    }
+
+    let paymentResult = null;
+    if (planPrice > 0) {
+      try {
+        paymentResult = await processSubscriptionPayment(supabase, {
+          subscriptionId: newSubscription.SubscriptionID,
+          entityType: 'Organization',
+          entityId: orgId,
+          amount: planPrice,
+          paymentMethod,
+          cardLast4: cardLast4 || null,
+        });
+      } catch (payErr) {
+        await supabase.from('Subscriptions').delete().eq('SubscriptionID', newSubscription.SubscriptionID);
+        return res.status(402).json({
+          error: 'Payment processing failed',
+          code: payErr.code || 'PAYMENT_FAILED',
+          details: payErr.message,
+        });
+      }
     }
 
     // Get exams linked to this plan
@@ -1500,6 +1540,13 @@ router.post('/subscriptions', authenticate, requireRole(['OrgAdmin']), verifyAct
         status: newSubscription.Status,
         autoRenew: newSubscription.AutoRenew,
       },
+      payment: paymentResult?.payment
+        ? {
+            paymentId: paymentResult.payment.PaymentID,
+            transactionId: paymentResult.transactionId,
+            amount: planPrice,
+          }
+        : null,
     });
   } catch (error) {
     console.error('Create subscription error:', error);

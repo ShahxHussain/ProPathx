@@ -1,0 +1,150 @@
+.bulk-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1rem 0;
+}
+
+.bulk-upload--disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.bulk-upload-intro {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 1rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.bulk-upload-intro p {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.bulk-upload-context h3,
+.bulk-upload-file h3,
+.bulk-preview h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.bulk-context-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.bulk-context-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.bulk-context-grid select {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.bulk-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.bulk-file-label {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.bulk-muted {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.bulk-errors {
+  padding: 0.75rem 1rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: #991b1b;
+  font-size: 0.85rem;
+}
+
+.bulk-errors ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.bulk-preview-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.bulk-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.bulk-preview-table th,
+.bulk-preview-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+}
+
+.bulk-preview-table th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.bulk-commit-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.bulk-success {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #15803d;
+  font-size: 0.9rem;
+}
+
+.bulk-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  background: #fef2f2;
+  border-radius: 8px;
+  color: #b91c1c;
+  font-size: 0.85rem;
+}
+
+.spinner {
+  animation: bulk-spin 0.8s linear infinite;
+}
+
+@keyframes bulk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

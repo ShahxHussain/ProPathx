@@ -16,6 +16,7 @@ import settingsRouter from './settings.js';
 import questionsRouter from './questions.js';
 import logsRouter from './logs.js';
 import subscriptionsRouter from './subscriptions.js';
+import revenueRouter from './revenue.js';
 
 const router = express.Router();
 
@@ -30,5 +31,6 @@ router.use(settingsRouter);
 router.use(questionsRouter);
 router.use(logsRouter);
 router.use(subscriptionsRouter);
+router.use(revenueRouter);
 
 export default router;

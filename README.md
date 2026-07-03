@@ -8,7 +8,7 @@ PostgreSQL (Supabase) · Node.js · Express.js · React.js · RESTful APIs · JW
 
 ---
 
-ProPath is a modern **AI-powered assessment and learning platform** built to help educational institutions, training organizations, certification providers, and independent learners create, deliver, and continuously improve high-quality assessments at scale. Combining intelligent automation with enterprise-grade infrastructure, ProPath transforms the traditional examination process into a personalized, data-driven learning experience.
+ProPath is a multi-tenant SaaS assessment and learning platform that I'm building with my university professor. It lets educational institutions, training organizations, and individual learners supporting adaptive learning paths that help them prepare their students more effectively at scale & also create, deliver, and analyze exams at scale, with role-based portals for admins, organizations, subject experts, reviewers, and students on two operating layers Platfrom & organization specific, all built on a proper multi-tenant architecture with subscription-based access.
 
 Whether you're conducting nationwide entrance exams, managing institutional assessments, delivering corporate training, or preparing for competitive certifications, ProPath provides everything needed in a single, unified platform—from content creation and AI-assisted question generation to secure test delivery, performance analytics, certifications, and learner engagement.
 
@@ -49,6 +49,8 @@ Our vision is to build a platform where assessments continuously improve learnin
 | Data | Supabase | PostgreSQL, migrations in `backend/db/migrations/` |
 
 Detailed design: [frontend/Reference_Documents/ARCHITECTURE.md](./frontend/Reference_Documents/ARCHITECTURE.md) · Schema: [Database_Schema.md](./frontend/Reference_Documents/Database_Schema.md)
+
+For complete per-role capabilities — every portal, screen, and action — see [USER_ROLES_AND_FEATURES.md](./Reference_Documents/USER_ROLES_AND_FEATURES.md).
 
 ---
 

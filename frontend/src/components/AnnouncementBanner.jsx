@@ -3,6 +3,19 @@ import { useLocation } from 'react-router-dom';
 import { orgAuth, studentAuth, adminAPI } from '../services/api';
 import './AnnouncementBanner.css';
 
+function normalizeRole(role) {
+  if (!role) return null;
+  const r = String(role).trim();
+  if (r === 'Super Admin' || r === 'SuperAdmin') return 'SuperAdmin';
+  return r;
+}
+
+function getAuthenticatedUser() {
+  if (orgAuth.isAuthenticated()) return orgAuth.getCurrentUser();
+  if (studentAuth.isAuthenticated()) return studentAuth.getCurrentUserSync();
+  return null;
+}
+
 const AnnouncementBanner = () => {
   const location = useLocation();
   const [announcement, setAnnouncement] = useState(null);
@@ -16,16 +29,14 @@ const AnnouncementBanner = () => {
       return;
     }
 
-    const isOrgAuth = orgAuth.isAuthenticated();
-    const isStudentAuth = studentAuth.isAuthenticated();
-    if (!isOrgAuth && !isStudentAuth) {
+    const user = getAuthenticatedUser();
+    if (!user) {
       setAnnouncement(null);
       setOpen(false);
       return;
     }
 
-    const user = isOrgAuth ? orgAuth.getCurrentUser() : studentAuth.getCurrentUserSync();
-    const role = user?.role || null;
+    const role = normalizeRole(user?.role);
 
     adminAPI
       .getActiveAnnouncements(role)

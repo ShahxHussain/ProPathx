@@ -10,6 +10,7 @@ import AdminLogs from '../../pages/admin/Logs';
 import AdminQuestions from '../../pages/admin/Questions';
 import SubscriptionPlans from '../../pages/admin/SubscriptionPlans';
 import Subscriptions from '../../pages/admin/Subscriptions';
+import Revenue from '../../pages/admin/Revenue';
 import AdminSettings from '../../pages/admin/Settings';
 import Health from '../../pages/admin/Health';
 import CreatePlatformUser from '../../pages/admin/CreatePlatformUser';
@@ -48,6 +49,7 @@ export function AdminFeatureRoutes() {
         <Route path="questions" element={<AdminQuestions />} />
         <Route path="subscription-plans" element={<SubscriptionPlans />} />
         <Route path="subscriptions" element={<Subscriptions />} />
+        <Route path="revenue" element={<Revenue />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="health" element={<Health />} />
         <Route path="logs" element={<AdminLogs />} />

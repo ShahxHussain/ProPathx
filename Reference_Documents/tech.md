@@ -1,4 +1,4 @@
-# ProPath Technical Stack (AWS Handoff)
+# ProPath Technical Stack (AWS Handoff) - FUTURE PLAN(next)
 
 ## Repository layout
 - `frontend/` — React SPA (Create React App, `react-scripts`)
@@ -43,8 +43,3 @@
 - Frontend static app
 - Backend API service
 - Supabase as managed DB/backend service
-
-## Improvements & refactor tracker
-See **[docs/IMPROVEMENTS_TRACKER.md](../docs/IMPROVEMENTS_TRACKER.md)** for folder-structure plans, feature status, and what is already done (tables with statuses).
-
-**Client handoff docs:** [ARCHITECTURE.md](../docs/ARCHITECTURE.md) · [API_OVERVIEW.md](../docs/API_OVERVIEW.md) · [DEPLOYMENT.md](../docs/DEPLOYMENT.md)

@@ -14,6 +14,11 @@ import {
   findDuplicateQuestion,
   duplicateQuestionErrorMessage,
 } from '../../utils/questionDuplicate.js';
+import {
+  getBulkQuestionCsvTemplate,
+  parseBulkQuestionCsv,
+  resolveBulkCommitStatus,
+} from '../../utils/bulkQuestionCsv.js';
 
 const router = express.Router();
 
@@ -401,6 +406,214 @@ router.get(
       });
     } catch (error) {
       console.error('Dashboard stats error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * GET /api/questions/bulk/template
+ * Download CSV template for bulk MCQ upload.
+ */
+router.get(
+  '/bulk/template',
+  authenticate,
+  requireRole(['Subject Expert']),
+  verifyActiveStatus,
+  (req, res) => {
+    const csv = getBulkQuestionCsvTemplate();
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="propath-questions-template.csv"');
+    res.send(csv);
+  }
+);
+
+/**
+ * POST /api/questions/bulk/parse
+ * Parse CSV text with wizard context — preview only, no DB writes.
+ */
+router.post(
+  '/bulk/parse',
+  authenticate,
+  requireRole(['Subject Expert']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { csv, context } = req.body || {};
+    if (!csv || typeof csv !== 'string') {
+      return res.status(400).json({ error: 'CSV text is required' });
+    }
+  if (!context?.topicId) {
+      return res.status(400).json({ error: 'Topic context is required (select exam, subject, and topic first)' });
+    }
+
+    const result = parseBulkQuestionCsv(csv, context);
+    res.json(result);
+  }
+);
+
+/**
+ * POST /api/questions/bulk/commit
+ * Commit validated rows as Draft or Pending questions.
+ */
+router.post(
+  '/bulk/commit',
+  authenticate,
+  requireRole(['Subject Expert']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { rows, status: statusInput, context } = req.body || {};
+    const { userId, orgId: userOrgId, actorType } = req.user;
+    const orgUserId = req.user.orgUserId ?? req.user.org_user_id ?? null;
+    const ipAddress = getClientIP(req);
+    const userAgent = getUserAgent(req);
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'No rows to commit' });
+    }
+    if (rows.length > 200) {
+      return res.status(400).json({ error: 'Too many rows (max 200 per commit)' });
+    }
+    if (!context?.topicId) {
+      return res.status(400).json({ error: 'Topic context is required' });
+    }
+
+    const commitStatus = resolveBulkCommitStatus(statusInput);
+    const isDraft = commitStatus === QUESTION_STATUS.DRAFT;
+
+    try {
+      if (actorType === 'OrgUser' && userOrgId) {
+        const subscriptionValidation = await validateSubscriptionForQuestionCreation(userOrgId);
+        if (!subscriptionValidation.valid) {
+          return res.status(403).json({
+            error: subscriptionValidation.reason,
+            message: subscriptionValidation.message,
+          });
+        }
+        const examIdToCheck = context.examId;
+        if (examIdToCheck && !subscriptionValidation.availableExamIds.includes(examIdToCheck)) {
+          return res.status(403).json({
+            error: 'Exam not in subscription',
+            message: "The selected exam is not included in any of your organization's subscription plans.",
+          });
+        }
+      }
+
+      const created = [];
+      const errors = [];
+
+      for (const row of rows) {
+        try {
+          if (!isDraft) {
+            const duplicate = await findDuplicateQuestion(supabase, {
+              questionText: row.questionText?.trim(),
+              topicId: context.topicId,
+              examId: context.examId || null,
+              subjectId: context.subjectId || null,
+              chapterId: context.chapterId || null,
+              orgId: actorType === 'OrgUser' ? userOrgId : null,
+            });
+            if (duplicate) {
+              errors.push({
+                rowIndex: row.rowIndex,
+                code: 'DUPLICATE',
+                message: duplicateQuestionErrorMessage(duplicate),
+              });
+              continue;
+            }
+          }
+
+          let finalCreatedBy = null;
+          let finalOrgID = null;
+          let finalCreatedByOrgUserID = null;
+          if (actorType === 'User') {
+            finalCreatedBy = userId;
+          } else if (actorType === 'OrgUser') {
+            finalOrgID = userOrgId ?? null;
+            finalCreatedByOrgUserID = orgUserId ? String(orgUserId) : null;
+          }
+
+          const questionData = {
+            TopicID: context.topicId,
+            QuestionText: row.questionText.trim(),
+            DifficultyLevel: row.difficultyLevel || 'Medium',
+            Explanation: row.explanation?.trim() || null,
+            QuestionType: row.questionType || 'Single Correct',
+            CreatedBy: finalCreatedBy,
+            OrgID: finalOrgID,
+            Source: row.source || 'Self',
+            CreatedAt: new Date().toISOString(),
+            ...buildStatusFields(commitStatus),
+          };
+          if (actorType === 'OrgUser') {
+            questionData.CreatedByOrgUserID = finalCreatedByOrgUserID;
+          }
+
+          const { data: newQuestion, error: questionError } = await supabase
+            .from('Questions')
+            .insert(questionData)
+            .select()
+            .single();
+
+          if (questionError) {
+            errors.push({
+              rowIndex: row.rowIndex,
+              code: 'INSERT_FAILED',
+              message: questionError.message,
+            });
+            continue;
+          }
+
+          const validOptions = (row.options || []).filter((o) => o.optionText?.trim());
+          if (validOptions.length > 0) {
+            const optionsToInsert = validOptions.map((opt, index) => ({
+              QuestionID: newQuestion.QuestionID,
+              OptionNumber: index + 1,
+              OptionText: opt.optionText.trim(),
+              IsCorrect: opt.isCorrect === true,
+            }));
+            const { error: optionsError } = await supabase.from('Options').insert(optionsToInsert);
+            if (optionsError) {
+              await supabase.from('Questions').delete().eq('QuestionID', newQuestion.QuestionID);
+              errors.push({
+                rowIndex: row.rowIndex,
+                code: 'OPTIONS_FAILED',
+                message: optionsError.message,
+              });
+              continue;
+            }
+          }
+
+          const actorID = actorType === 'OrgUser' ? orgUserId || userId : userId;
+          await createLog({
+            actorType: actorType === 'OrgUser' ? 'OrgUser' : 'User',
+            actorID,
+            actionType: 'Create',
+            entityType: 'Question',
+            entityID: newQuestion.QuestionID,
+            description: `Bulk ${isDraft ? 'draft' : 'submit'}: ${row.questionText.substring(0, 50)}...`,
+            ipAddress,
+            userAgent,
+            newData: { bulk: true, rowIndex: row.rowIndex },
+          });
+
+          created.push({ rowIndex: row.rowIndex, questionId: newQuestion.QuestionID });
+        } catch (rowErr) {
+          errors.push({
+            rowIndex: row.rowIndex,
+            code: 'ROW_ERROR',
+            message: rowErr.message,
+          });
+        }
+      }
+
+      res.status(201).json({
+        created: created.length,
+        skipped: errors.length,
+        createdIds: created,
+        errors,
+      });
+    } catch (error) {
+      console.error('Bulk commit error:', error);
       res.status(500).json({ error: 'Internal server error', details: error.message });
     }
   }
