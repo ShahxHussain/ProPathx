@@ -99,7 +99,7 @@ export const ProtectedRoute = ({ children, requireSuperAdmin = false, allowedRol
   }
 
   if (allowedRoles.length > 0 && !allowedRoles.includes(user?.role)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={getPostLoginRoute(user) || '/'} replace />;
   }
 
   if (!maintenanceChecked) {

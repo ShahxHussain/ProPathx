@@ -1,14 +1,11 @@
-**API Health** · [https://propath-r4tw.onrender.com/health](https://propath-r4tw.onrender.com/health)
+**Beckend API Health (Render)** · [https://propath-r4tw.onrender.com/health](https://propath-r4tw.onrender.com/health)
 
 # ProPath – The Intelligent Assessment & Learning Platform
-
-**GitHub** · [ShahxHussain/ProPathx](https://github.com/ShahxHussain/ProPathx) · **Live Demo** · *[Add your Vercel URL]* · **API** · [propath-r4tw.onrender.com](https://propath-r4tw.onrender.com)
-
-PostgreSQL (Supabase) · Node.js · Express.js · React.js · RESTful APIs · JWT · RBAC · Recharts · KaTeX/LaTeX · CSV automation
+`PostgreSQL (Supabase) · Node.js · Express.js · React.js · RESTful APIs · JWT · RBAC · Recharts · KaTeX/LaTeX · CSV automation`
 
 ---
 
-ProPath is a multi-tenant SaaS assessment and learning platform that I'm building with my university professor. It lets educational institutions, training organizations, and individual learners supporting adaptive learning paths that help them prepare their students more effectively at scale & also create, deliver, and analyze exams at scale, with role-based portals for admins, organizations, subject experts, reviewers, and students on two operating layers Platfrom & organization specific, all built on a proper multi-tenant architecture with subscription-based access.
+ProPath is a **multi-tenant SaaS assessment and learning platform** that I'm building with my university professor. It lets educational institutions, training organizations, and individual learners supporting adaptive learning paths that help them prepare their students more effectively at scale & also create, deliver, and analyze exams at scale, with role-based portals for admins, organizations, subject experts, reviewers, and students on two operating layers Platfrom & organization specific, all built on a proper multi-tenant architecture with subscription-based access.
 
 Whether you're conducting nationwide entrance exams, managing institutional assessments, delivering corporate training, or preparing for competitive certifications, ProPath provides everything needed in a single, unified platform—from content creation and AI-assisted question generation to secure test delivery, performance analytics, certifications, and learner engagement.
 
@@ -48,7 +45,7 @@ Our vision is to build a platform where assessments continuously improve learnin
 | API | `backend/` | Express routes, JWT auth, RBAC, business rules, audit logs |
 | Data | Supabase | PostgreSQL, migrations in `backend/db/migrations/` |
 
-Detailed design: [frontend/Reference_Documents/ARCHITECTURE.md](./frontend/Reference_Documents/ARCHITECTURE.md) · Schema: [Database_Schema.md](./frontend/Reference_Documents/Database_Schema.md)
+Detailed design: [ARCHITECTURE.md](./Reference_Documents/ARCHITECTURE.md) · Schema: [Database_Schema.md](./Reference_Documents/Database_Schema.md)
 
 For complete per-role capabilities — every portal, screen, and action — see [USER_ROLES_AND_FEATURES.md](./Reference_Documents/USER_ROLES_AND_FEATURES.md).
 
@@ -251,7 +248,7 @@ REACT_APP_API_URL=http://localhost:3001
 
 ### 3. Database migrations
 
-Run scripts in **order** from `backend/db/migrations/` in the Supabase SQL editor. See [backend/db/migrations/README.md](./backend/db/migrations/README.md) and [frontend/Reference_Documents/DEPLOYMENT.md](./frontend/Reference_Documents/DEPLOYMENT.md).
+Run scripts in **order** from `backend/db/migrations/` in the Supabase SQL editor. See [backend/db/migrations/README.md](./backend/db/migrations/README.md) and [DEPLOYMENT.md](./Reference_Documents/DEPLOYMENT.md).
 
 ### 4. Bootstrap SuperAdmin
 
@@ -291,7 +288,7 @@ Or with CI strictness: `CI=true npm run build` (treats ESLint warnings as errors
 npm run test:smoke
 ```
 
-Runs health + auth guard checks without a live database. Full auth smoke requires repository secrets — see [frontend/Reference_Documents/DEPLOYMENT.md](./frontend/Reference_Documents/DEPLOYMENT.md).
+Runs health + auth guard checks without a live database. Full auth smoke requires repository secrets — see [DEPLOYMENT.md](./Reference_Documents/DEPLOYMENT.md).
 
 ---
 
@@ -300,7 +297,7 @@ Runs health + auth guard checks without a live database. Full auth smoke require
 | Prefix | Consumers | Purpose |
 |--------|-----------|---------|
 | `/api/admin/*` | SuperAdmin | Platform governance |
-| `/api/org/*` | OrgAdmin, org staff | Tenant operations |
+| `/api/org/*` | OrgAdmin | Tenant operations |
 | `/api/questions/*` | Experts, reviewers, admins | MCQ CRUD & workflow |
 | `/api/reviewers/*` | Reviewers | Verification queue |
 | `/api/student/*` | Students | Attempts, results, self-tests |
@@ -308,21 +305,21 @@ Runs health + auth guard checks without a live database. Full auth smoke require
 | `/api/profile/*` | All roles | Profile & password |
 | `GET /health` | Public | Liveness check |
 
-Org auth examples: [backend/README.md](./backend/README.md) · Per-role UI catalog: [USER_ROLES_AND_FEATURES.md](./frontend/Reference_Documents/USER_ROLES_AND_FEATURES.md)
+Org auth examples: [backend/README.md](./backend/README.md) · Per-role UI catalog: [USER_ROLES_AND_FEATURES.md](./Reference_Documents/USER_ROLES_AND_FEATURES.md)
 
 ---
 
 ## Documentation
 
-Published documentation lives in **[frontend/Reference_Documents/](./frontend/Reference_Documents/)**:
+Published documentation lives in **[Reference_Documents/](./Reference_Documents/)** (repo root). The local `docs/` folder is gitignored and kept for internal notes only.
 
 | Document | Description |
 |----------|-------------|
-| [ARCHITECTURE.md](./frontend/Reference_Documents/ARCHITECTURE.md) | System design, request flow, repository layers |
-| [Database_Schema.md](./frontend/Reference_Documents/Database_Schema.md) | PostgreSQL tables, enums, relationships (source of truth) |
-| [Main_Implementation.md](./frontend/Reference_Documents/Main_Implementation.md) | Feature ↔ schema alignment |
-| [USER_ROLES_AND_FEATURES.md](./frontend/Reference_Documents/USER_ROLES_AND_FEATURES.md) | Complete per-role feature catalog |
-| [DEPLOYMENT.md](./frontend/Reference_Documents/DEPLOYMENT.md) | Local setup, env vars, production checklist |
+| [ARCHITECTURE.md](./Reference_Documents/ARCHITECTURE.md) | System design, request flow, repository layers |
+| [Database_Schema.md](./Reference_Documents/Database_Schema.md) | PostgreSQL tables, enums, relationships (source of truth) |
+| [Main_Implementation.md](./Reference_Documents/Main_Implementation.md) | Feature ↔ schema alignment |
+| [USER_ROLES_AND_FEATURES.md](./Reference_Documents/USER_ROLES_AND_FEATURES.md) | Complete per-role feature catalog |
+| [DEPLOYMENT.md](./Reference_Documents/DEPLOYMENT.md) | Local setup, env vars, production checklist |
 
 Backend quick reference: [backend/README.md](./backend/README.md) · [backend/SETUP.md](./backend/SETUP.md)
 
@@ -330,7 +327,7 @@ Backend quick reference: [backend/README.md](./backend/README.md) · [backend/SE
 
 ## Security
 
-- **Server-side RBAC** on every protected route; UI route guards are not a security boundary
+- **Server-side RBAC** on every protected route; `/org/*` is additionally limited to **OrgAdmin** in the SPA
 - **Tenant isolation** — org routes scope queries by `OrgID` from the JWT
 - **Subscription enforcement** — plans, per-exam limits, and delivery modes checked before create/assign/attempt
 - **Audit logging** — actor, action, entity type, IP, and user agent on sensitive operations

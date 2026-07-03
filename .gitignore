@@ -26,5 +26,6 @@ yarn-error.log*
 
 # Internal / local documentation (not published to GitHub)
 
+/docs
 /Implementations_Docs
 /frontend/docs

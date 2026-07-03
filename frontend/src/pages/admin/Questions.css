@@ -393,6 +393,22 @@
   border-radius: 6px;
 }
 
+.detail-options-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.detail-options-list li {
+  margin-bottom: 0.25rem;
+}
+
+.detail-option--correct {
+  color: #15803d;
+  font-weight: 600;
+}
+
 .detail-org-name {
   font-weight: 600;
   color: #3730a3;

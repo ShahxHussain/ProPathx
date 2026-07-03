@@ -52,7 +52,7 @@ ProPath uses a **two-tier identity model**:
 | Student        | `/login` (student) | Student dashboard  | `/student/*`  |
 
 
-**JWT** carries `userId`, `role`, and (for org users) `orgId`. All data access is enforced **server-side**; UI route guards are not a security boundary.
+**JWT** carries `userId`, `role`, and (for org users) `orgId`. All data access is enforced **server-side**; the `/org/*` portal is also limited to **OrgAdmin** in the SPA. API RBAC remains the authoritative security boundary.
 
 ---
 
@@ -536,7 +536,7 @@ Subjects count (vs planned limit) · Chapters · Topics · Weight total %
 
 ### 4.8 Question Bank — `/admin/questions`
 
-**Read-only oversight** — no approve/reject/edit/delete in SuperAdmin UI. Question moderation is handled in the **Reviewer** portal (`/reviewer/*`), not here.
+**Platform oversight** — cross-tenant browse and filter; expand rows for options and reviewer feedback. On-screen notice explains the workflow. No create, edit, delete, or moderation. **Subject Experts** author (`/expert/*`); **Reviewers** approve/reject (`/reviewer/*`). API: `GET /api/admin/questions` only.
 
 
 | Action        | Details                                                                                 |
@@ -545,7 +545,7 @@ Subjects count (vs planned limit) · Chapters · Topics · Weight total %
 | Filter source | All · Platform · Organizations                                                          |
 | Filter status | All · Draft · Pending · Verified · Rejected                                             |
 | View table    | Snippet, source, creator, exam/subject/chapter/topic, difficulty, type, status, created |
-| Expand row    | Full text, explanation, verified-by, rejection comments, creator                        |
+| Expand row    | Full text, options (with correct markers), explanation, verified-by, rejection comments, creator |
 | Paginate      | 25/page                                                                                 |
 
 
@@ -598,7 +598,7 @@ Subjects count (vs planned limit) · Chapters · Topics · Weight total %
 
 ### 4.10 Subscriptions & Usage — `/admin/subscriptions`
 
-**Read-only by design** — view subscription records, usage, and payment history. No cancel, refund, or billing-action UI (handled outside the app until payment gateway integration).
+**Tenant oversight** — monitor subscriptions, per-exam usage, and payment history. Org/student tenants subscribe (simulated checkout → `Payments`) and unsubscribe on their plan pages. No SuperAdmin cancel, refund, or billing UI. API: `GET /api/admin/subscriptions` only. Links to **Revenue & Payments** and **Subscription Plans** for billing vs catalog tasks.
 
 
 | Action        | Details                                                              |
@@ -743,9 +743,9 @@ Revenue dashboard powered by the `Payments` ledger:
 **Portal:** `/org/*`  
 **Source:** `frontend/src/features/org/pages/*` (routes in `features/org/routes.jsx`)  
 **Identity:** `OrgUsers` where `Role = OrgAdmin`  
-**API prefix:** `/api/org/*` (OrgAdmin enforced on write endpoints)
+**API prefix:** `/api/org/*` (`requireRole(['OrgAdmin'])` on org endpoints)
 
-**Route access (intentional):** The frontend does **not** scope `/org/*` URLs by org role — any org-authenticated user (`OrgAdmin`, `Reviewer`, `Subject Expert`) can navigate to org routes. **Authorization is enforced on the API**: sensitive writes (users, students, tests, settings, etc.) return **403** unless the caller is `OrgAdmin`. UI route guards are not a security boundary.
+**Route access:** `/org/*` is the **OrgAdmin portal only**. After login, Reviewer → `/reviewer/*` and Subject Expert → `/expert/*`. The SPA guard on `/org/*` requires `OrgAdmin` (`allowedRoles` in `features/org/routes.jsx`). The API applies the same role check on org endpoints — UI and API stay aligned.
 
 ### 5.0 Layout navigation
 
@@ -1749,11 +1749,12 @@ Actor types: User, OrgUser, Organization, Student, System.
 
 ### Intentional design (not gaps)
 
+These screens are **read-only by product design**. Each page shows an on-screen oversight notice; APIs expose **GET only** (no SuperAdmin mutate routes).
+
 | Item | Detail |
 | ---- | ------ |
-| SuperAdmin Question Bank | **View-only** — browse and filter platform/org questions; approve/reject happens in the **Reviewer** portal |
-| SuperAdmin Subscriptions | **View-only** — no cancel/refund UI until payment gateway integration |
-| `/org/*` route guard | Frontend allows any org-authenticated role to open org URLs; **API enforces OrgAdmin** on sensitive writes |
+| SuperAdmin Question Bank | **Platform oversight** — search/filter platform and org questions (all statuses), expand for detail and options. No create, edit, delete, or moderation. **Subject Experts** author (`/expert/*`); **Reviewers** approve/reject (`/reviewer/*`). |
+| SuperAdmin Subscriptions | **Tenant oversight** — filter subscriptions, usage, and payment history. Org/student tenants subscribe/unsubscribe on their plan pages (simulated checkout → `Payments`). No SuperAdmin cancel, refund, or billing UI. Plan catalog is managed under **Subscription Plans**. |
 
 ### Known gaps
 

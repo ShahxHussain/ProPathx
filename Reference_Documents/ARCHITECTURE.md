@@ -55,8 +55,8 @@ sequenceDiagram
 propath/
   frontend/          React SPA (Create React App)
   backend/           Express API (ES modules)
-  docs/              Client handoff + tracker
-  Reference_Documents/   Database schema reference
+  docs/              Local-only internal notes (gitignored — not on GitHub)
+  Reference_Documents/   Published product & schema documentation
   tech.md            Quick stack reference
 ```
 

@@ -56,7 +56,8 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
             ExamID,
             Exams(ExamID, ExamName)
           )
-        )
+        ),
+        Options(OptionID, OptionText, IsCorrect, OptionNumber)
       `, { count: 'exact' })
       .order('CreatedAt', { ascending: false });
 
@@ -164,6 +165,15 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
         ? verifierMap.get(String(qVerifiedBy))
         : null;
 
+      const options = (q.Options || [])
+        .slice()
+        .sort((a, b) => (a.OptionNumber ?? 0) - (b.OptionNumber ?? 0))
+        .map((o) => ({
+          optionText: o.OptionText,
+          isCorrect: o.IsCorrect === true,
+          optionNumber: o.OptionNumber,
+        }));
+
       return {
         questionId: q.QuestionID,
         questionText: q.QuestionText,
@@ -191,6 +201,7 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
         verifiedAt: q.VerifiedAt,
         reviewerComments: q.ReviewerComments,
         explanation: q.Explanation,
+        options,
       };
     });
 

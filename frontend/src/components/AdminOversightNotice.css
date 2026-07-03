@@ -1,0 +1,54 @@
+.admin-oversight-notice {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.25rem;
+  background: rgba(30, 58, 138, 0.06);
+  border: 1px solid rgba(30, 58, 138, 0.15);
+  border-radius: 10px;
+  color: #1e293b;
+}
+
+.admin-oversight-notice__icon {
+  flex-shrink: 0;
+  color: #1e3a8a;
+  margin-top: 0.1rem;
+}
+
+.admin-oversight-notice__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-oversight-notice__title {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+  color: #1e3a8a;
+}
+
+.admin-oversight-notice__text {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.admin-oversight-notice__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.admin-oversight-notice__link {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #dc2626;
+  text-decoration: none;
+}
+
+.admin-oversight-notice__link:hover {
+  text-decoration: underline;
+}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Package,
   Building2,
@@ -16,6 +17,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { adminAPI } from '../../services/api';
+import AdminOversightNotice from '../../components/AdminOversightNotice';
 import './Subscriptions.css';
 
 const Subscriptions = () => {
@@ -137,7 +139,7 @@ const Subscriptions = () => {
       <div className="page-header">
         <div>
           <h1>Subscriptions & Usage</h1>
-          <p className="page-subtitle">View all subscriptions and their usage statistics</p>
+          <p className="page-subtitle">Tenant subscription oversight — usage and payment history</p>
         </div>
         <div className="header-actions">
           <div className="filters">
@@ -178,6 +180,24 @@ const Subscriptions = () => {
           </div>
         </div>
       </div>
+
+      <AdminOversightNotice
+        title="Oversight only"
+        actions={
+          <>
+            <Link to="/admin/revenue" className="admin-oversight-notice__link">
+              Revenue &amp; Payments →
+            </Link>
+            <Link to="/admin/subscription-plans" className="admin-oversight-notice__link">
+              Manage plans →
+            </Link>
+          </>
+        }
+      >
+        Inspect subscriptions, per-exam usage, and payment rows. Organizations and students subscribe or
+        unsubscribe from their own plan pages (simulated checkout writes to Payments). There are no SuperAdmin
+        cancel, refund, or billing controls on this screen.
+      </AdminOversightNotice>
 
       {error && (
         <div className="notice error" style={{ marginBottom: '24px' }}>

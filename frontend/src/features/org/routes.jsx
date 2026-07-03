@@ -26,7 +26,7 @@ export function OrgFeatureRoutes() {
     <Route
       path="/org/*"
       element={
-        <ProtectedRoute>
+        <ProtectedRoute allowedRoles={['OrgAdmin']}>
           <DashboardLayout />
         </ProtectedRoute>
       }

@@ -195,7 +195,7 @@ If these secrets are not set, CI still passes the basic smoke job.
 
 ### Automated (CI)
 
-- [x] GitHub Actions: frontend build on every PR — see [DEPLOYMENT.md § CI](../docs/DEPLOYMENT.md#ci-github-actions)
+- [x] GitHub Actions: frontend build on every PR — see [DEPLOYMENT.md § CI](#ci-github-actions) in this file
 - [x] API smoke: `/health` + unauthenticated `/api/profile` guard
 - [ ] Optional: full login + profile smoke (add GitHub secrets)
 
