@@ -1,4 +1,4 @@
-import { request } from './client.js';
+import { request } from '../client.js';
 
 export function syncStoredUser(profile) {
   if (!profile) return;
