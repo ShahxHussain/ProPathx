@@ -64,11 +64,9 @@ Scripts use `IF NOT EXISTS` / idempotent patterns where possible. Re-running is 
 
 **SuperAdmin bootstrap:** run `007_createSuperAdmin.sql` manually in ops environments only (contains placeholder credentials — change before use).
 
-Legacy copies also exist in `backend/scripts/`; prefer `backend/db/migrations/` for new deployments.
-
 ### 4. Create SuperAdmin (first time)
 
-1. Run migration `007_createSuperAdmin.sql` **or** use `backend/scripts/createSuperAdmin.js` if present.
+1. Run migration `007_createSuperAdmin.sql` **or** `node backend/scripts/createSuperAdmin.js`.
 2. Log in at `/admin/login` with the configured credentials.
 3. Change the default password immediately.
 

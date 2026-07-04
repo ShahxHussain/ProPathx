@@ -286,7 +286,7 @@ CREATE TABLE "Tests" (
   "EndTime" timestamptz,
   "CreatedAt" timestamptz DEFAULT now(),
   "Status" status_organizations_enum,
-  -- Question sourcing + schedule: see Reference_Documents/schedule_or_opentiime_assigned.md and backend/scripts/add_tests_binding_schedule.sql
+  -- Question sourcing + schedule: see Reference_Documents/schedule_or_opentiime_assigned.md
   "QuestionBindingMode" text DEFAULT 'custom',
   CONSTRAINT "Tests_QuestionBindingMode_check" CHECK ("QuestionBindingMode" IN ('custom','auto','hybrid')),
   "HybridAutoPercent" numeric DEFAULT 0,
@@ -456,7 +456,7 @@ ALTER TABLE "Certificates"
 --   allowing several OptionID values for the same question in one attempt.
 -- IsCorrect: optional denormalized flag at insert time for reporting (nullable).
 -- Legacy: some databases stored integer OptionID (= OptionNumber). Migrate with:
---   backend/scripts/migrate_studentanswers_optionid_to_uuid.sql
+--   backend/db/migrations/006_migrate_studentanswers_optionid_to_uuid.sql
 CREATE TABLE "StudentAnswers" (
   "AttemptID" uuid NOT NULL REFERENCES "StudentAttempts"("AttemptID") ON DELETE CASCADE,
   "QuestionID" uuid NOT NULL REFERENCES "Questions"("QuestionID") ON DELETE CASCADE,
@@ -772,7 +772,7 @@ ADD COLUMN IF NOT EXISTS "LastResetAt" TIMESTAMP WITH TIME ZONE;
 
 
 -- SubscriptionPlans Status: enum status_subscriptionplans_enum ('Active', 'Inactive')
--- Full script: backend/scripts/add_subscriptionplans_status.sql
+-- Apply enum/column changes in Supabase SQL editor if missing (see SubscriptionPlans table below).
 -- Step 1 creates the enum (run once). Step 2a adds the column if missing; step 2b converts existing text column to enum.
 
 DO $$ BEGIN
@@ -843,7 +843,7 @@ CREATE INDEX IF NOT EXISTS idx_questions_created_by_status ON public."Questions"
 
 -- ---------------------------------------------------------------------------
 -- OrgEnrollmentSettings (OrgAdmin Settings → Exam enrollments)
--- One row per organization. Script: backend/scripts/org_enrollment_settings.sql
+-- One row per organization. Migration: backend/db/migrations/004_org_enrollment_settings.sql
 -- ---------------------------------------------------------------------------
 
 DO $$

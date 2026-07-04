@@ -135,7 +135,7 @@ router.post(
           .eq('OrgUserID', newUser.OrgUserID);
         if (flagError) {
           console.warn(
-            'Could not set MustChangePassword on new OrgAdmin. Run backend/scripts/org_users_must_change_password.sql:',
+            'Could not set MustChangePassword on new OrgAdmin. Run backend/db/migrations/001_org_users_must_change_password.sql:',
             flagError.message
           );
         }

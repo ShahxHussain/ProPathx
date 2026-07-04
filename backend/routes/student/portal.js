@@ -2110,7 +2110,7 @@ router.post('/tests/:testId/attempts', authenticate, async (req, res) => {
       Number(pickCol(assignment, ['CompletedCycleCount', 'completed_cycle_count']) ?? 0) || 0;
 
     if (!attempt) {
-      // Create new attempt — core columns only; AttemptOrdinal is optional (see backend/scripts/add_attempt_ordinal_columns.sql)
+      // Create new attempt — core columns only; AttemptOrdinal is optional (see backend/db/migrations/005_add_attempt_ordinal_columns.sql)
       const { data: newAttempt, error: insertError } = await supabase
         .from('StudentAttempts')
         .insert({

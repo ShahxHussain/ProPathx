@@ -1,7 +1,10 @@
-# SQL migrations moved to db/migrations/
+# Backend ops scripts
 
-Run scripts from **`backend/db/migrations/`** in numeric order.
+One-off utilities for local setup. Database schema changes belong in **`backend/db/migrations/`** (run in numeric order).
 
-See [db/migrations/README.md](../db/migrations/README.md) and [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
+| Script | Purpose |
+|--------|---------|
+| `generateHash.js` | Generate a bcrypt hash for manual SQL or config (`node backend/scripts/generateHash.js`) |
+| `createSuperAdmin.js` | Interactive SuperAdmin bootstrap via Supabase (`node backend/scripts/createSuperAdmin.js`) |
 
-These files are kept for backward compatibility until Phase D cleanup.
+See [db/migrations/README.md](../db/migrations/README.md) and [Reference_Documents/DEPLOYMENT.md](../../Reference_Documents/DEPLOYMENT.md).

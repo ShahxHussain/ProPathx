@@ -29,8 +29,4 @@ Ordered SQL scripts for Supabase (PostgreSQL). Run **in numeric order** on each 
 - If a migration partially applied, inspect Supabase schema before re-running.
 - Always test on **staging** before production.
 
-## Legacy location
-
-Older copies live in `backend/scripts/`. New deployments should use this folder only.
-
-See also: [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md) and [Reference_Documents/Database_Schema.md](../../Reference_Documents/Database_Schema.md).
+See also: [Reference_Documents/DEPLOYMENT.md](../../Reference_Documents/DEPLOYMENT.md) and [Reference_Documents/Database_Schema.md](../../Reference_Documents/Database_Schema.md).

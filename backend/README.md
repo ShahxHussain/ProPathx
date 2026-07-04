@@ -118,7 +118,7 @@ Organization/OrgUser login.
 }
 ```
 
-When `mustChangePassword` is `true` (SuperAdmin- or OrgAdmin-created accounts), the client must call `POST /api/org/auth/first-password` before other org APIs. Run `backend/scripts/org_users_must_change_password.sql` in Supabase first.
+When `mustChangePassword` is `true` (SuperAdmin- or OrgAdmin-created accounts), the client must call `POST /api/org/auth/first-password` before other org APIs. Run migration `001_org_users_must_change_password.sql` from `backend/db/migrations/` in Supabase first.
 
 #### POST `/api/org/auth/first-password`
 Set password on first login (Bearer token required; no current password).
