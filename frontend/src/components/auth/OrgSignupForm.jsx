@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { orgAuth } from '../services/api';
+import { orgAuth } from '../../services/api';
 
 const OrgSignupForm = ({ onSuccess, onSwitchToLogin }) => {
   const [formData, setFormData] = useState({

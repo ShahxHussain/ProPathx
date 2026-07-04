@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { studentAuth } from '../services/api';
+import { studentAuth } from '../../services/api';
 
 const StudentLoginForm = ({ onSuccess, onSwitchToSignup }) => {
   const [formData, setFormData] = useState({

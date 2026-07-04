@@ -34,5 +34,6 @@ features/  org/
 ## Related
 
 - Shared layouts: `components/layouts/`
-- Shared chrome: `components/ProfileMenu`, `NotificationBell`, …
+- Shared chrome: `components/common/` (ProfileMenu, NotificationBell, AnnouncementBanner, UserAvatar)
+- LaTeX: `components/latex/` · Auth forms: `components/auth/` · Billing: `components/billing/`
 - API client: `api/` + barrel `services/api.js`

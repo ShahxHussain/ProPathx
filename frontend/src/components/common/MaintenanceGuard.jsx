@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { orgAuth, studentAuth, adminAPI } from '../services/api';
+import { orgAuth, studentAuth, adminAPI } from '../../services/api';
 
 /**
  * MaintenanceGuard

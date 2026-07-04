@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Download } from 'lucide-react';
 import { testAPI } from '../../../services/api';
 import { getTestScheduleLabel } from '../utils/testScheduleLabel.js';
-import LaTeXRenderer from '../../../components/LaTeXRenderer';
+import LaTeXRenderer from '../../../components/latex/LaTeXRenderer';
 import './ViewTestQuestions.css';
 
 const ViewTestQuestions = () => {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Upload, Download, FileText, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
-import { questionAPI } from '../services/api';
+import { questionAPI } from '../../services/api';
 import './BulkQuestionUpload.css';
 
 const buildContext = (form) => ({

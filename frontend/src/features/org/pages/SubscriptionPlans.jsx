@@ -17,7 +17,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { orgDashboard } from '../../../services/api';
-import PaymentCheckout from '../../../components/PaymentCheckout';
+import PaymentCheckout from '../../../components/billing/PaymentCheckout';
 import './OrgStudentExamEnrollments.css';
 import './SubscriptionPlans.css';
 

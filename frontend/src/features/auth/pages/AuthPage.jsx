@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { orgAuth, adminAPI } from '../../../services/api';
-import OrgSignupForm from '../../../components/OrgSignupForm';
-import OrgLoginForm from '../../../components/OrgLoginForm';
-import StudentLoginForm from '../../../components/StudentLoginForm';
-import StudentSignupForm from '../../../components/StudentSignupForm';
+import OrgSignupForm from '../../../components/auth/OrgSignupForm';
+import OrgLoginForm from '../../../components/auth/OrgLoginForm';
+import StudentLoginForm from '../../../components/auth/StudentLoginForm';
+import StudentSignupForm from '../../../components/auth/StudentSignupForm';
 import { getPostLoginRoute } from '../../../utils/roleRedirect';
 import AuthBrandPanel from '../components/AuthBrandPanel';
 import { getAuthBrandContent } from '../authBrandContent';

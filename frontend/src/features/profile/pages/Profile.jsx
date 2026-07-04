@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { profileAPI, syncStoredUser } from '../../../services/api';
-import UserAvatar from '../../../components/UserAvatar';
+import UserAvatar from '../../../components/common/UserAvatar';
 import { Save, Lock, Loader2, Shield, Building2 } from 'lucide-react';
 import './Profile.css';
 

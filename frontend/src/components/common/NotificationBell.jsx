@@ -11,7 +11,7 @@ import {
   TriangleAlert,
   Info,
 } from 'lucide-react';
-import { notificationAPI } from '../services/api';
+import { notificationAPI } from '../../services/api';
 import './NotificationBell.css';
 
 const NotificationBell = () => {

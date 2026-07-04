@@ -13,9 +13,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { studentAuth } from '../../services/api';
-import NotificationBell from '../NotificationBell';
-import AnnouncementBanner from '../AnnouncementBanner';
-import ProfileMenu from '../ProfileMenu';
+import NotificationBell from '../common/NotificationBell';
+import AnnouncementBanner from '../common/AnnouncementBanner';
+import ProfileMenu from '../common/ProfileMenu';
 import '../../pages/student/student-theme.css';
 import './DashboardLayout.css';
 import './StudentLayout.css';

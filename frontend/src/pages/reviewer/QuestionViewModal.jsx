@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { CheckCircle, XCircle, Loader2, User, BookOpen } from 'lucide-react';
-import LaTeXRenderer from '../../components/LaTeXRenderer';
+import LaTeXRenderer from '../../components/latex/LaTeXRenderer';
 
 const QuestionViewModal = ({
   questionData,

@@ -21,9 +21,9 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { orgAuth } from '../../services/api';
-import NotificationBell from '../NotificationBell';
-import AnnouncementBanner from '../AnnouncementBanner';
-import ProfileMenu from '../ProfileMenu';
+import NotificationBell from '../common/NotificationBell';
+import AnnouncementBanner from '../common/AnnouncementBanner';
+import ProfileMenu from '../common/ProfileMenu';
 import './AdminLayout.css';
 
 const AdminLayout = () => {

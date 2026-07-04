@@ -17,7 +17,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { adminAPI } from '../../services/api';
-import AdminOversightNotice from '../../components/AdminOversightNotice';
+import AdminOversightNotice from '../../components/admin/AdminOversightNotice';
 import './Subscriptions.css';
 
 const Subscriptions = () => {

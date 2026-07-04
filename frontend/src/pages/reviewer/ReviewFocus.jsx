@@ -14,7 +14,7 @@ import {
   ListChecks,
 } from 'lucide-react';
 import { reviewerAPI } from '../../services/api';
-import LaTeXRenderer from '../../components/LaTeXRenderer';
+import LaTeXRenderer from '../../components/latex/LaTeXRenderer';
 import './ReviewFocus.css';
 
 const ReviewFocus = () => {

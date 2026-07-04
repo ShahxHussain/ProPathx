@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Plus, X, Save, AlertCircle, CheckCircle2, Loader2, Info, AlertTriangle, Code, RotateCcw, Upload, PenLine } from 'lucide-react';
 import { questionAPI, orgAuth } from '../../services/api';
-import LaTeXEditor from '../../components/LaTeXEditor';
-import BulkQuestionUpload from '../../components/BulkQuestionUpload';
+import LaTeXEditor from '../../components/latex/LaTeXEditor';
+import BulkQuestionUpload from '../../components/expert/BulkQuestionUpload';
 import './Create.css';
 
 const EMPTY_FORM = {

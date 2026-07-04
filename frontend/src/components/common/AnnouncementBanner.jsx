@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { orgAuth, studentAuth, adminAPI } from '../services/api';
+import { orgAuth, studentAuth, adminAPI } from '../../services/api';
 import './AnnouncementBanner.css';
 
 function normalizeRole(role) {

@@ -18,8 +18,8 @@ import {
   Code,
 } from 'lucide-react';
 import { questionAPI } from '../../services/api';
-import LaTeXEditor from '../../components/LaTeXEditor';
-import LaTeXRenderer from '../../components/LaTeXRenderer';
+import LaTeXEditor from '../../components/latex/LaTeXEditor';
+import LaTeXRenderer from '../../components/latex/LaTeXRenderer';
 import {
   statusToApiSlug,
   statusLabel,
