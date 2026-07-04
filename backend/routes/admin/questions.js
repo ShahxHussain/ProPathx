@@ -36,7 +36,6 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
         CreatedBy,
         CreatedByOrgUserID,
         CreatedAt,
-        IsVerified,
         Status,
         SubmittedAt,
         VerifiedBy,
@@ -56,8 +55,7 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
             ExamID,
             Exams(ExamID, ExamName)
           )
-        ),
-        Options(OptionID, OptionText, IsCorrect, OptionNumber)
+        )
       `, { count: 'exact' })
       .order('CreatedAt', { ascending: false });
 
@@ -127,6 +125,30 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
       (verifiers || []).forEach((v) => verifierMap.set(String(v.UserID), v));
     }
 
+    const questionIds = list.map((q) => q.QuestionID).filter(Boolean);
+    const optionsByQuestion = new Map();
+    if (questionIds.length > 0) {
+      const { data: optionRows, error: optionsError } = await supabase
+        .from('Options')
+        .select('QuestionID, OptionText, IsCorrect, OptionNumber')
+        .in('QuestionID', questionIds)
+        .order('OptionNumber', { ascending: true });
+
+      if (optionsError) {
+        console.error('Admin questions options fetch error:', optionsError);
+      } else {
+        (optionRows || []).forEach((o) => {
+          const qid = String(o.QuestionID);
+          if (!optionsByQuestion.has(qid)) optionsByQuestion.set(qid, []);
+          optionsByQuestion.get(qid).push({
+            optionText: o.OptionText,
+            isCorrect: o.IsCorrect === true,
+            optionNumber: o.OptionNumber,
+          });
+        });
+      }
+    }
+
     const enriched = list.map((q) => {
       const topic = q.Topics;
       const chapter = topic?.Chapters && Array.isArray(topic.Chapters) ? topic.Chapters[0] : topic?.Chapters;
@@ -165,14 +187,7 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
         ? verifierMap.get(String(qVerifiedBy))
         : null;
 
-      const options = (q.Options || [])
-        .slice()
-        .sort((a, b) => (a.OptionNumber ?? 0) - (b.OptionNumber ?? 0))
-        .map((o) => ({
-          optionText: o.OptionText,
-          isCorrect: o.IsCorrect === true,
-          optionNumber: o.OptionNumber,
-        }));
+      const options = optionsByQuestion.get(String(q.QuestionID)) || [];
 
       return {
         questionId: q.QuestionID,
@@ -195,7 +210,7 @@ router.get('/questions', authenticate, requireSuperAdmin, async (req, res) => {
         createdByOrgUserId: qCreatedByOrgUserID,
         orgId: qOrgId,
         createdAt: q.CreatedAt,
-        isVerified: q.IsVerified,
+        isVerified: statusValue === 'verified',
         status: statusValue,
         verifiedBy: verifier ? { fullName: verifier.FullName, email: verifier.Email } : null,
         verifiedAt: q.VerifiedAt,

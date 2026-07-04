@@ -12,7 +12,6 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { adminAPI } from '../../services/api';
-import AdminOversightNotice from '../../components/AdminOversightNotice';
 import './Questions.css';
 
 const AdminQuestions = () => {
@@ -160,16 +159,10 @@ const AdminQuestions = () => {
         <div>
           <h1>Question Bank</h1>
           <p className="page-subtitle">
-            Platform oversight — all questions across platform and organizations
+            View all questions (platform and organization) with status and creator details
           </p>
         </div>
       </div>
-
-      <AdminOversightNotice title="Oversight only">
-        Search and filter questions by source and status, then expand a row for full text, options, and
-        reviewer feedback. Subject Experts author in <code>/expert/*</code>; Reviewers approve or reject in{' '}
-        <code>/reviewer/*</code>. This screen has no create, edit, delete, or moderation actions.
-      </AdminOversightNotice>
 
       {error && (
         <div className="notice error" style={{ marginBottom: '24px' }}>
