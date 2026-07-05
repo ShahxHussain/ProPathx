@@ -19,6 +19,10 @@ import {
   parseBulkQuestionCsv,
   resolveBulkCommitStatus,
 } from '../../utils/bulkQuestionCsv.js';
+import {
+  getBulkQuestionDocxTemplateBuffer,
+  parseBulkQuestionDocx,
+} from '../../utils/bulkQuestionDocx.js';
 
 const router = express.Router();
 
@@ -412,25 +416,44 @@ router.get(
 );
 
 /**
- * GET /api/questions/bulk/template
- * Download CSV template for bulk MCQ upload.
+ * GET /api/questions/bulk/template?format=csv|docx
+ * Download CSV or Word template for bulk MCQ upload.
  */
 router.get(
   '/bulk/template',
   authenticate,
   requireRole(['Subject Expert']),
   verifyActiveStatus,
-  (req, res) => {
-    const csv = getBulkQuestionCsvTemplate();
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="propath-questions-template.csv"');
-    res.send(csv);
+  async (req, res) => {
+    const format = String(req.query.format || 'csv').toLowerCase();
+    try {
+      if (format === 'docx') {
+        const buffer = await getBulkQuestionDocxTemplateBuffer();
+        res.setHeader(
+          'Content-Type',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
+        res.setHeader(
+          'Content-Disposition',
+          'attachment; filename="propath-questions-template.docx"'
+        );
+        return res.send(buffer);
+      }
+
+      const csv = getBulkQuestionCsvTemplate();
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="propath-questions-template.csv"');
+      return res.send(csv);
+    } catch (error) {
+      console.error('Bulk template error:', error);
+      return res.status(500).json({ error: 'Failed to generate template' });
+    }
   }
 );
 
 /**
  * POST /api/questions/bulk/parse
- * Parse CSV text with wizard context — preview only, no DB writes.
+ * Parse CSV text or DOCX (base64) with wizard context — preview only, no DB writes.
  */
 router.post(
   '/bulk/parse',
@@ -438,16 +461,26 @@ router.post(
   requireRole(['Subject Expert']),
   verifyActiveStatus,
   async (req, res) => {
-    const { csv, context } = req.body || {};
-    if (!csv || typeof csv !== 'string') {
-      return res.status(400).json({ error: 'CSV text is required' });
-    }
-  if (!context?.topicId) {
+    const { csv, docxBase64, context } = req.body || {};
+    if (!context?.topicId) {
       return res.status(400).json({ error: 'Topic context is required (select exam, subject, and topic first)' });
     }
 
-    const result = parseBulkQuestionCsv(csv, context);
-    res.json(result);
+    try {
+      let result;
+      if (docxBase64 && typeof docxBase64 === 'string') {
+        const buffer = Buffer.from(docxBase64, 'base64');
+        result = await parseBulkQuestionDocx(buffer, context);
+      } else if (csv && typeof csv === 'string') {
+        result = parseBulkQuestionCsv(csv, context);
+      } else {
+        return res.status(400).json({ error: 'CSV text or DOCX file (docxBase64) is required' });
+      }
+      return res.json(result);
+    } catch (error) {
+      console.error('Bulk parse error:', error);
+      return res.status(500).json({ error: 'Failed to parse upload', details: error.message });
+    }
   }
 );
 

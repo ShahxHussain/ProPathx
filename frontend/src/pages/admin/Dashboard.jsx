@@ -10,14 +10,10 @@ import {
   FileText,
   GraduationCap,
   BarChart3,
-  ArrowUp,
-  ArrowDown,
   ArrowRight,
   Package,
   Shield,
-  Zap,
   PlusCircle,
-  UserPlus,
   ScrollText,
   RefreshCw,
   LayoutDashboard,
@@ -66,6 +62,7 @@ const Dashboard = () => {
     approvedQuestions: 0,
     pendingQuestions: 0,
     rejectedQuestions: 0,
+    draftQuestions: 0,
   });
   const [revenueData, setRevenueData] = useState([]);
   const [userGrowthData, setUserGrowthData] = useState([]);
@@ -104,6 +101,7 @@ const Dashboard = () => {
         approvedQuestions: response.stats?.approvedQuestions || 0,
         pendingQuestions: response.stats?.pendingQuestions || 0,
         rejectedQuestions: response.stats?.rejectedQuestions || 0,
+        draftQuestions: response.stats?.draftQuestions || 0,
       });
 
       setRevenueData(response.revenueData || []);
@@ -133,81 +131,80 @@ const Dashboard = () => {
     return () => clearTimeout(timer);
   }, [error]);
 
-  const primaryKpis = useMemo(
+  const quickLinks = useMemo(
+    () => [
+      { icon: Building2, label: 'Organizations', path: '/admin/organizations' },
+      { icon: Users, label: 'Users', path: '/admin/users' },
+      { icon: FileText, label: 'Questions', path: '/admin/questions' },
+      { icon: GraduationCap, label: 'Exams', path: '/admin/exams' },
+      { icon: Package, label: 'Plans', path: '/admin/subscription-plans' },
+      { icon: DollarSign, label: 'Revenue', path: '/admin/revenue' },
+      { icon: Activity, label: 'Subscriptions', path: '/admin/subscriptions' },
+      { icon: ScrollText, label: 'Logs', path: '/admin/logs' },
+      { icon: HeartPulse, label: 'Health', path: '/admin/health' },
+      { icon: Settings, label: 'Settings', path: '/admin/settings' },
+      { icon: PlusCircle, label: 'New org', path: '/admin/create-organization' },
+    ],
+    []
+  );
+
+  const statCards = useMemo(
     () => [
       {
         icon: Building2,
         label: 'Active organizations',
         value: stats.activeOrgs,
-        hint: `${stats.totalOrgs || 0} total tenants`,
-        trend: 'up',
-        variant: 'navy',
+        trend: `${stats.totalOrgs || 0} total tenants`,
         action: () => navigate('/admin/organizations'),
       },
       {
         icon: DollarSign,
         label: 'Revenue (all time)',
         value: `$${Number(stats.totalRevenue || 0).toLocaleString()}`,
-        hint: 'Completed payments',
-        trend: 'up',
-        variant: 'crimson',
-        action: () => navigate('/admin/subscriptions'),
+        trend: 'Completed payments',
+        action: () => navigate('/admin/revenue'),
       },
       {
         icon: Users,
         label: 'Platform users',
         value: stats.totalUsers,
-        hint: 'Active platform & org accounts',
-        trend: 'up',
-        variant: 'teal',
+        trend: 'Active accounts',
         action: () => navigate('/admin/users'),
       },
-      {
-        icon: HeartPulse,
-        label: 'System health',
-        value: stats.systemHealth.status === 'healthy' ? 'Healthy' : 'Check',
-        hint: `CPU ${stats.systemHealth.cpu}%`,
-        trend: stats.systemHealth.cpu > 80 ? 'down' : 'up',
-        variant: stats.systemHealth.cpu > 80 ? 'warn' : 'ok',
-        action: () => navigate('/admin/health'),
-      },
-    ],
-    [navigate, stats]
-  );
-
-  const secondaryKpis = useMemo(
-    () => [
       {
         icon: GraduationCap,
         label: 'Students',
         value: stats.totalStudents,
-        hint: 'Active learners',
-        trend: 'up',
+        trend: 'Active learners',
         action: () => navigate('/admin/organizations'),
+      },
+      {
+        icon: BarChart3,
+        label: 'Active tests',
+        value: stats.totalTests || 0,
+        trend: 'Across all tenants',
+        action: () => navigate('/admin/exams'),
       },
       {
         icon: FileText,
         label: 'Questions',
         value: stats.totalQuestions || 0,
-        hint: `${stats.approvedQuestions || 0} approved`,
-        trend: 'up',
+        trend: `${stats.approvedQuestions || 0} approved · ${stats.draftQuestions || 0} drafts`,
         action: () => navigate('/admin/questions'),
-      },
-      {
-        icon: BarChart3,
-        label: 'Tests',
-        value: stats.totalTests || 0,
-        hint: 'Active tests',
-        trend: 'up',
-        action: () => navigate('/admin/organizations'),
       },
       {
         icon: Shield,
-        label: 'Pending reviews',
+        label: 'Pending review',
         value: stats.pendingQuestions || 0,
-        hint: `${stats.rejectedQuestions || 0} rejected`,
-        trend: stats.pendingQuestions > 0 ? 'down' : 'up',
+        trend: `${stats.rejectedQuestions || 0} rejected`,
         action: () => navigate('/admin/questions'),
+      },
+      {
+        icon: HeartPulse,
+        label: 'System health',
+        value: stats.systemHealth.status === 'healthy' ? 'Healthy' : 'Check',
+        trend: `CPU ${stats.systemHealth.cpu}% · ${stats.systemHealth.latency} ms`,
+        action: () => navigate('/admin/health'),
       },
     ],
     [navigate, stats]
@@ -356,8 +353,8 @@ const Dashboard = () => {
       {loading ? (
         <div className="sa-skeleton-wrap" aria-busy="true" aria-label="Loading dashboard">
           <div className="sa-skeleton sa-skeleton--hero" />
-          <div className="sa-skeleton-grid">
-            {[1, 2, 3, 4].map((k) => (
+          <div className="sa-skeleton-grid sa-skeleton-grid--stats">
+            {Array.from({ length: 8 }).map((_, k) => (
               <div key={k} className="sa-skeleton sa-skeleton--card" />
             ))}
           </div>
@@ -368,52 +365,50 @@ const Dashboard = () => {
         </div>
       ) : (
         <>
-          <section className="sa-kpi-row" aria-label="Primary metrics">
-            {primaryKpis.map((card) => {
-              const Icon = card.icon;
-              return (
-                <button
-                  key={card.label}
-                  type="button"
-                  className={`sa-kpi sa-kpi--${card.variant}`}
-                  onClick={card.action}
-                >
-                  <span className={`sa-kpi__icon sa-kpi__icon--${card.variant}`}>
-                    <Icon size={22} strokeWidth={1.75} />
-                  </span>
-                  <span className="sa-kpi__body">
-                    <span className="sa-kpi__label">{card.label}</span>
-                    <span className="sa-kpi__value">{card.value}</span>
-                    <span className={`sa-kpi__hint sa-kpi__hint--${card.trend}`}>
-                      {card.trend === 'up' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-                      {card.hint}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </section>
+          <nav className="sa-quick-nav" aria-label="Shortcuts">
+            {quickLinks.map(({ icon: Icon, label, path }) => (
+              <button
+                key={path}
+                type="button"
+                className="sa-quick-nav__btn"
+                onClick={() => navigate(path)}
+              >
+                <Icon size={18} strokeWidth={2} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
 
-          <section className="sa-kpi-row sa-kpi-row--dense" aria-label="Secondary metrics">
-            {secondaryKpis.map((card) => {
+          <div className="sa-stats-grid" aria-label="Platform metrics">
+            {statCards.map((card) => {
               const Icon = card.icon;
               return (
-                <button key={card.label} type="button" className="sa-kpi sa-kpi--compact" onClick={card.action}>
-                  <span className="sa-kpi__icon sa-kpi__icon--muted">
-                    <Icon size={18} strokeWidth={1.75} />
-                  </span>
-                  <span className="sa-kpi__body">
-                    <span className="sa-kpi__label">{card.label}</span>
-                    <span className="sa-kpi__value sa-kpi__value--sm">{card.value}</span>
-                    <span className={`sa-kpi__hint sa-kpi__hint--${card.trend}`}>
-                      {card.trend === 'up' ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
-                      {card.hint}
-                    </span>
-                  </span>
-                </button>
+                <div
+                  key={card.label}
+                  className="sa-stat-card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={card.action}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      card.action();
+                    }
+                  }}
+                >
+                  <div className="sa-stat-card__icon" aria-hidden>
+                    <Icon size={22} strokeWidth={1.75} />
+                  </div>
+                  <div className="sa-stat-card__body">
+                    <div className="sa-stat-card__value">{card.value}</div>
+                    <div className="sa-stat-card__label">{card.label}</div>
+                    {card.trend && <div className="sa-stat-card__trend">{card.trend}</div>}
+                  </div>
+                  <ArrowRight size={18} className="sa-stat-card__arrow" aria-hidden />
+                </div>
               );
             })}
-          </section>
+          </div>
 
           <div className="sa-panels">
             <section className="sa-panel sa-panel--chart">
@@ -794,37 +789,6 @@ const Dashboard = () => {
                   })
                 )}
               </ul>
-            </div>
-          </section>
-
-          <section className="sa-panel sa-panel--actions">
-            <div className="sa-panel__head">
-              <h2 className="sa-panel__title">
-                <Zap size={18} />
-                Quick actions
-              </h2>
-            </div>
-            <div className="sa-actions">
-              <button type="button" className="sa-action sa-action--primary" onClick={() => navigate('/admin/create-organization')}>
-                <PlusCircle size={18} />
-                Create organization
-              </button>
-              <button type="button" className="sa-action" onClick={() => navigate('/admin/create-platform-user')}>
-                <UserPlus size={18} />
-                Platform user
-              </button>
-              <button type="button" className="sa-action" onClick={() => navigate('/admin/subscription-plans')}>
-                <Package size={18} />
-                Subscription plans
-              </button>
-              <button type="button" className="sa-action" onClick={() => navigate('/admin/logs')}>
-                <ScrollText size={18} />
-                System logs
-              </button>
-              <button type="button" className="sa-action" onClick={() => navigate('/admin/settings')}>
-                <Settings size={18} />
-                Settings
-              </button>
             </div>
           </section>
         </>

@@ -108,10 +108,11 @@ export const questionAPI = {
     });
   },
 
-  downloadBulkTemplate: async () => {
+  downloadBulkTemplate: async (format = 'csv') => {
     const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
     const token = localStorage.getItem('authToken');
-    const res = await fetch(`${API_BASE_URL}/api/questions/bulk/template`, {
+    const normalized = String(format || 'csv').toLowerCase();
+    const res = await fetch(`${API_BASE_URL}/api/questions/bulk/template?format=${normalized}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) {
@@ -121,6 +122,14 @@ export const questionAPI = {
     return res.blob();
   },
 
+  parseBulkUpload: async ({ csv, docxBase64, context }) => {
+    return request('/api/questions/bulk/parse', {
+      method: 'POST',
+      body: JSON.stringify({ csv, docxBase64, context }),
+    });
+  },
+
+  /** @deprecated Use parseBulkUpload */
   parseBulkCsv: async ({ csv, context }) => {
     return request('/api/questions/bulk/parse', {
       method: 'POST',
@@ -135,7 +144,3 @@ export const questionAPI = {
     });
   },
 };
-
-/**
- * Reviewers API
- */
