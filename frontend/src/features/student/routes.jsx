@@ -15,6 +15,7 @@ import {
   IndividualStudentRoute,
   OrganizationStudentRoute,
 } from '../auth/routes/guards';
+import { NotFoundRoute } from '../../app/NotFoundRoute';
 
 /** Student portal routes — mounted at `/student/*` */
 export function StudentFeatureRoutes() {
@@ -52,6 +53,7 @@ export function StudentFeatureRoutes() {
       <Route path="test/:testId" element={<StudentTestAttempt />} />
       <Route path="profile" element={<Profile />} />
       <Route index element={<Navigate to="dashboard" replace />} />
+      {NotFoundRoute()}
     </Route>
   );
 }

@@ -19,6 +19,7 @@ import CreateNotificationAdmin from '../../pages/admin/CreateNotification';
 import Notifications from '../../pages/Notifications';
 import Profile from '../profile/pages/Profile';
 import { ProtectedRoute, PublicRoute } from '../auth/routes/guards';
+import { NotFoundRoute } from '../../app/NotFoundRoute';
 
 /** SuperAdmin portal routes — `/admin/login` + `/admin/*` */
 export function AdminFeatureRoutes() {
@@ -58,6 +59,7 @@ export function AdminFeatureRoutes() {
         <Route path="notifications" element={<Notifications />} />
         <Route path="profile" element={<Profile />} />
         <Route index element={<Navigate to="dashboard" replace />} />
+        {NotFoundRoute()}
       </Route>
     </>
   );

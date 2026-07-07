@@ -19,6 +19,7 @@ import CreateNotificationOrg from './pages/CreateNotification';
 import Notifications from '../../pages/Notifications';
 import Profile from '../profile/pages/Profile';
 import { ProtectedRoute } from '../auth/routes/guards';
+import { NotFoundRoute } from '../../app/NotFoundRoute';
 
 /** OrgAdmin portal routes — mounted at `/org/*` */
 export function OrgFeatureRoutes() {
@@ -52,6 +53,7 @@ export function OrgFeatureRoutes() {
       <Route path="settings" element={<Settings />} />
       <Route path="profile" element={<Profile />} />
       <Route index element={<Navigate to="dashboard" replace />} />
+      {NotFoundRoute()}
     </Route>
   );
 }

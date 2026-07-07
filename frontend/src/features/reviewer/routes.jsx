@@ -7,6 +7,7 @@ import ReviewFocus from '../../pages/reviewer/ReviewFocus';
 import Notifications from '../../pages/Notifications';
 import Profile from '../profile/pages/Profile';
 import { ProtectedRoute } from '../auth/routes/guards';
+import { NotFoundRoute } from '../../app/NotFoundRoute';
 
 /** Reviewer portal routes — mounted at `/reviewer/*` */
 export function ReviewerFeatureRoutes() {
@@ -27,6 +28,7 @@ export function ReviewerFeatureRoutes() {
       <Route path="notifications" element={<Notifications />} />
       <Route path="profile" element={<Profile />} />
       <Route index element={<Navigate to="dashboard" replace />} />
+      {NotFoundRoute()}
     </Route>
   );
 }

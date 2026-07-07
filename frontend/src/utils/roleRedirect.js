@@ -5,12 +5,14 @@
  */
 export const getDashboardRoute = (role) => {
   const routes = {
+    SuperAdmin: '/admin/dashboard',
     OrgAdmin: '/org/dashboard',
     Reviewer: '/reviewer/dashboard',
     'Subject Expert': '/expert/dashboard',
+    Student: '/student/dashboard',
   };
 
-  return routes[role] || '/dashboard';
+  return routes[role] || '/';
 };
 
 /**

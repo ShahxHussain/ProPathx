@@ -7,6 +7,7 @@ import ExpertPerformance from '../../pages/expert/Performance';
 import Notifications from '../../pages/Notifications';
 import Profile from '../profile/pages/Profile';
 import { ProtectedRoute } from '../auth/routes/guards';
+import { NotFoundRoute } from '../../app/NotFoundRoute';
 
 /** Subject Expert portal routes — mounted at `/expert/*` */
 export function ExpertFeatureRoutes() {
@@ -26,6 +27,7 @@ export function ExpertFeatureRoutes() {
       <Route path="notifications" element={<Notifications />} />
       <Route path="profile" element={<Profile />} />
       <Route index element={<Navigate to="dashboard" replace />} />
+      {NotFoundRoute()}
     </Route>
   );
 }
