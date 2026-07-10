@@ -1,3 +1,5 @@
+import { separateInBatchDuplicates } from './bulkDuplicateCheck.js';
+
 const FILE_LEVEL_CODES = new Set([
   'EMPTY_FILE',
   'OUTLINE_FILE',
@@ -83,15 +85,18 @@ export function enrichBulkParseErrors(errors = [], meta = {}) {
 }
 
 export function finalizeBulkParseResult(result, meta = {}) {
-  const errors = enrichBulkParseErrors(result.errors || [], meta);
+  const { rows: dedupedRows, errors: duplicateErrors } = separateInBatchDuplicates(
+    result.rows || []
+  );
+  const errors = enrichBulkParseErrors([...(result.errors || []), ...duplicateErrors], meta);
   const rowErrors = errors.filter((e) => !isFileLevelParseError(e) && e.code !== 'SKIPPED');
-  const summary = buildBulkParseSummary(result.rows || [], errors, {
+  const summary = buildBulkParseSummary(dedupedRows, errors, {
     ...meta,
-    totalFound: (result.rows?.length || 0) + rowErrors.length,
+    totalFound: dedupedRows.length + rowErrors.length,
     skippedCount: errors.filter((e) => e.code === 'SKIPPED').length,
   });
   return {
-    rows: result.rows || [],
+    rows: dedupedRows,
     errors,
     summary,
   };

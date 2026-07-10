@@ -13,6 +13,7 @@ import {
 import './BulkQuestionUpload.css';
 
 const PREVIEW_PAGE_SIZE = 15;
+const COMMIT_BATCH_SIZE = 5;
 
 const TEMPLATE_QUICK_COPY = `Question 1
 Question text
@@ -77,6 +78,7 @@ const BulkQuestionUpload = ({ disabled = false }) => {
   const [parseErrors, setParseErrors] = useState([]);
   const [parseSummary, setParseSummary] = useState(null);
   const [commitResult, setCommitResult] = useState(null);
+  const [commitProgress, setCommitProgress] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [downloadNotice, setDownloadNotice] = useState('');
@@ -243,23 +245,66 @@ const BulkQuestionUpload = ({ disabled = false }) => {
 
   const handleCommit = async (status) => {
     if (!parsedRows.length) return;
+    const isDraft = status === 'Draft';
+    const busyKey = isDraft ? 'commit-draft' : 'commit-pending';
+
     setError('');
-    setBusy('commit');
+    setBusy(busyKey);
+    setCommitResult(null);
+    setCommitProgress({ phase: isDraft ? 'Draft' : 'Submit', processed: 0, total: parsedRows.length });
+
+    const createdRowIndexes = new Set();
+    let totalCreated = 0;
+    let totalSkipped = 0;
+    const allErrors = [];
+
     try {
-      const res = await questionAPI.commitBulkQuestions({
-        rows: parsedRows,
-        status,
-        context: buildContext(contextForm),
+      for (let i = 0; i < parsedRows.length; i += COMMIT_BATCH_SIZE) {
+        const chunk = parsedRows.slice(i, i + COMMIT_BATCH_SIZE);
+        const res = await questionAPI.commitBulkQuestions({
+          rows: chunk,
+          status,
+          context: buildContext(contextForm),
+        });
+
+        totalCreated += res.created || 0;
+        totalSkipped += res.skipped || 0;
+        if (res.errors?.length) {
+          allErrors.push(...res.errors);
+        }
+        if (res.createdIds?.length) {
+          res.createdIds.forEach((item) => {
+            if (item?.rowIndex != null) createdRowIndexes.add(item.rowIndex);
+          });
+        }
+
+        setCommitProgress({
+          phase: isDraft ? 'Draft' : 'Submit',
+          processed: Math.min(i + chunk.length, parsedRows.length),
+          total: parsedRows.length,
+        });
+      }
+
+      setCommitResult({
+        created: totalCreated,
+        skipped: totalSkipped,
+        errors: allErrors,
+        status: isDraft ? 'Draft' : 'Pending',
       });
-      setCommitResult(res);
-      if (res.created > 0) {
-        setUploadPayload(null);
-        setUploadLabel('');
-        setParsedRows([]);
+
+      if (totalCreated > 0) {
+        setParsedRows((prev) => prev.filter((row) => !createdRowIndexes.has(row.rowIndex)));
+        if (createdRowIndexes.size >= parsedRows.length) {
+          setUploadPayload(null);
+          setUploadLabel('');
+          setParseErrors([]);
+          setParseSummary(null);
+        }
       }
     } catch (err) {
       setError(err.message || 'Failed to import questions');
     } finally {
+      setCommitProgress(null);
       setBusy('');
     }
   };
@@ -281,6 +326,13 @@ const BulkQuestionUpload = ({ disabled = false }) => {
   const infoNotices = parseErrors.filter((e) => e.code === 'SKIPPED' || e.severity === 'info');
   const fileLevelErrors = parseErrors.filter((e) => e.index === 0 && e.code !== 'SKIPPED');
   const canImportParsed = parseSummary?.canImport ?? parsedRows.length > 0;
+  const isCommitting = busy === 'commit-draft' || busy === 'commit-pending';
+  const commitProgressPct = commitProgress
+    ? Math.round((commitProgress.processed / commitProgress.total) * 100)
+    : 0;
+  const commitErrors = commitResult?.errors || [];
+  const duplicateCommitErrors = commitErrors.filter((e) => e.code === 'DUPLICATE');
+  const otherCommitErrors = commitErrors.filter((e) => e.code !== 'DUPLICATE');
 
   const getCorrectAnswerLabel = (row) => {
     const answers = (row.options || [])
@@ -663,20 +715,40 @@ const BulkQuestionUpload = ({ disabled = false }) => {
               type="button"
               className="btn-secondary"
               onClick={() => handleCommit('Draft')}
-              disabled={!!busy}
+              disabled={isCommitting}
             >
-              Save all as drafts
+              {busy === 'commit-draft' ? <Loader2 size={16} className="spinner" /> : null}
+              {busy === 'commit-draft' ? 'Saving drafts…' : 'Save all as drafts'}
             </button>
             <button
               type="button"
               className="btn-primary"
               onClick={() => handleCommit('Pending')}
-              disabled={!!busy}
+              disabled={isCommitting}
             >
-              {busy === 'commit' ? <Loader2 size={16} className="spinner" /> : null}
-              Submit all for review
+              {busy === 'commit-pending' ? <Loader2 size={16} className="spinner" /> : null}
+              {busy === 'commit-pending' ? 'Submitting…' : 'Submit all for review'}
             </button>
           </div>
+
+          {commitProgress && (
+            <div className="bulk-commit-progress" role="status" aria-live="polite">
+              <div className="bulk-commit-progress-head">
+                <Loader2 size={16} className="spinner" />
+                <span>
+                  {commitProgress.phase === 'Draft' ? 'Saving drafts' : 'Submitting for review'} —{' '}
+                  {commitProgress.processed} of {commitProgress.total}
+                </span>
+                <span className="bulk-commit-progress-pct">{commitProgressPct}%</span>
+              </div>
+              <div className="bulk-commit-progress-track">
+                <div
+                  className="bulk-commit-progress-fill"
+                  style={{ width: `${commitProgressPct}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -684,9 +756,38 @@ const BulkQuestionUpload = ({ disabled = false }) => {
         <div className="bulk-success">
           <CheckCircle2 size={18} />
           <span>
-            Created {commitResult.created} question(s)
+            {commitResult.status === 'Draft' ? 'Saved' : 'Submitted'} {commitResult.created}{' '}
+            question(s)
             {commitResult.skipped > 0 ? ` · ${commitResult.skipped} skipped` : ''}
           </span>
+        </div>
+      )}
+
+      {duplicateCommitErrors.length > 0 && (
+        <div className="bulk-errors bulk-errors--duplicates">
+          <h4>Duplicates skipped ({duplicateCommitErrors.length})</h4>
+          <ul>
+            {duplicateCommitErrors.map((e, i) => (
+              <li key={i}>
+                <span className="bulk-error-ref">Question {e.rowIndex}</span>
+                <span className="bulk-error-message">{e.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {otherCommitErrors.length > 0 && (
+        <div className="bulk-errors bulk-errors--partial">
+          <h4>Import issues ({otherCommitErrors.length})</h4>
+          <ul>
+            {otherCommitErrors.map((e, i) => (
+              <li key={i}>
+                <span className="bulk-error-ref">Question {e.rowIndex}</span>
+                <span className="bulk-error-message">{e.message}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

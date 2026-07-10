@@ -13,7 +13,9 @@ import {
 import {
   findDuplicateQuestion,
   duplicateQuestionErrorMessage,
+  normalizeQuestionText,
 } from '../../utils/questionDuplicate.js';
+import { batchDuplicateError } from '../../utils/bulkDuplicateCheck.js';
 import {
   buildBulkTemplateCsv,
   parseBulkQuestionCsv,
@@ -645,10 +647,17 @@ router.post(
 
       const created = [];
       const errors = [];
+      const seenInBatch = new Set();
 
       for (const row of rows) {
         try {
-          if (!isDraft) {
+          const normalized = normalizeQuestionText(row.questionText);
+          if (normalized) {
+            if (seenInBatch.has(normalized)) {
+              errors.push(batchDuplicateError(row.rowIndex));
+              continue;
+            }
+
             const duplicate = await findDuplicateQuestion(supabase, {
               questionText: row.questionText?.trim(),
               topicId: context.topicId,
@@ -742,6 +751,9 @@ router.post(
           });
 
           created.push({ rowIndex: row.rowIndex, questionId: newQuestion.QuestionID });
+          if (normalized) {
+            seenInBatch.add(normalized);
+          }
         } catch (rowErr) {
           errors.push({
             rowIndex: row.rowIndex,

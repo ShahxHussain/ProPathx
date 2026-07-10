@@ -206,7 +206,7 @@ function buildQuestionEntryGuidancePage(templateContext, uiContext = {}) {
     }),
     ...BULK_TEMPLATE_INSTRUCTIONS.map((line) => bulletParagraph(line)),
     new Paragraph({ spacing: { after: 200 }, children: [] }),
-    bodyParagraph('Start entering your questions below. Copy Question 1 to add more.', {
+    bodyParagraph('Start entering your questions below. Copy Question 2 to add more.', {
       italics: true,
       color: '64748B',
     }),
@@ -234,7 +234,7 @@ function buildQuestionSection(number, data, { blank = false } = {}) {
     sectionHeading('Answer options'),
     ...(blank
       ? [
-          bodyParagraph('List each option on its own line (A and B required).', {
+          bodyParagraph('List each option on its own line (A and B required; C-F optional).', {
             italics: true,
             color: hintColor,
           }),
@@ -242,14 +242,16 @@ function buildQuestionSection(number, data, { blank = false } = {}) {
       : [])
   );
 
-  const optionCount = blank ? 2 : OPTION_LETTERS.length;
-  const options = blank
-    ? ['', '']
-    : [...(data.options || []), '', '', '', '', ''].slice(0, OPTION_LETTERS.length);
-  OPTION_LETTERS.slice(0, optionCount).forEach((letter, i) => {
+  const options = blank ? ['', '', '', '', '', ''] : data.options;
+  OPTION_LETTERS.forEach((letter, i) => {
     const value = options[i] ?? '';
     if (blank) {
-      const hint = i === 0 ? 'First option text' : 'Second option text';
+      const hint =
+        i === 0
+          ? 'First option text'
+          : i === 1
+            ? 'Second option text'
+            : '(optional)';
       children.push(optionParagraph(letter, hint, { italics: true, color: hintColor }));
     } else if (value) {
       children.push(optionParagraph(letter, value));
@@ -259,7 +261,7 @@ function buildQuestionSection(number, data, { blank = false } = {}) {
   children.push(
     sectionHeading('Correct answer(s)'),
     bodyParagraph(
-      blank ? 'B   (one letter; use A,B for multiple correct)' : data.correctRaw,
+      blank ? 'B   (one letter, or A,C for multiple correct)' : data.correctRaw,
       blank ? { italics: true, color: hintColor } : {}
     ),
     sectionHeading('Explanation'),
@@ -281,7 +283,8 @@ export async function buildBulkTemplateDocxBuffer(templateContext, mode, uiConte
   const children = [
     ...buildQuestionEntryGuidancePage(templateContext, uiContext),
     ...buildQuestionSection(1, null, { blank: true }),
-    bodyParagraph('Copy the Question 1 block above to add Question 2, 3, 4…', {
+    ...buildQuestionSection(2, null, { blank: true }),
+    bodyParagraph('Copy the Question 2 block above to add Question 3, 4, 5…', {
       italics: true,
       color: '64748B',
     }),
