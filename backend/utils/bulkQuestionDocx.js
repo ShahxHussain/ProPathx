@@ -4,12 +4,18 @@ import {
   BorderStyle,
   Document,
   HeadingLevel,
+  PageBreak,
   Packer,
   Paragraph,
   ShadingType,
   TextRun,
 } from 'docx';
 import { parseBulkQuestionDrafts, parseBulkQuestionTableRows } from './bulkQuestionCsv.js';
+import { BULK_TEMPLATE_MODES } from './bulkTemplateMode.js';
+import { formatUiContextLine, BULK_TEMPLATE_INSTRUCTIONS } from './bulkTemplateGuidance.js';
+
+const OUTLINE_UPLOAD_MESSAGE =
+  'This file is a planning outline, not a question-entry file. Select a topic and download a question template (Mode Q), then upload that file.';
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -29,22 +35,12 @@ const PLACEHOLDER_HINTS = [
   /^list each option/i,
 ];
 
-const EXAMPLE_QUESTIONS = [
-  {
-    questionText: 'What is $2 + 2$?',
-    questionType: 'Single Correct',
-    options: ['3', '4', '5', '6'],
-    correctRaw: 'B',
-    explanation: 'Basic addition. You may use LaTeX between $...$ for math.',
-  },
-  {
-    questionText: 'Select all prime numbers from the options below.',
-    questionType: 'Multiple Correct',
-    options: ['2', '4', '5', '9'],
-    correctRaw: 'A, C',
-    explanation: '2 and 5 are prime; 4 and 9 are composite.',
-  },
-];
+const EXAMPLE_QUESTION = {
+  questionText: 'What is $2 + 2$?',
+  options: ['3', '4', '5', '6'],
+  correctRaw: 'B',
+  explanation: 'Basic addition. You may use LaTeX between $...$ for math.',
+};
 
 function decodeHtmlEntities(text) {
   return String(text || '')
@@ -69,9 +65,21 @@ function htmlToPlain(html) {
   ).trim();
 }
 
-/** Strip inline tags from h') so h2/h3 labels match reliably after mammoth. */
+function normalizePlainText(text) {
+  return String(text || '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[‐‑‒–—]/g, '-')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\r\n/g, '\n')
+    .replace(/\t/g, ' ')
+    .replace(/[ ]{2,}/g, ' ')
+    .trim();
+}
+
+/** Strip inline tags from heading labels so matching remains stable. */
 function normalizeHeadingHtml(html) {
-  return String(html || '').replace(/<(h[23])[^>]*>([\s\S]*?)<\/\1>/gi, (_match, tag, inner) => {
+  return String(html || '').replace(/<(h[1-6])[^>]*>([\s\S]*?)<\/\1>/gi, (_match, tag, inner) => {
     const label = htmlToPlain(inner).replace(/\s+/g, ' ').trim();
     return `<${tag}>${label}</${tag}>`;
   });
@@ -139,94 +147,70 @@ function questionTitle(number) {
   });
 }
 
-function buildInstructionsSection() {
+function guidanceBox(children) {
+  return new Paragraph({
+    spacing: { after: 200 },
+    shading: { type: ShadingType.CLEAR, fill: 'EFF6FF' },
+    border: {
+      top: { style: BorderStyle.SINGLE, size: 4, color: 'BFDBFE' },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: 'BFDBFE' },
+      left: { style: BorderStyle.SINGLE, size: 4, color: 'BFDBFE' },
+      right: { style: BorderStyle.SINGLE, size: 4, color: 'BFDBFE' },
+    },
+    children,
+  });
+}
+
+function pageBreakParagraph() {
+  return new Paragraph({ children: [new PageBreak()] });
+}
+
+function buildOutlineGuidancePage(title, contextLines, bullets, uiContext = {}) {
   return [
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 120 },
-      children: [
-        new TextRun({
-          text: 'ProPath MCQ Authoring Template',
-          bold: true,
-          size: 36,
-          color: '1E3A8A',
-        }),
-      ],
+      children: [new TextRun({ text: title, bold: true, size: 36, color: '1E3A8A' })],
     }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 320 },
-      children: [
-        new TextRun({
-          text: 'Bulk import · Subject Expert',
-          size: 24,
-          color: '64748B',
-        }),
-      ],
-    }),
-    new Paragraph({
-      heading: HeadingLevel.HEADING_2,
-      spacing: { after: 160 },
-      children: [new TextRun('Step 1 — Set in ProPath app (not in this file)')],
-    }),
-    new Paragraph({
-      spacing: { after: 200 },
-      shading: { type: ShadingType.CLEAR, fill: 'EFF6FF' },
-      border: {
-        top: { style: BorderStyle.SINGLE, size: 4, color: 'BFDBFE' },
-        bottom: { style: BorderStyle.SINGLE, size: 4, color: 'BFDBFE' },
-        left: { style: BorderStyle.SINGLE, size: 4, color: 'BFDBFE' },
-        right: { style: BorderStyle.SINGLE, size: 4, color: 'BFDBFE' },
-      },
-      children: [
-        new TextRun({
-          text: 'These apply to every question in the batch. Select them under Create → Bulk upload before uploading this document:\n\n',
-          size: 21,
-        }),
-        new TextRun({ text: 'Exam', bold: true }),
-        new TextRun(' · '),
-        new TextRun({ text: 'Subject', bold: true }),
-        new TextRun(' · '),
-        new TextRun({ text: 'Chapter', bold: true }),
-        new TextRun(' · '),
-        new TextRun({ text: 'Topic', bold: true }),
-        new TextRun(' · '),
-        new TextRun({ text: 'Difficulty', bold: true }),
-        new TextRun(' · '),
-        new TextRun({ text: 'Source', bold: true }),
-      ],
-    }),
+    ...contextLines.map((line) => bodyParagraph(line, { italics: true, color: '64748B' })),
+    bodyParagraph(`UI context: ${formatUiContextLine(uiContext)}`, { italics: true, color: '64748B' }),
     new Paragraph({
       heading: HeadingLevel.HEADING_2,
       spacing: { before: 280, after: 160 },
-      children: [new TextRun('Step 2 — Fill each question block below')],
+      children: [new TextRun('Page 1 — How to use this file')],
     }),
-    bulletParagraph(
-      'One “Question N” section = one MCQ. Copy the blank Question 3 block to add more.'
-    ),
-    bulletParagraph(
-      'Do not rename section headings (Question text, Question type, Answer options, …) — the importer uses them.'
-    ),
-    bulletParagraph('Use LaTeX for math: $x^2 + 1$ or $$\\frac{a}{b}$$.'),
+    guidanceBox([
+      new TextRun({ text: 'Guidance\n', bold: true, size: 22 }),
+      ...bullets.flatMap((text, index) => [
+        new TextRun({ text: `• ${text}${index < bullets.length - 1 ? '\n' : ''}`, size: 21 }),
+      ]),
+    ]),
+  ];
+}
+
+function buildQuestionEntryGuidancePage(templateContext, uiContext = {}) {
+  const { exam, subject, chapter, topic } = templateContext;
+
+  return [
+    new Paragraph({
+      spacing: { after: 120 },
+      children: [new TextRun({ text: 'ProPath — Question entry', bold: true, size: 34, color: '1E3A8A' })],
+    }),
+    bodyParagraph(`Exam: ${exam.name} | Subject: ${subject.name}`),
+    bodyParagraph(`Chapter: ${chapter?.name || '—'} | Topic: ${topic?.name || '—'}`),
+    bodyParagraph(`UI context: ${formatUiContextLine(uiContext)}`, { italics: true, color: '64748B' }),
     new Paragraph({
       heading: HeadingLevel.HEADING_2,
-      spacing: { before: 240, after: 160 },
-      children: [new TextRun('In-file fields only')],
+      spacing: { before: 240, after: 140 },
+      children: [new TextRun({ text: 'How to use this file', bold: true, size: 26 })],
     }),
-    new Paragraph({
-      spacing: { after: 240 },
-      shading: { type: ShadingType.CLEAR, fill: 'F1F5F9' },
-      children: [
-        new TextRun({ text: 'Question type: ', bold: true }),
-        new TextRun('Single Correct · Multiple Correct'),
-        new TextRun({ text: '\nAnswer options: ', bold: true }),
-        new TextRun('A through F (minimum 2; E and F optional)'),
-        new TextRun({ text: '\nCorrect answer(s): ', bold: true }),
-        new TextRun('letter(s) A–F, comma-separated when multiple are correct'),
-        new TextRun({ text: '\nExplanation: ', bold: true }),
-        new TextRun('optional'),
-      ],
+    ...BULK_TEMPLATE_INSTRUCTIONS.map((line) => bulletParagraph(line)),
+    new Paragraph({ spacing: { after: 200 }, children: [] }),
+    bodyParagraph('Start entering your questions below. Copy Question 2 to add more.', {
+      italics: true,
+      color: '64748B',
     }),
+    new Paragraph({ spacing: { after: 180 }, children: [] }),
   ];
 }
 
@@ -247,18 +231,15 @@ function buildQuestionSection(number, data, { blank = false } = {}) {
   }
 
   children.push(
-    sectionHeading('Question type'),
-    bodyParagraph(
-      blank ? 'Single Correct' : data.questionType,
-      blank ? { italics: true, color: hintColor } : {}
-    ),
     sectionHeading('Answer options'),
-    bodyParagraph(
-      blank
-        ? 'List each option on its own line (A and B required; C–F as needed).'
-        : 'Provide 2–6 options. Leave E and F blank if not needed.',
-      { italics: blank, color: blank ? hintColor : undefined }
-    )
+    ...(blank
+      ? [
+          bodyParagraph('List each option on its own line (A and B required; C-F optional).', {
+            italics: true,
+            color: hintColor,
+          }),
+        ]
+      : [])
   );
 
   const options = blank ? ['', '', '', '', '', ''] : data.options;
@@ -294,19 +275,38 @@ function buildQuestionSection(number, data, { blank = false } = {}) {
   return children;
 }
 
-export async function getBulkQuestionDocxTemplateBuffer() {
+export async function buildBulkTemplateDocxBuffer(templateContext, mode, uiContext = {}) {
+  if (mode !== BULK_TEMPLATE_MODES.QUESTION_ENTRY) {
+    throw new Error('Only topic question-entry template is enabled');
+  }
+
   const children = [
-    ...buildInstructionsSection(),
-    ...buildQuestionSection(1, EXAMPLE_QUESTIONS[0]),
-    ...buildQuestionSection(2, EXAMPLE_QUESTIONS[1]),
-    ...buildQuestionSection(3, null, { blank: true }),
+    ...buildQuestionEntryGuidancePage(templateContext, uiContext),
+    ...buildQuestionSection(1, null, { blank: true }),
+    ...buildQuestionSection(2, null, { blank: true }),
+    bodyParagraph('Copy the Question 2 block above to add Question 3, 4, 5…', {
+      italics: true,
+      color: '64748B',
+    }),
   ];
 
-  const doc = new Document({
-    sections: [{ children }],
-  });
-
+  const doc = new Document({ sections: [{ children }] });
   return Packer.toBuffer(doc);
+}
+
+export async function getBulkQuestionDocxTemplateBuffer() {
+  return buildBulkTemplateDocxBuffer(
+    {
+      exam: { name: 'Your Exam' },
+      subject: { name: 'Your Subject' },
+      chapter: { name: 'Your Chapter' },
+      topic: { name: 'Your Topic' },
+      chapterGroups: [],
+      chapterTopics: [],
+      generatedAt: new Date().toISOString().slice(0, 10),
+    },
+    BULK_TEMPLATE_MODES.QUESTION_ENTRY
+  );
 }
 
 function extractSection(blockHtml, headingLabel) {
@@ -318,12 +318,36 @@ function extractSection(blockHtml, headingLabel) {
   return match ? htmlToPlain(match[1]) : '';
 }
 
+function extractSectionByAliases(blockHtml, aliases) {
+  for (const alias of aliases) {
+    const re = new RegExp(
+      `<h[1-6][^>]*>\\s*${escapeRegex(alias)}\\s*:?\\s*<\\/h[1-6]>([\\s\\S]*?)(?=<h[1-6][^>]*>|$)`,
+      'i'
+    );
+    const match = blockHtml.match(re);
+    if (match) {
+      const text = htmlToPlain(match[1]);
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
+function extractInlineLabeledValue(blockHtml, aliases) {
+  const plain = normalizePlainText(htmlToPlain(blockHtml));
+  if (!plain) return '';
+
+  const escaped = aliases.map((a) => escapeRegex(a)).join('|');
+  const match = plain.match(new RegExp(`(?:^|\\n)(?:${escaped})\\s*:\\s*(.+)`, 'i'));
+  return match ? normalizePlainText(match[1]) : '';
+}
+
 function parseOptionsFromSection(sectionText) {
   const options = [];
-  const lines = sectionText.split('\n').map((l) => l.trim()).filter(Boolean);
+  const lines = normalizePlainText(sectionText).split('\n').map((l) => l.trim()).filter(Boolean);
 
   for (const line of lines) {
-    const match = line.match(/^([A-Fa-f])[\s.):\-–—]+(.+)$/);
+    const match = line.match(/^(?:Option\s*)?([A-Fa-f])[\s.):\-–—]+(.+)$/i);
     if (match) {
       const letter = match[1].toUpperCase();
       const idx = OPTION_LETTERS.indexOf(letter);
@@ -344,7 +368,9 @@ function parseOptionsFromSection(sectionText) {
 }
 
 function splitDocumentIntoQuestionBlocks(html) {
-  const parts = String(html).split(/<h2[^>]*>\s*Question\s+(\d+)\s*<\/h2>/i);
+  const parts = String(html).split(
+    /<h[1-6][^>]*>\s*(?:Question|Q)(?:\s*(?:#|No\.?)|\s+)?(\d+)\s*[:\-–—.]?\s*<\/h[1-6]>/i
+  );
   if (parts.length < 3) return [];
 
   const blocks = [];
@@ -356,17 +382,107 @@ function splitDocumentIntoQuestionBlocks(html) {
   return blocks;
 }
 
+function splitPlainTextIntoQuestionBlocks(html) {
+  const text = normalizePlainText(htmlToPlain(html));
+  if (!text) return [];
+
+  const lines = text.split('\n');
+  const blocks = [];
+  let current = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const qMatch = line.match(/^(?:Question|Q)(?:\s*(?:#|No\.?)|\s+)?(\d+)\s*[:\-–—.]?\s*$/i);
+    if (qMatch) {
+      if (current) blocks.push(current);
+      current = { number: parseInt(qMatch[1], 10), content: '' };
+      continue;
+    }
+
+    if (current) {
+      current.content += `${line}\n`;
+    }
+  }
+
+  if (current) blocks.push(current);
+  return blocks;
+}
+
+function extractSectionFromPlainBlock(content, aliases, stopAliases = []) {
+  const lines = normalizePlainText(content).split('\n');
+  let start = -1;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (aliases.some((alias) => new RegExp(`^${escapeRegex(alias)}\\s*:?\\s*$`, 'i').test(line))) {
+      start = i + 1;
+      break;
+    }
+  }
+
+  if (start < 0) return '';
+
+  const out = [];
+  for (let i = start; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (
+      stopAliases.some((alias) => new RegExp(`^${escapeRegex(alias)}\\s*:?\\s*$`, 'i').test(line))
+    ) {
+      break;
+    }
+    if (line) out.push(line);
+  }
+
+  return out.join('\n').trim();
+}
+
 export function parseDocumentQuestionBlocks(blocks) {
   const drafts = [];
 
   for (const { number, content } of blocks) {
-    const questionText = extractSection(content, 'Question text');
-    const questionType = extractSection(content, 'Question type');
-    const optionsSection = extractSection(content, 'Answer options');
-    const correctRaw = extractSection(content, 'Correct answer(s)').replace(/^Correct answers?\s*:\s*/i, '');
-    const explanation = extractSection(content, 'Explanation');
+    const questionText =
+      extractSectionByAliases(content, ['Question text', 'Question']) ||
+      extractInlineLabeledValue(content, ['Question text', 'Question']) ||
+      extractSection(content, 'Question text');
+    const questionType =
+      extractSectionByAliases(content, ['Question type']) ||
+      extractInlineLabeledValue(content, ['Question type']) ||
+      extractSection(content, 'Question type');
+    const optionsSection =
+      extractSectionByAliases(content, ['Answer options', 'Options']) ||
+      extractSection(content, 'Answer options');
+    const correctRaw = (
+      extractSectionByAliases(content, [
+        'Correct answer(s)',
+        'Correct answers',
+        'Correct answer',
+        'Correct option',
+        'Answer key',
+      ]) ||
+      extractInlineLabeledValue(content, [
+        'Correct answer(s)',
+        'Correct answers',
+        'Correct answer',
+        'Correct option',
+        'Answer key',
+      ]) ||
+      extractSection(content, 'Correct answer(s)')
+    ).replace(/^Correct answers?\s*:\s*/i, '');
+    const explanation =
+      extractSectionByAliases(content, ['Explanation', 'Rationale']) ||
+      extractInlineLabeledValue(content, ['Explanation', 'Rationale']) ||
+      extractSection(content, 'Explanation');
 
     if (isPlaceholder(questionText)) continue;
+    if (
+      questionText.replace(/\s+/g, '') === 'Whatis$2+2$?' ||
+      questionText === 'What is $2 + 2$?' ||
+      questionText === 'What is $2+2$?'
+    ) {
+      continue;
+    }
 
     drafts.push({
       rowIndex: number,
@@ -381,26 +497,80 @@ export function parseDocumentQuestionBlocks(blocks) {
   return drafts;
 }
 
+function parsePlainTextQuestionBlocks(blocks) {
+  const drafts = [];
+  const allLabels = [
+    'Question text',
+    'Question',
+    'Answer options',
+    'Options',
+    'Correct answer(s)',
+    'Correct answers',
+    'Correct answer',
+    'Explanation',
+    'Rationale',
+  ];
+
+  for (const { number, content } of blocks) {
+    const questionText = extractSectionFromPlainBlock(content, ['Question text', 'Question'], allLabels);
+    const optionsSection = extractSectionFromPlainBlock(content, ['Answer options', 'Options'], allLabels);
+    const correctRaw = extractSectionFromPlainBlock(
+      content,
+      ['Correct answer(s)', 'Correct answers', 'Correct answer'],
+      allLabels
+    ).replace(/^Correct answers?\s*:\s*/i, '');
+    const explanation = extractSectionFromPlainBlock(content, ['Explanation', 'Rationale'], allLabels);
+
+    if (isPlaceholder(questionText)) continue;
+    if (
+      questionText.replace(/\s+/g, '') === 'Whatis$2+2$?' ||
+      questionText === 'What is $2 + 2$?' ||
+      questionText === 'What is $2+2$?'
+    ) {
+      continue;
+    }
+
+    drafts.push({
+      rowIndex: number,
+      questionText,
+      optionTexts: parseOptionsFromSection(optionsSection),
+      correctRaw: isPlaceholder(correctRaw) ? '' : correctRaw,
+      explanation: isPlaceholder(explanation) ? '' : explanation,
+    });
+  }
+
+  return drafts;
+}
+
 export function htmlTableToRows(html) {
-  const tableMatch = String(html || '').match(/<table[\s\S]*?<\/table>/i);
-  if (!tableMatch) return null;
+  const tableMatches = String(html || '').match(/<table[\s\S]*?<\/table>/gi);
+  if (!tableMatches?.length) return null;
 
   const rows = [];
-  const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-  let trMatch = trRegex.exec(tableMatch[0]);
-  while (trMatch) {
-    const cells = [];
-    const cellRegex = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
-    let cellMatch = cellRegex.exec(trMatch[1]);
-    while (cellMatch) {
-      cells.push(decodeHtmlEntities(cellMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')));
-      cellMatch = cellRegex.exec(trMatch[1]);
+  for (const table of tableMatches) {
+    const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let trMatch = trRegex.exec(table);
+    while (trMatch) {
+      const cells = [];
+      const cellRegex = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+      let cellMatch = cellRegex.exec(trMatch[1]);
+      while (cellMatch) {
+        cells.push(
+          normalizePlainText(decodeHtmlEntities(cellMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')))
+        );
+        cellMatch = cellRegex.exec(trMatch[1]);
+      }
+      if (cells.some((c) => c.length > 0)) rows.push(cells);
+      trMatch = trRegex.exec(table);
     }
-    if (cells.some((c) => c.length > 0)) rows.push(cells);
-    trMatch = trRegex.exec(tableMatch[0]);
   }
 
   return rows.length ? rows : null;
+}
+
+export function detectBulkDocxOutline(html) {
+  const plain = htmlToPlain(html);
+  return /subject outline/i.test(plain) || /chapter outline/i.test(plain);
 }
 
 export async function parseBulkQuestionDocx(buffer, context = {}, options = {}) {
@@ -419,9 +589,35 @@ export async function parseBulkQuestionDocx(buffer, context = {}, options = {}) 
     };
   }
 
+  if (detectBulkDocxOutline(html)) {
+    return {
+      rows: [],
+      errors: [{ index: 0, code: 'OUTLINE_FILE', message: OUTLINE_UPLOAD_MESSAGE }],
+    };
+  }
+
   const questionBlocks = splitDocumentIntoQuestionBlocks(html);
   if (questionBlocks.length) {
     const drafts = parseDocumentQuestionBlocks(questionBlocks);
+    if (drafts.length) {
+      return parseBulkQuestionDrafts(drafts, context, options);
+    }
+    return {
+      rows: [],
+      errors: [
+        {
+          index: 0,
+          code: 'NO_QUESTIONS',
+          message:
+            'Question headings were found, but every block is empty or still uses template placeholder text. Fill in question text, options, and correct answers.',
+        },
+      ],
+    };
+  }
+
+  const plainQuestionBlocks = splitPlainTextIntoQuestionBlocks(html);
+  if (plainQuestionBlocks.length) {
+    const drafts = parsePlainTextQuestionBlocks(plainQuestionBlocks);
     if (drafts.length) {
       return parseBulkQuestionDrafts(drafts, context, options);
     }
@@ -439,7 +635,7 @@ export async function parseBulkQuestionDocx(buffer, context = {}, options = {}) 
         index: 0,
         code: 'NO_QUESTIONS',
         message:
-          'No questions found. Use the ProPath Word template: each question needs a "Question 1" heading and section labels (Question text, Question type, Answer options, …).',
+          'No questions found. Use the ProPath Word template: each question needs a "Question 1" heading and section labels (Question text, Answer options, Correct answer(s), …).',
       },
     ],
   };

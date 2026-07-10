@@ -419,7 +419,7 @@ const Create = () => {
     <div className="create-page">
       <div className="page-header">
         <div className="page-header__text">
-          <h1>Create MCQ</h1>
+          <h1>Create Questions</h1>
           <p className="page-subtitle">
             {isOrganizationExpert 
               ? "Create a new multiple choice question for your organization's question bank"
@@ -440,7 +440,7 @@ const Create = () => {
               onClick={() => setEntryMode('bulk')}
             >
               <Upload size={16} />
-              Bulk CSV
+              Bulk Questions
             </button>
           </div>
         </div>

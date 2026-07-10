@@ -108,18 +108,59 @@ export const questionAPI = {
     });
   },
 
-  downloadBulkTemplate: async (format = 'csv') => {
+  downloadBulkTemplate: async ({
+    format = 'csv',
+    examId,
+    subjectId,
+    chapterId,
+    topicId,
+    defaultDifficulty,
+    defaultSource,
+    defaultQuestionType,
+  } = {}) => {
     const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
     const token = localStorage.getItem('authToken');
     const normalized = String(format || 'csv').toLowerCase();
-    const res = await fetch(`${API_BASE_URL}/api/questions/bulk/template?format=${normalized}`, {
+    const params = new URLSearchParams({ format: normalized });
+    if (examId) params.set('examId', examId);
+    if (subjectId) params.set('subjectId', subjectId);
+    if (chapterId) params.set('chapterId', chapterId);
+    if (topicId) params.set('topicId', topicId);
+    if (defaultDifficulty) params.set('defaultDifficulty', defaultDifficulty);
+    if (defaultSource) params.set('defaultSource', defaultSource);
+    if (defaultQuestionType) params.set('defaultQuestionType', defaultQuestionType);
+
+    const res = await fetch(`${API_BASE_URL}/api/questions/bulk/template?${params}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
+
+    const contentType = res.headers.get('Content-Type') || '';
+
     if (!res.ok) {
+      const data = contentType.includes('application/json')
+        ? await res.json().catch(() => ({}))
+        : { error: await res.text().catch(() => '') };
+      throw new Error(data.error || 'Failed to download template');
+    }
+
+    if (contentType.includes('application/json')) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'Failed to download template');
     }
-    return res.blob();
+
+    const blob = await res.blob();
+    if (!blob?.size) {
+      throw new Error('Downloaded file is empty');
+    }
+
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const filenameMatch = disposition.match(/filename="([^"]+)"/i);
+    const mode = res.headers.get('X-Template-Mode') || null;
+    return {
+      blob,
+      filename: filenameMatch?.[1] || `propath-template.${normalized === 'docx' ? 'docx' : 'csv'}`,
+      mode,
+    };
   },
 
   parseBulkUpload: async ({ csv, docxBase64, context }) => {

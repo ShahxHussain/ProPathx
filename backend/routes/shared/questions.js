@@ -15,14 +15,20 @@ import {
   duplicateQuestionErrorMessage,
 } from '../../utils/questionDuplicate.js';
 import {
-  getBulkQuestionCsvTemplate,
+  buildBulkTemplateCsv,
   parseBulkQuestionCsv,
   resolveBulkCommitStatus,
 } from '../../utils/bulkQuestionCsv.js';
 import {
-  getBulkQuestionDocxTemplateBuffer,
+  buildBulkTemplateDocxBuffer,
   parseBulkQuestionDocx,
 } from '../../utils/bulkQuestionDocx.js';
+import { loadBulkTemplateContext } from '../../utils/bulkTemplateContext.js';
+import {
+  getBulkTemplateFilename,
+  resolveBulkTemplateMode,
+} from '../../utils/bulkTemplateMode.js';
+import { finalizeBulkParseResult } from '../../utils/bulkParseResult.js';
 
 const router = express.Router();
 
@@ -416,8 +422,9 @@ router.get(
 );
 
 /**
- * GET /api/questions/bulk/template?format=csv|docx
- * Download CSV or Word template for bulk MCQ upload.
+ * GET /api/questions/bulk/template?format=csv|docx&examId&subjectId&chapterId&topicId
+ * Download context-aware CSV or Word template for bulk MCQ upload.
+ * Current behavior: Mode Q only (topic-level question-entry template).
  */
 router.get(
   '/bulk/template',
@@ -426,23 +433,52 @@ router.get(
   verifyActiveStatus,
   async (req, res) => {
     const format = String(req.query.format || 'csv').toLowerCase();
+    const examId = req.query.examId || null;
+    const subjectId = req.query.subjectId || null;
+    const chapterId = req.query.chapterId || null;
+    const topicId = req.query.topicId || null;
+    const uiContext = {
+      defaultDifficulty: req.query.defaultDifficulty || 'Medium',
+      defaultSource: req.query.defaultSource || 'Self',
+      defaultQuestionType: req.query.defaultQuestionType || 'Single Correct',
+    };
+
+    const modeResult = resolveBulkTemplateMode({ examId, subjectId, chapterId, topicId });
+    if (modeResult.error) {
+      return res.status(400).json({ error: modeResult.error });
+    }
+
     try {
+      const loaded = await loadBulkTemplateContext({ examId, subjectId, chapterId, topicId });
+      if (loaded.error) {
+        return res.status(400).json({ error: loaded.error });
+      }
+
+      const filename = getBulkTemplateFilename(loaded.context, modeResult.mode, format);
+      res.setHeader('X-Template-Mode', modeResult.mode);
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Template-Mode');
+
       if (format === 'docx') {
-        const buffer = await getBulkQuestionDocxTemplateBuffer();
+        const buffer = await buildBulkTemplateDocxBuffer(
+          loaded.context,
+          modeResult.mode,
+          uiContext
+        );
         res.setHeader(
           'Content-Type',
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         );
-        res.setHeader(
-          'Content-Disposition',
-          'attachment; filename="propath-questions-template.docx"'
-        );
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         return res.send(buffer);
       }
 
-      const csv = getBulkQuestionCsvTemplate();
+      if (format !== 'csv') {
+        return res.status(400).json({ error: 'format must be csv or docx' });
+      }
+
+      const csv = buildBulkTemplateCsv(loaded.context, modeResult.mode, uiContext);
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', 'attachment; filename="propath-questions-template.csv"');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       return res.send(csv);
     } catch (error) {
       console.error('Bulk template error:', error);
@@ -463,16 +499,24 @@ router.post(
   async (req, res) => {
     const { csv, docxBase64, context } = req.body || {};
     if (!context?.topicId) {
-      return res.status(400).json({ error: 'Topic context is required (select exam, subject, and topic first)' });
+      return res.status(400).json({
+        error:
+          'Topic context is required for upload. Select exam, subject, chapter, and topic, then use a question-entry template.',
+      });
+    }
+    if (!context?.chapterId) {
+      return res.status(400).json({ error: 'Chapter context is required for question upload' });
     }
 
     try {
       let result;
       if (docxBase64 && typeof docxBase64 === 'string') {
         const buffer = Buffer.from(docxBase64, 'base64');
-        result = await parseBulkQuestionDocx(buffer, context);
+        result = finalizeBulkParseResult(await parseBulkQuestionDocx(buffer, context), {
+          source: 'docx',
+        });
       } else if (csv && typeof csv === 'string') {
-        result = parseBulkQuestionCsv(csv, context);
+        result = finalizeBulkParseResult(parseBulkQuestionCsv(csv, context), { source: 'csv' });
       } else {
         return res.status(400).json({ error: 'CSV text or DOCX file (docxBase64) is required' });
       }
