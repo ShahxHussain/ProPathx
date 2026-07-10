@@ -1,0 +1,229 @@
+@import './Dashboard.css';
+
+.contributions-page .contrib-main-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.contrib-chart-wrap {
+  margin-top: 4px;
+}
+
+.contrib-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.contrib-status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--od-border);
+  background: color-mix(in srgb, var(--surface, #fff) 92%, var(--text-muted) 8%);
+}
+
+.contrib-status-item strong {
+  font-size: 1.5rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.contrib-tree-section {
+  margin-bottom: 8px;
+}
+
+.contrib-tree-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.contrib-tree-heading {
+  margin-bottom: 0;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.contrib-tree-heading h2 {
+  margin: 0;
+}
+
+.contrib-tree-heading p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.contrib-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 260px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--od-border);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: var(--text-muted);
+}
+
+.contrib-search input {
+  border: none;
+  outline: none;
+  width: 100%;
+  font-size: 0.9rem;
+  background: transparent;
+  color: var(--text);
+}
+
+.contrib-exam-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.contrib-exam-card {
+  border: 1px solid var(--od-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface, #fff);
+}
+
+.contrib-exam-card--open {
+  border-color: color-mix(in srgb, var(--od-accent) 28%, var(--od-border));
+  box-shadow: 0 8px 24px rgba(91, 33, 182, 0.06);
+}
+
+.contrib-exam-head,
+.contrib-subject-head {
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.contrib-exam-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.contrib-exam-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.contrib-exam-title-wrap h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.contrib-exam-title-wrap p {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.contrib-exam-body {
+  padding: 0 16px 14px;
+}
+
+.contrib-subject-block + .contrib-subject-block {
+  margin-top: 10px;
+}
+
+.contrib-subject-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text-muted) 6%, var(--surface, #fff));
+}
+
+.contrib-subject-name,
+.contrib-topic-name {
+  flex: 1;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.contrib-topic-list {
+  margin: 8px 0 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.contrib-topic-row {
+  padding: 10px 12px;
+  border: 1px solid var(--od-border);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+}
+
+.contrib-topic-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.contrib-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--od-accent) 12%, var(--surface, #fff));
+  color: var(--od-accent);
+  border: 1px solid color-mix(in srgb, var(--od-accent) 18%, var(--od-border));
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.contrib-count-badge--large {
+  min-width: 36px;
+  height: 36px;
+  font-size: 0.95rem;
+}
+
+.contrib-status-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.contrib-expand-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+@media (max-width: 980px) {
+  .contributions-page .contrib-main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .contrib-search {
+    min-width: 100%;
+  }
+}

@@ -29,6 +29,7 @@ import {
   resolveBulkTemplateMode,
 } from '../../utils/bulkTemplateMode.js';
 import { finalizeBulkParseResult } from '../../utils/bulkParseResult.js';
+import { buildQuestionContributions } from '../../utils/questionContributions.js';
 
 const router = express.Router();
 
@@ -416,6 +417,73 @@ router.get(
       });
     } catch (error) {
       console.error('Dashboard stats error:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  }
+);
+
+/**
+ * GET /api/questions/dashboard/contributions
+ * Personal contribution breakdown by exam → subject → topic.
+ */
+router.get(
+  '/dashboard/contributions',
+  authenticate,
+  requireRole(['Subject Expert']),
+  verifyActiveStatus,
+  async (req, res) => {
+    const { userId, orgId, actorType } = req.user;
+    const orgUserId = req.user.orgUserId ?? req.user.org_user_id ?? null;
+
+    try {
+      let questionsQuery = supabase.from('Questions').select(`
+        QuestionID,
+        Status,
+        IsVerified,
+        ReviewerComments,
+        CreatedAt,
+        Topics(
+          TopicID,
+          TopicName,
+          Subjects(
+            SubjectID,
+            SubjectName,
+            Exams(ExamID, ExamName)
+          )
+        )
+      `);
+
+      if (actorType === 'OrgUser' && orgUserId) {
+        questionsQuery = questionsQuery.eq('CreatedByOrgUserID', String(orgUserId));
+        if (orgId) questionsQuery = questionsQuery.eq('OrgID', orgId);
+      } else if (actorType === 'OrgUser' && orgId) {
+        questionsQuery = questionsQuery.eq('OrgID', orgId);
+      } else if (actorType === 'User') {
+        questionsQuery = questionsQuery.eq('CreatedBy', userId);
+      }
+
+      const { data: questions, error: questionsError } = await questionsQuery;
+
+      if (questionsError) {
+        return res.status(500).json({
+          error: 'Failed to fetch contributions',
+          details: questionsError.message,
+        });
+      }
+
+      const contribution = buildQuestionContributions(questions || []);
+
+      res.json({
+        scope:
+          actorType === 'OrgUser' && orgUserId
+            ? 'personal'
+            : actorType === 'User'
+              ? 'personal'
+              : 'organization',
+        ...contribution,
+      });
+    } catch (error) {
+      console.error('Contributions error:', error);
       res.status(500).json({ error: 'Internal server error', details: error.message });
     }
   }

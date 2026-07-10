@@ -3,7 +3,7 @@ import ExpertLayout from '../../components/layouts/ExpertLayout';
 import ExpertDashboard from '../../pages/expert/Dashboard';
 import ExpertCreate from '../../pages/expert/Create';
 import ExpertQuestions from '../../pages/expert/Questions';
-import ExpertPerformance from '../../pages/expert/Performance';
+import ExpertContributions from '../../pages/expert/Contributions';
 import Notifications from '../../pages/Notifications';
 import Profile from '../profile/pages/Profile';
 import { ProtectedRoute } from '../auth/routes/guards';
@@ -23,7 +23,7 @@ export function ExpertFeatureRoutes() {
       <Route path="dashboard" element={<ExpertDashboard />} />
       <Route path="create" element={<ExpertCreate />} />
       <Route path="questions" element={<ExpertQuestions />} />
-      <Route path="performance" element={<ExpertPerformance />} />
+      <Route path="contributions" element={<ExpertContributions />} />
       <Route path="notifications" element={<Notifications />} />
       <Route path="profile" element={<Profile />} />
       <Route index element={<Navigate to="dashboard" replace />} />

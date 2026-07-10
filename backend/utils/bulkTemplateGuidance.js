@@ -9,9 +9,9 @@ export const BULK_TEMPLATE_INSTRUCTIONS = [
   'Set Exam, Subject, Chapter, Topic, Difficulty, Source, and Question type in ProPath before upload.',
   'Each Question block = one MCQ. Copy a blank block to add more questions.',
   'Do not rename section headings (Question text, Answer options, Correct answer(s), Explanation).',
-  'In the file only: question text, options A–F, correct answer, explanation.',
+  'In the file only: question text, options A and B, correct answer, explanation.',
   'Question text must be at least 10 characters. Options A and B are required.',
-  'Correct answer: use a letter (A) or multiple letters (A,C), or paste the exact option text.',
+  'Correct answer: use A or B (or A,B for multiple correct), or paste the exact option text.',
   'Invalid questions are skipped on upload — valid ones can still be imported.',
 ];
 
@@ -54,4 +54,4 @@ export const QUESTION_ENTRY_CSV_EXAMPLE = [
   'Basic addition',
 ];
 
-export { formatUiContextLine, BULK_TEMPLATE_INSTRUCTIONS };
+export { formatUiContextLine };

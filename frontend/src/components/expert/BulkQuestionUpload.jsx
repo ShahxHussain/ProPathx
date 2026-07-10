@@ -21,8 +21,6 @@ Type question here...
 Answer options
 A. Option A
 B. Option B
-C. Option C
-D. Option D
 
 Correct answer(s)
 A

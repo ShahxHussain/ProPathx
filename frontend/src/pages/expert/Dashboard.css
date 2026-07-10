@@ -131,6 +131,50 @@
   color: var(--text);
 }
 
+.expert-coverage-card {
+  padding: 4px 2px;
+}
+
+.expert-coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.expert-coverage-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--od-border);
+  background: color-mix(in srgb, var(--surface, #fff) 92%, var(--text-muted) 8%);
+}
+
+.expert-coverage-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.expert-coverage-value {
+  font-size: 22px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.expert-coverage-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 /* Approval snapshot */
 .expert-approval-card {
   padding: 4px 2px;
@@ -248,6 +292,10 @@
   }
 
   .expert-approval-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .expert-coverage-grid {
     grid-template-columns: 1fr;
   }
 

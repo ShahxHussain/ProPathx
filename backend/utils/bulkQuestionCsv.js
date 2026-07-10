@@ -179,6 +179,16 @@ function isEmptyDraft(draft) {
   return !questionText && !optionTexts.length && !correctRaw && !explanation;
 }
 
+function normalizeOptionSlots(optionTexts) {
+  const slots = Array.isArray(optionTexts)
+    ? optionTexts.map((t) => String(t || '').trim())
+    : [];
+  while (slots.length > 0 && !slots[slots.length - 1]) {
+    slots.pop();
+  }
+  return slots.slice(0, 6);
+}
+
 function resolveCorrectIndices(correctRaw, options) {
   const indices = parseCorrectMarkers(correctRaw, options.length);
   if (indices.size > 0) return indices;
@@ -193,7 +203,7 @@ function resolveCorrectIndices(correctRaw, options) {
 
   for (const part of parts) {
     const exactIdx = options.findIndex(
-      (o) => o.optionText.toLowerCase() === part.toLowerCase()
+      (o) => o.optionText && o.optionText.toLowerCase() === part.toLowerCase()
     );
     if (exactIdx >= 0) {
       indices.add(exactIdx);
@@ -224,21 +234,19 @@ function validateAndBuildQuestionRow(index, draft, context) {
   const source = String(context.defaultSource || 'Self').trim();
   const explanation = String(draft.explanation || '').trim();
 
-  const optionTexts = Array.isArray(draft.optionTexts) ? draft.optionTexts.map((t) => String(t || '').trim()) : [];
-  const options = optionTexts
-    .filter(Boolean)
-    .slice(0, 6)
-    .map((optionText, optIdx) => ({
-      optionText,
-      isCorrect: false,
-      optionNumber: optIdx + 1,
-    }));
+  const optionSlots = normalizeOptionSlots(draft.optionTexts);
+  const options = optionSlots.map((optionText, optIdx) => ({
+    optionText,
+    isCorrect: false,
+    optionNumber: optIdx + 1,
+  }));
 
   const correctSet = resolveCorrectIndices(draft.correctRaw, options);
   options.forEach((o, i) => {
     o.isCorrect = correctSet.has(i);
   });
 
+  const filledOptions = options.filter((o) => o.optionText);
   const rowErrors = [];
   const preview = questionPreview(questionText);
 
@@ -256,20 +264,20 @@ function validateAndBuildQuestionRow(index, draft, context) {
   if (!SOURCES.has(source)) {
     rowErrors.push(`Invalid source "${source}"`);
   }
-  if (options.length < 2) {
+  if (filledOptions.length < 2) {
     rowErrors.push('At least 2 answer options are required (A and B minimum)');
   }
-  if (options.length > 6) {
+  if (optionSlots.length > 6) {
     rowErrors.push('Maximum 6 options allowed (A through F)');
   }
 
-  const texts = options.map((o) => o.optionText.toLowerCase());
+  const texts = filledOptions.map((o) => o.optionText.toLowerCase());
   if (new Set(texts).size !== texts.length) {
     rowErrors.push('Two or more options have the same text — each option must be unique');
   }
 
   const correctRaw = String(draft.correctRaw || '').trim();
-  const correctCount = options.filter((o) => o.isCorrect).length;
+  const correctCount = filledOptions.filter((o) => o.isCorrect).length;
   if (correctCount === 0) {
     if (!correctRaw) {
       rowErrors.push('Correct answer is missing (use a letter like A, or the exact option text)');
@@ -305,7 +313,7 @@ function validateAndBuildQuestionRow(index, draft, context) {
       questionType,
       source,
       explanation,
-      options: options.map(({ optionText, isCorrect }) => ({ optionText, isCorrect })),
+      options: filledOptions.map(({ optionText, isCorrect }) => ({ optionText, isCorrect })),
       topicId: context.topicId || null,
       examId: context.examId || null,
       subjectId: context.subjectId || null,
@@ -401,7 +409,7 @@ export function parseBulkQuestionTableRows(tableRows, context = {}, { maxRows = 
         getColumnValue(record, header, ['option_d', 'option_4', 'option4']),
         getColumnValue(record, header, ['option_e', 'option_5', 'option5']),
         getColumnValue(record, header, ['option_f', 'option_6', 'option6']),
-      ].filter(Boolean);
+      ];
       return {
         rowIndex: offset + 2,
         questionText: getColumnValue(record, header, ['question_text', 'question', 'questiontext']),

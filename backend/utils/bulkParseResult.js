@@ -10,7 +10,9 @@ const FILE_LEVEL_CODES = new Set([
  * Build a parse summary for bulk upload preview.
  */
 export function buildBulkParseSummary(rows = [], errors = [], meta = {}) {
-  const rowErrors = errors.filter((e) => !FILE_LEVEL_CODES.has(e.code));
+  const rowErrors = errors.filter(
+    (e) => !FILE_LEVEL_CODES.has(e.code) && e.code !== 'SKIPPED'
+  );
   const fileErrors = errors.filter((e) => FILE_LEVEL_CODES.has(e.code));
   const validCount = rows.length;
   const errorCount = rowErrors.length;

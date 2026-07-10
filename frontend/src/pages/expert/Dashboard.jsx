@@ -17,6 +17,7 @@ import {
   Bell,
   RefreshCw,
   Sparkles,
+  Award,
 } from 'lucide-react';
 import {
   LineChart,
@@ -94,6 +95,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [coverage, setCoverage] = useState({ exams: 0, subjects: 0, topics: 0 });
   const [error, setError] = useState('');
 
   const loadDashboardData = useCallback(async (opts = {}) => {
@@ -103,7 +105,10 @@ const Dashboard = () => {
       if (silent) setRefreshing(true);
       else setLoading(true);
 
-      const response = await questionAPI.getDashboardStats();
+      const [response, contributions] = await Promise.all([
+        questionAPI.getDashboardStats(),
+        questionAPI.getContributions().catch(() => null),
+      ]);
       const nextStats = response.stats || {};
       setStats({
         ...nextStats,
@@ -118,6 +123,7 @@ const Dashboard = () => {
       }));
       setStatusData(transformedStatusData);
       setTrendData(response.trendData || []);
+      setCoverage(contributions?.coverage || { exams: 0, subjects: 0, topics: 0 });
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
@@ -192,6 +198,7 @@ const Dashboard = () => {
   const quickLinks = [
     { icon: FilePlus, label: 'Create', path: '/expert/create' },
     { icon: FileText, label: 'My questions', path: '/expert/questions' },
+    { icon: Award, label: 'Contributions', path: '/expert/contributions' },
     { icon: BarChart3, label: 'Performance', path: '/expert/performance' },
     { icon: Bell, label: 'Notifications', path: '/expert/notifications' },
   ];
@@ -408,6 +415,42 @@ const Dashboard = () => {
         </div>
 
         <div className="dashboard-right-column">
+          <div className="dashboard-section">
+            <div className="section-header">
+              <h2>
+                <Award size={20} />
+                Syllabus coverage
+              </h2>
+              <button
+                type="button"
+                className="view-all-link"
+                onClick={() => navigate('/expert/contributions')}
+              >
+                View contributions
+                <ArrowRight size={16} />
+              </button>
+            </div>
+            <div className="expert-coverage-card">
+              <div className="expert-coverage-grid">
+                <div className="expert-coverage-item">
+                  <span className="expert-coverage-label">Exams</span>
+                  <span className="expert-coverage-value">{coverage.exams}</span>
+                </div>
+                <div className="expert-coverage-item">
+                  <span className="expert-coverage-label">Subjects</span>
+                  <span className="expert-coverage-value">{coverage.subjects}</span>
+                </div>
+                <div className="expert-coverage-item">
+                  <span className="expert-coverage-label">Topics</span>
+                  <span className="expert-coverage-value">{coverage.topics}</span>
+                </div>
+              </div>
+              <p className="expert-coverage-hint">
+                Questions you have added across exam syllabi — open Contributions for the full breakdown.
+              </p>
+            </div>
+          </div>
+
           <div className="dashboard-section">
             <div className="section-header">
               <h2>

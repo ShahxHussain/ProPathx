@@ -78,6 +78,12 @@ export const questionAPI = {
     });
   },
 
+  getContributions: async () => {
+    return request('/api/questions/dashboard/contributions', {
+      method: 'GET',
+    });
+  },
+
   /**
    * Get subscription status (Organization Subject Expert only)
    * @returns {Promise<Object>} Subscription status with plan and exam details

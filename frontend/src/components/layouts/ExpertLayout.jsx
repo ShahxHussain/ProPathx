@@ -4,11 +4,11 @@ import {
   LayoutDashboard,
   FilePlus,
   FileText,
-  BarChart3,
   LogOut,
   Menu,
   GraduationCap,
   Bell,
+  Award,
 } from 'lucide-react';
 import { orgAuth } from '../../services/api';
 import NotificationBell from '../common/NotificationBell';
@@ -46,7 +46,7 @@ const ExpertLayout = () => {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/expert/dashboard' },
     { icon: FilePlus, label: 'Create Question', path: '/expert/create' },
     { icon: FileText, label: 'My Questions', path: '/expert/questions' },
-    { icon: BarChart3, label: 'Performance', path: '/expert/performance' },
+    { icon: Award, label: 'Contributions', path: '/expert/contributions' },
     { icon: Bell, label: 'Notifications', path: '/expert/notifications' },
   ];
 
