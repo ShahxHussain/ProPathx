@@ -1,0 +1,11 @@
+/* Preserve author casing; never inherit parent text-transform (breaks mixed case + KaTeX). */
+.latex-renderer {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.latex-renderer .katex,
+.latex-renderer .katex-display {
+  text-transform: none;
+  letter-spacing: normal;
+}

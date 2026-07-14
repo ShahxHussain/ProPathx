@@ -180,7 +180,7 @@ router.get(
               )
             )
           ),
-          Options(OptionID, OptionText, IsCorrect, OptionNumber)
+          Options!Options_QuestionID_fkey(OptionID, OptionText, IsCorrect, OptionNumber)
         `)
         .order('CreatedAt', { ascending: false });
 
@@ -809,7 +809,7 @@ router.get(
               )
             )
           ),
-          Options(OptionID, OptionText, IsCorrect, OptionNumber)
+          Options!Options_QuestionID_fkey(OptionID, OptionText, IsCorrect, OptionNumber)
         `)
         .eq('QuestionID', questionId)
         .single();

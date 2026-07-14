@@ -237,7 +237,9 @@
   opacity: 0.95;
 }
 
-.question-card {
+/* Scope shared class names — unscoped .question-header { text-transform: uppercase }
+   was leaking into Expert/Reviewer My Questions and breaking LaTeX casing. */
+.test-attempt-page .question-card {
   background: var(--ta-card);
   border: 1px solid var(--ta-border);
   border-radius: 18px;
@@ -246,7 +248,7 @@
   box-shadow: 0 8px 30px rgba(28, 25, 23, 0.06);
 }
 
-.question-header {
+.test-attempt-page .question-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -258,7 +260,7 @@
   color: var(--ta-muted);
 }
 
-.question-number {
+.test-attempt-page .question-number {
   font-family: 'Fraunces', Georgia, serif;
   font-size: 13px;
   letter-spacing: 0;
@@ -266,7 +268,7 @@
   color: var(--ta-ink);
 }
 
-.question-marks {
+.test-attempt-page .question-marks {
   font-family: 'DM Sans', system-ui, sans-serif;
   text-transform: none;
   letter-spacing: 0;
@@ -278,20 +280,22 @@
   border: 1px solid var(--ta-soft-border);
 }
 
-.question-text {
+.test-attempt-page .question-text {
   font-size: 1.05rem;
   margin-bottom: 18px;
   line-height: 1.55;
   color: var(--ta-ink);
+  text-transform: none;
+  letter-spacing: normal;
 }
 
-.options-list {
+.test-attempt-page .options-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.option-row {
+.test-attempt-page .option-row {
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -303,18 +307,18 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.option-row:hover {
+.test-attempt-page .option-row:hover {
   border-color: #d6d3d1;
   box-shadow: 0 2px 12px rgba(28, 25, 23, 0.04);
 }
 
-.option-row:has(input:checked) {
+.test-attempt-page .option-row:has(input:checked) {
   border-color: #fdba74;
   background: #fffbeb;
   box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.12);
 }
 
-.option-row input {
+.test-attempt-page .option-row input {
   width: 18px;
   height: 18px;
   margin-top: 3px;
@@ -322,10 +326,12 @@
   flex-shrink: 0;
 }
 
-.option-label {
+.test-attempt-page .option-label {
   font-size: 15px;
   line-height: 1.45;
   color: var(--ta-ink);
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .test-attempt-footer {

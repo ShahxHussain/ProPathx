@@ -306,6 +306,7 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
+  text-transform: none;
 }
 
 .question-info {
@@ -319,6 +320,8 @@
   color: var(--text);
   margin: 0 0 12px 0;
   line-height: 1.6;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .question-text--preview {
@@ -331,6 +334,8 @@
 .question-text-display,
 .explanation-display {
   line-height: 1.65;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .question-text-display--large {
@@ -344,6 +349,8 @@
 .explanation-display .katex,
 .option-text .katex {
   font-size: 1.08em;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .question-text-display .katex-display,

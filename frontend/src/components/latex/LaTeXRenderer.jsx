@@ -1,6 +1,7 @@
 import React from 'react';
 import { BlockMath, InlineMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
+import './LaTeXRenderer.css';
 
 /**
  * LaTeXRenderer Component
@@ -9,6 +10,8 @@ import 'katex/dist/katex.min.css';
  */
 const LaTeXRenderer = ({ text, displayMode = false, className = '' }) => {
   if (!text) return null;
+
+  const rootClass = ['latex-renderer', className].filter(Boolean).join(' ');
 
   // Pattern to match LaTeX expressions
   // Inline math: $...$ or \(...\)
@@ -24,7 +27,7 @@ const LaTeXRenderer = ({ text, displayMode = false, className = '' }) => {
 
   // If no LaTeX found, return plain text
   if (!hasBlockMath && !hasInlineMath) {
-    return <span className={className}>{text}</span>;
+    return <span className={rootClass}>{text}</span>;
   }
 
   // Reset regex lastIndex
@@ -105,11 +108,11 @@ const LaTeXRenderer = ({ text, displayMode = false, className = '' }) => {
 
   // If no parts were created (shouldn't happen), return original text
   if (parts.length === 0) {
-    return <span className={className}>{text}</span>;
+    return <span className={rootClass}>{text}</span>;
   }
 
   return (
-    <span className={className}>
+    <span className={rootClass}>
       {parts.map((part, index) => {
         if (part.type === 'text') {
           return <span key={index}>{part.content}</span>;
