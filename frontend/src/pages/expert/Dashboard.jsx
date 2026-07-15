@@ -322,27 +322,41 @@ const Dashboard = () => {
                 Status mix
               </h2>
             </div>
-            <div className="chart-container">
+            <div className="chart-container chart-container--status-mix">
               {statusData.length > 0 && statusData.some((d) => d.count > 0) ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                     <Pie
-                      data={statusData}
+                      data={statusData.filter((d) => d.count > 0)}
                       cx="50%"
-                      cy="50%"
+                      cy="46%"
                       labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={88}
-                      innerRadius={48}
-                      paddingAngle={2}
+                      label={false}
+                      outerRadius={84}
+                      innerRadius={46}
+                      paddingAngle={3}
                       dataKey="count"
                     >
-                      {statusData.map((entry, index) => (
-                        <Cell key={entry.name} fill={PIE_FILLS[index % PIE_FILLS.length]} stroke="none" />
-                      ))}
+                      {statusData
+                        .filter((d) => d.count > 0)
+                        .map((entry, index) => (
+                          <Cell key={entry.name} fill={PIE_FILLS[index % PIE_FILLS.length]} stroke="none" />
+                        ))}
                     </Pie>
                     <Tooltip {...CHART_TOOLTIP} />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                    <Legend
+                      verticalAlign="bottom"
+                      align="center"
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{ fontSize: '12px', paddingTop: 8 }}
+                      formatter={(value, entry) => {
+                        const total = statusData.reduce((sum, d) => sum + (d.count || 0), 0);
+                        const count = entry?.payload?.count || 0;
+                        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                        return `${value} · ${pct}%`;
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
