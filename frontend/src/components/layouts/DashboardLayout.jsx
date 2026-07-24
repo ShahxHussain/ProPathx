@@ -3,7 +3,6 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
-  FileText,
   Settings,
   LogOut,
   Menu,
@@ -15,9 +14,10 @@ import {
   Package,
   GraduationCap,
   UsersRound,
-  List,
   BookOpenCheck,
   BookMarked,
+  CalendarPlus,
+  BarChart3,
 } from 'lucide-react';
 import { orgAuth } from '../../services/api';
 import NotificationBell from '../common/NotificationBell';
@@ -59,10 +59,10 @@ const DashboardLayout = () => {
     { icon: GraduationCap, label: 'Students', path: '/org/students' },
     { icon: BookMarked, label: 'Exam enrollments', path: '/org/student-exam-enrollments' },
     { icon: UsersRound, label: 'Groups', path: '/org/groups' },
-    { icon: FileText, label: 'Tests', path: '/org/tests' },
+    { icon: CalendarPlus, label: 'Schedule Test', path: '/org/tests' },
+    { icon: BarChart3, label: 'Test Analytics', path: '/org/test-analytics' },
     { icon: BookOpenCheck, label: 'Questions in Tests', path: '/org/test-questions' },
     { icon: BookOpen, label: 'Question Bank', path: '/org/question-bank' },
-    { icon: List, label: 'Assigned Tests', path: '/org/test-assignments' },
     { icon: Bell, label: 'Notifications', path: '/org/notifications' },
     { icon: ScrollText, label: 'System Logs', path: '/org/logs' },
     { icon: Bell, label: 'Create Notification', path: '/org/create-notification' },

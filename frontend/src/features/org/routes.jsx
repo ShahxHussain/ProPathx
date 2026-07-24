@@ -5,7 +5,7 @@ import Users from './pages/Users';
 import ExploreExams from './pages/ExploreExams';
 import Tests from './pages/Tests';
 import TestWizardPage from './pages/testWizard/TestWizardPage';
-import TestAssignments from './pages/TestAssignments';
+import TestAnalytics from './pages/TestAnalytics';
 import Students from './pages/Students';
 import OrgStudentExamEnrollments from './pages/OrgStudentExamEnrollments';
 import Groups from './pages/Groups';
@@ -40,7 +40,8 @@ export function OrgFeatureRoutes() {
       <Route path="tests/wizard/:testId" element={<TestWizardPage />} />
       <Route path="tests/wizard" element={<TestWizardPage />} />
       <Route path="tests" element={<Tests />} />
-      <Route path="test-assignments" element={<TestAssignments />} />
+      <Route path="test-analytics" element={<TestAnalytics />} />
+      <Route path="test-assignments" element={<Navigate to="/org/test-analytics" replace />} />
       <Route path="students" element={<Students />} />
       <Route path="student-exam-enrollments" element={<OrgStudentExamEnrollments />} />
       <Route path="groups" element={<Groups />} />

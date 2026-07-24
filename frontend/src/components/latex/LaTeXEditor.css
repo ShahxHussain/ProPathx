@@ -51,8 +51,8 @@
 .latex-editor-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 6px;
+  padding: 8px 10px;
   background: var(--background, #f8f9fa);
   border: 1px solid var(--border, #e0e0e0);
   border-bottom: none;
@@ -70,7 +70,92 @@
   width: 1px;
   height: 24px;
   background: var(--border, #e0e0e0);
-  margin: 0 4px;
+  margin: 0 2px;
+}
+
+/* ── Category pill row ── */
+.toolbar-categories {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.toolbar-cat-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  color: var(--text-muted, #666);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.toolbar-cat-btn:hover {
+  border-color: #8b5cf6;
+  color: #7c3aed;
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.toolbar-cat-btn.active {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: #fff;
+  border-color: #7c3aed;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.22);
+}
+
+/* Help button */
+.toolbar-btn-help {
+  gap: 4px;
+}
+
+.toolbar-btn-help.active {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: #fff;
+  border-color: #7c3aed;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.22);
+}
+
+/* ── Panel anchor (panels render below the toolbar) ── */
+.latex-panel-anchor {
+  position: relative;
+}
+
+.latex-menu--inline {
+  position: relative;
+  top: 0;
+  left: 0;
+  border-radius: 0;
+  border: 1px solid var(--border, #e0e0e0);
+  border-top: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  min-width: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.latex-menu-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border, #e0e0e0);
+  background: var(--background, #f8f9fa);
+}
+
+.latex-menu-bar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #333);
 }
 
 .toolbar-btn {
@@ -108,34 +193,14 @@
   color: white;
 }
 
-.toolbar-dropdown {
-  position: relative;
-}
-
 .latex-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 1000;
   background: var(--surface, #fff);
   border: 1px solid var(--border, #e0e0e0);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  min-width: 500px;
-  max-width: 90vw;
+  max-width: 100%;
   max-height: 70vh;
   overflow-y: auto;
-}
-
-.latex-menu-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border, #e0e0e0);
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text, #333);
 }
 
 .latex-menu-close {
@@ -178,55 +243,6 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 12px;
-}
-
-.latex-templates-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 8px;
-}
-
-.latex-template-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--background, #f8f9fa);
-  border: 1px solid var(--border, #e0e0e0);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: left;
-}
-
-.latex-template-btn:hover {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: #8b5cf6;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.1);
-}
-
-.latex-template-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.latex-template-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text, #333);
-}
-
-.latex-template-example {
-  font-size: 11px;
-  font-family: 'Courier New', monospace;
-  color: #8b5cf6;
-  background: rgba(139, 92, 246, 0.1);
-  padding: 2px 6px;
-  border-radius: 3px;
-  display: inline-block;
 }
 
 .latex-quick-insert {
@@ -275,6 +291,156 @@
   font-family: 'Courier New', monospace;
   font-size: 11px;
   color: #8b5cf6;
+}
+
+/* ── Help / Reference tab ── */
+.latex-help-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0 !important;
+}
+
+.latex-help-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border, #e0e0e0);
+  background: var(--background, #f8f9fa);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.latex-help-search svg {
+  color: var(--text-muted, #999);
+  flex-shrink: 0;
+}
+
+.latex-help-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: none;
+  font-size: 14px;
+  color: var(--text, #333);
+  font-family: inherit;
+}
+
+.latex-help-search input::placeholder {
+  color: var(--text-muted, #999);
+}
+
+.latex-help-search-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted, #999);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  border-radius: 4px;
+}
+
+.latex-help-search-clear:hover {
+  color: var(--text, #333);
+  background: var(--border, #e0e0e0);
+}
+
+.latex-help-body {
+  padding: 12px 16px 4px;
+  overflow-y: auto;
+  max-height: 52vh;
+}
+
+.latex-help-category {
+  margin-bottom: 18px;
+}
+
+.latex-help-category:last-child {
+  margin-bottom: 8px;
+}
+
+.latex-help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 4px;
+}
+
+.latex-help-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+  font-family: inherit;
+}
+
+.latex-help-item:hover {
+  background: rgba(139, 92, 246, 0.06);
+  border-color: rgba(139, 92, 246, 0.18);
+}
+
+.latex-help-cmd {
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  color: #7c3aed;
+  background: rgba(139, 92, 246, 0.08);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.latex-help-label {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-muted, #666);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.latex-help-copy {
+  opacity: 0;
+  color: var(--text-muted, #999);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  display: flex;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.latex-help-item:hover .latex-help-copy {
+  opacity: 1;
+}
+
+.latex-help-copy:hover {
+  color: #7c3aed;
+}
+
+.latex-help-empty {
+  padding: 32px 0;
+  text-align: center;
+  color: var(--text-muted, #999);
+  font-size: 14px;
+}
+
+.latex-help-content .latex-menu-help {
+  margin: 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border, #e0e0e0);
+  border-radius: 0 0 8px 8px;
+  border-left: none;
 }
 
 .latex-editor-textarea {
@@ -340,16 +506,15 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
+/* ── Textarea gets top-border when a panel is open above it ── */
+.latex-panel-anchor + .latex-editor-textarea {
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
-  .latex-menu {
-    min-width: calc(100vw - 32px);
-    max-width: calc(100vw - 32px);
-    left: 0;
-    right: 0;
-  }
-
-  .latex-templates-grid {
+  .latex-help-grid {
     grid-template-columns: 1fr;
   }
 
@@ -361,17 +526,23 @@
     width: 100%;
   }
 
-  .latex-editor-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+  .toolbar-categories {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
 
-  .toolbar-group {
-    width: 100%;
-    justify-content: flex-start;
+  .toolbar-categories::-webkit-scrollbar {
+    display: none;
   }
 
   .toolbar-divider {
+    display: none;
+  }
+
+  .toolbar-btn-help span {
     display: none;
   }
 }

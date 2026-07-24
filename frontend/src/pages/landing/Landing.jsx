@@ -6,7 +6,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { CHECKS, METRICS, PILLARS } from './data';
-import HeroPreview from './HeroPreview';
+import LandingHero3D from './LandingHero3D';
 import LandingBackground from './LandingBackground';
 import LandingNavbar from './LandingNavbar';
 import PlatformSection from './PlatformSection';
@@ -68,8 +68,8 @@ export default function Landing() {
             </ul>
           </div>
 
-          <div className="landing-hero__visual landing-anim" style={{ '--anim-i': 2 }} aria-hidden>
-            <HeroPreview />
+          <div className="landing-hero__visual landing-anim" style={{ '--anim-i': 2 }}>
+            <LandingHero3D />
           </div>
         </section>
 

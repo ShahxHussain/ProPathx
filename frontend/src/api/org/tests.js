@@ -257,6 +257,34 @@ export const testAPI = {
       body: JSON.stringify({ questionIds }),
     });
   },
+
+  getAnalyticsSummary: async (type = 'all') => {
+    return request(`/api/org/tests/analytics/summary?type=${encodeURIComponent(type)}`, { method: 'GET' });
+  },
+
+  getAnalyticsTests: async (params = {}) => {
+    const sp = new URLSearchParams();
+    if (params.type) sp.append('type', params.type);
+    if (params.sort) sp.append('sort', params.sort);
+    if (params.order) sp.append('order', params.order);
+    if (params.page) sp.append('page', String(params.page));
+    if (params.limit) sp.append('limit', String(params.limit));
+    if (params.search) sp.append('search', params.search);
+    const qs = sp.toString();
+    return request(`/api/org/tests/analytics/tests${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+
+  getAnalyticsDetail: async (testId) => {
+    return request(`/api/org/tests/${testId}/analytics/detail`, { method: 'GET' });
+  },
+
+  getAttemptsTrend: async (type = 'all', days = 30) => {
+    return request(`/api/org/tests/analytics/attempts-trend?type=${encodeURIComponent(type)}&days=${days}`, { method: 'GET' });
+  },
+
+  getScoreDistribution: async (type = 'all') => {
+    return request(`/api/org/tests/analytics/score-distribution?type=${encodeURIComponent(type)}`, { method: 'GET' });
+  },
 };
 
 /**

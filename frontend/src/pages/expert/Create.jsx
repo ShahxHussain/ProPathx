@@ -362,12 +362,17 @@ const Create = () => {
       
       setSuccess('Question created successfully! It will be reviewed by a Reviewer.');
       
-      // Clear form and draft
-      const resetForm = {
+      // Retain context fields so the expert can quickly create another question
+      // in the same exam/subject/chapter/topic without re-selecting everything.
+      setFormData((prev) => ({
         ...EMPTY_FORM,
+        examId: prev.examId,
+        subjectId: prev.subjectId,
+        chapterId: prev.chapterId,
+        topicMode: prev.topicMode,
+        topicId: prev.topicMode === 'existing' ? prev.topicId : '',
         options: EMPTY_FORM.options.map((opt) => ({ ...opt })),
-      };
-      setFormData(resetForm);
+      }));
       setDraftQuestionId(null);
       setValidationErrors({});
     } catch (err) {
