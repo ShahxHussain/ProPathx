@@ -1,12 +1,12 @@
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
-  CheckCircle2,
   Shield,
   Sparkles,
 } from 'lucide-react';
-import { CHECKS, METRICS, PILLARS } from './data';
+import { METRICS, PILLARS } from './data';
 import LandingHero3D from './LandingHero3D';
+import HeroTypewriter from './HeroTypewriter';
 import LandingBackground from './LandingBackground';
 import LandingNavbar from './LandingNavbar';
 import PlatformSection from './PlatformSection';
@@ -40,16 +40,8 @@ export default function Landing() {
               <Sparkles size={14} aria-hidden />
               Learning intelligence for modern institutions
             </p>
-            <h1 className="landing-hero__title landing-anim" style={{ '--anim-i': 1 }}>
-              The operating system for
-              <br />
-              <em>learning &amp; growth programs.</em>
-            </h1>
-            <p className="landing-hero__lead landing-anim" style={{ '--anim-i': 2 }}>
-              ProPath unifies syllabi, enrollments, practice, progress tracking, subscriptions, and analytics —
-              so organizations run serious learning programs on one tenant-safe platform.
-            </p>
-            <div className="landing-hero__cta landing-anim" style={{ '--anim-i': 3 }}>
+            <HeroTypewriter />
+            <div className="landing-hero__cta landing-anim" style={{ '--anim-i': 2 }}>
               <button type="button" className="landing-btn landing-btn--primary landing-btn--lg" onClick={() => goLogin('org')}>
                 Start as an organization
                 <ArrowRight size={18} />
@@ -58,14 +50,6 @@ export default function Landing() {
                 I&apos;m a student
               </button>
             </div>
-            <ul className="landing-hero__checks landing-anim" style={{ '--anim-i': 4 }} aria-label="Platform highlights">
-              {CHECKS.map((item, i) => (
-                <li key={item} style={{ '--check-i': i }}>
-                  <CheckCircle2 size={15} aria-hidden />
-                  {item}
-                </li>
-              ))}
-            </ul>
           </div>
 
           <div className="landing-hero__visual landing-anim" style={{ '--anim-i': 2 }}>
@@ -78,12 +62,15 @@ export default function Landing() {
           className={`landing-metrics${metricsReveal.visible ? ' is-visible' : ''}`}
           aria-label="Platform metrics"
         >
-          {METRICS.map(({ value, label }, i) => (
-            <div key={label} className="landing-metric" style={{ '--metric-i': i }}>
-              <span className="landing-metric__value">{value}</span>
-              <span className="landing-metric__label">{label}</span>
-            </div>
-          ))}
+          <div className="landing-metrics__inner">
+            {METRICS.map(({ value, label }, i) => (
+              <div key={label} className="landing-metric" style={{ '--metric-i': i }}>
+                {i > 0 && <span className="landing-metric__rule" aria-hidden />}
+                <span className="landing-metric__value">{value}</span>
+                <span className="landing-metric__label">{label}</span>
+              </div>
+            ))}
+          </div>
         </section>
 
         <PlatformSection />

@@ -37,9 +37,9 @@ export const NAV_LINKS = [
 ];
 
 export const METRICS = [
-  { value: '10K+', label: 'Learning sessions delivered' },
-  { value: '99.9%', label: 'Platform uptime' },
-  { value: '5 portals', label: 'Role-built experiences' },
+  { value: '10K+', label: 'sessions delivered' },
+  { value: '99.9%', label: 'uptime' },
+  { value: '5', label: 'role-built portals' },
 ];
 
 export const CHECKS = [
