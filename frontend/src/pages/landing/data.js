@@ -36,6 +36,25 @@ export const NAV_LINKS = [
   { href: '/contact', label: 'Contact', route: true },
 ];
 
+export const PRODUCT_NAV = [
+  { href: '#platform', label: 'Platform', desc: 'Content, assessments, subscriptions, governance' },
+  { href: '#roles', label: 'Roles', desc: 'Platform, institute, and learner layers' },
+  { href: '#portals', label: 'Portals', desc: 'Org admin, staff, and student workspaces' },
+  { href: '#roadmap', label: 'Roadmap', desc: 'Adaptive learning, RAG MCQs, study assistant' },
+  { href: '#security', label: 'Security', desc: 'Tenant isolation, audit logs, entitlements' },
+];
+
+export const COMPANY_NAV = [
+  { href: '/about', label: 'About', route: true },
+  { href: '/contact', label: 'Contact', route: true },
+];
+
+export const SUPPORT_WHATSAPP = {
+  phone: '923106620325',
+  display: '+92 310 6620325',
+  message: 'Hi ProPath support — I need help with the platform.',
+};
+
 export const METRICS = [
   { value: '10K+', label: 'sessions delivered' },
   { value: '99.9%', label: 'uptime' },

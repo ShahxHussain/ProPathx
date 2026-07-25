@@ -354,7 +354,7 @@ export default function Contact() {
       </main>
 
       <footer className="landing-footer">
-        <LandingLogo size="sm" />
+        <LandingLogo size="sm" to="/" />
         <p>© {new Date().getFullYear()} ProPath. Learning intelligence platform.</p>
         <div className="landing-footer__links">
           <Link to="/">Home</Link>

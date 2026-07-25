@@ -1,4 +1,5 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import {
   ArrowRight,
   Shield,
@@ -15,14 +16,33 @@ import PortalsSection from './PortalsSection';
 import RolesSection from './RolesSection';
 import { useReveal } from './useReveal';
 import LandingLogo from './LandingLogo';
+import LandingFloaters from './LandingFloaters';
 import './Landing.css';
+
+function scrollLandingToHash(hash) {
+  if (!hash) return;
+  const id = hash.replace('#', '');
+  const el = document.getElementById(id);
+  if (!el) return;
+  const header = document.querySelector('.landing-header');
+  const offset = (header?.getBoundingClientRect().height ?? 72) + 12;
+  const top = el.getBoundingClientRect().top + window.scrollY - offset;
+  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+}
 
 export default function Landing() {
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const metricsReveal = useReveal(0.2);
   const pillarsReveal = useReveal(0.15);
   const trustReveal = useReveal(0.12);
   const ctaReveal = useReveal(0.15);
+
+  useEffect(() => {
+    if (!hash) return undefined;
+    const t = setTimeout(() => scrollLandingToHash(hash), 100);
+    return () => clearTimeout(t);
+  }, [hash]);
 
   const goLogin = (loginType) => {
     navigate('/login', { state: loginType ? { loginType } : undefined });
@@ -32,6 +52,7 @@ export default function Landing() {
     <div className="landing">
       <LandingBackground />
       <LandingNavbar onSignIn={() => goLogin()} onGetStarted={() => goLogin('org')} />
+      <LandingFloaters />
 
       <main>
         <section className="landing-hero">
@@ -141,7 +162,7 @@ export default function Landing() {
       </main>
 
       <footer className="landing-footer">
-        <LandingLogo size="sm" />
+        <LandingLogo size="sm" to="/" />
         <p>© {new Date().getFullYear()} ProPath. Learning intelligence platform.</p>
         <div className="landing-footer__links">
           <Link to="/about">About</Link>
